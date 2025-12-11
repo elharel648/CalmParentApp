@@ -1,72 +1,234 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, Switch, Alert } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, Moon, Share2, MessageCircle, Star, LogOut, Trash2, ChevronLeft } from 'lucide-react-native';
-
-const SettingRow = ({ icon: Icon, label, isSwitch, value, onToggle, isDestructive }: any) => (
-  <TouchableOpacity style={styles.settingRow} onPress={!isSwitch ? onToggle : undefined}>
-    <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
-       {isSwitch && <Switch value={value} onValueChange={onToggle} trackColor={{false: '#e5e7eb', true: '#4f46e5'}} />}
-       {!isSwitch && <ChevronLeft size={20} color="#9ca3af" />}
-    </View>
-    <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
-       <Text style={[styles.settingLabel, isDestructive && {color: '#ef4444'}]}>{label}</Text>
-       <View style={[styles.settingIconBox, isDestructive && {backgroundColor: '#fee2e2'}]}>
-          <Icon size={20} color={isDestructive ? '#ef4444' : '#4b5563'} />
-       </View>
-    </View>
-  </TouchableOpacity>
-);
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  Switch,
+  Alert,
+  ScrollView,
+  ActivityIndicator
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { 
+  LogOut, 
+  Trash2, 
+  Moon, 
+  Bell, 
+  User, 
+  ChevronLeft, 
+  Shield, 
+  Mail
+} from 'lucide-react-native';
+import { auth } from '../services/firebaseConfig';
+import { deleteUser, signOut } from 'firebase/auth';
 
 export default function SettingsScreen() {
-  const insets = useSafeAreaInsets();
-  const [notifications, setNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const userEmail = auth.currentUser?.email || 'אורח';
+
+  // פונקציה להתנתקות
+  const handleLogout = async () => {
+    Alert.alert(
+      'התנתקות',
+      'האם את/ה בטוח/ה שברצונך להתנתק?',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        { 
+          text: 'התנתק', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut(auth);
+              // ה-App.tsx יזהה את השינוי ויעביר אותך ללוגין
+            } catch (error) {
+              Alert.alert('שגיאה', 'לא הצלחנו להתנתק');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // פונקציה למחיקת חשבון (איזור מסוכן!)
+  const handleDeleteAccount = async () => {
+    Alert.alert(
+      'מחיקת חשבון לצמיתות ⚠️',
+      'פעולה זו תמחק את כל המידע שלך ולא ניתן לשחזר אותה. האם להמשיך?',
+      [
+        { text: 'לא, טעות!', style: 'cancel' },
+        { 
+          text: 'כן, מחק הכל', 
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const user = auth.currentUser;
+              if (user) {
+                await deleteUser(user);
+                // פיירבס ינתק אוטומטית אחרי מחיקה
+              }
+            } catch (error) {
+              Alert.alert('שגיאה', 'לצורך מחיקת חשבון יש להתחבר מחדש (מטעמי אבטחה)');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // רכיב עזר לשורה בהגדרות
+  const SettingItem = ({ icon: Icon, title, value, isSwitch = false, onPress, color = '#1f2937' }: any) => (
+    <TouchableOpacity 
+      style={styles.itemContainer} 
+      onPress={onPress} 
+      disabled={isSwitch}
+      activeOpacity={0.7}
+    >
+      {/* צד שמאל - הפעולה */}
+      <View style={styles.leftAction}>
+        {isSwitch ? (
+          <Switch
+            trackColor={{ false: '#e5e7eb', true: '#818cf8' }}
+            thumbColor={value ? '#4f46e5' : '#f4f3f4'}
+            onValueChange={onPress}
+            value={value}
+          />
+        ) : (
+          <ChevronLeft size={20} color="#9ca3af" />
+        )}
+      </View>
+
+      {/* צד ימין - הטקסט והאייקון */}
+      <View style={styles.rightContent}>
+        <Text style={[styles.itemText, { color }]}>{title}</Text>
+        <View style={[styles.iconBox, { backgroundColor: color === '#ef4444' ? '#fee2e2' : '#f3f4f6' }]}>
+          <Icon size={20} color={color} />
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
-      <View style={[styles.simpleHeader, { paddingTop: insets.top + 20 }]}>
-        <Text style={styles.simpleTitle}>הגדרות</Text>
+      <StatusBar style="dark" />
+      
+      {/* כותרת */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>הגדרות</Text>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <View style={styles.settingsProfileCard}>
-           <Image source={{uri: 'https://images.unsplash.com/photo-1522771753035-4a5000b5ad88?q=80&w=200&auto=format&fit=crop'}} style={styles.settingsAvatar} />
-           <View><Text style={styles.settingsName}>עלמא</Text><Text style={styles.settingsSub}>הורה ראשי</Text></View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        
+        {/* כרטיס פרופיל */}
+        <View style={styles.profileCard}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{userEmail.charAt(0).toUpperCase()}</Text>
+          </View>
+          <View>
+            <Text style={styles.profileName}>הורה רגוע</Text>
+            <Text style={styles.profileEmail}>{userEmail}</Text>
+          </View>
         </View>
-        <Text style={styles.settingsSectionTitle}>כללי</Text>
-        <View style={styles.settingsGroup}>
-           <SettingRow icon={Bell} label="קבלת התראות" isSwitch value={notifications} onToggle={() => setNotifications(!notifications)} />
-           <SettingRow icon={Moon} label="מצב לילה" isSwitch value={darkMode} onToggle={() => setDarkMode(!darkMode)} />
+
+        <Text style={styles.sectionTitle}>כללי</Text>
+        <View style={styles.section}>
+          <SettingItem 
+            icon={Moon} 
+            title="מצב לילה" 
+            isSwitch 
+            value={isDarkMode} 
+            onPress={() => setIsDarkMode(!isDarkMode)} 
+          />
+          <View style={styles.divider} />
+          <SettingItem 
+            icon={Bell} 
+            title="התראות" 
+            isSwitch 
+            value={notificationsEnabled} 
+            onPress={() => setNotificationsEnabled(!notificationsEnabled)} 
+          />
         </View>
-        <Text style={styles.settingsSectionTitle}>שיתוף ותמיכה</Text>
-        <View style={styles.settingsGroup}>
-           <SettingRow icon={Share2} label="שתף גישה" onToggle={() => Alert.alert('שיתוף', 'קישור נשלח!')} />
-           <SettingRow icon={MessageCircle} label="צור קשר" onToggle={() => {}} />
-           <SettingRow icon={Star} label="דרג אותנו" onToggle={() => {}} />
+
+        <Text style={styles.sectionTitle}>חשבון</Text>
+        <View style={styles.section}>
+          <SettingItem icon={User} title="עריכת פרופיל" onPress={() => Alert.alert('בקרוב', 'אפשרות זו תפתח בגרסה הבאה')} />
+          <View style={styles.divider} />
+          <SettingItem icon={Shield} title="פרטיות ואבטחה" onPress={() => {}} />
+          <View style={styles.divider} />
+          <SettingItem icon={Mail} title="צור קשר לתמיכה" onPress={() => {}} />
         </View>
-        <Text style={styles.settingsSectionTitle}>איזור מסוכן</Text>
-        <View style={styles.settingsGroup}>
-           <SettingRow icon={LogOut} label="התנתק" isDestructive onToggle={() => Alert.alert('התנתקות', 'האם אתה בטוח?')} />
-           <SettingRow icon={Trash2} label="מחק חשבון" isDestructive onToggle={() => Alert.alert('מחיקה', 'בלתי הפיך')} />
+
+        <Text style={styles.sectionTitle}>איזור מסוכן</Text>
+        <View style={styles.section}>
+          <SettingItem 
+            icon={LogOut} 
+            title="התנתקות" 
+            color="#ef4444" 
+            onPress={handleLogout} 
+          />
+          <View style={styles.divider} />
+          <SettingItem 
+            icon={Trash2} 
+            title="מחיקת חשבון" 
+            color="#ef4444" 
+            onPress={handleDeleteAccount} 
+          />
         </View>
-        <Text style={styles.versionText}>גרסה 1.0.0 (Beta)</Text>
+
+        <Text style={styles.version}>גרסה 1.0.0 • CalmParentApp</Text>
+
       </ScrollView>
+
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#4f46e5" />
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
-  simpleHeader: { paddingHorizontal: 20, paddingBottom: 20, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  simpleTitle: { fontSize: 24, fontWeight: '900', textAlign: 'right' },
-  settingsProfileCard: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: 'white', padding: 16, borderRadius: 20, marginBottom: 24, gap: 16 },
-  settingsAvatar: { width: 56, height: 56, borderRadius: 28 },
-  settingsName: { fontSize: 18, fontWeight: '800', textAlign: 'right' },
-  settingsSub: { fontSize: 13, color: '#6b7280', textAlign: 'right' },
-  settingsSectionTitle: { fontSize: 13, fontWeight: 'bold', color: '#9ca3af', textAlign: 'right', marginBottom: 8, marginTop: 16 },
-  settingsGroup: { backgroundColor: 'white', borderRadius: 20, overflow: 'hidden' },
-  settingRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  settingLabel: { fontSize: 15, fontWeight: '600', color: '#374151' },
-  settingIconBox: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
-  versionText: { textAlign: 'center', marginTop: 40, color: '#d1d5db', fontSize: 12, fontWeight: '600' },
+  header: { paddingTop: 60, paddingBottom: 20, paddingHorizontal: 24, backgroundColor: 'white' },
+  headerTitle: { fontSize: 30, fontWeight: 'bold', color: '#111827', textAlign: 'right' },
+  scrollContent: { padding: 20, paddingBottom: 100 },
+  
+  profileCard: {
+    flexDirection: 'row-reverse', // כדי שהתמונה תהיה מימין
+    alignItems: 'center',
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 20,
+    marginBottom: 30,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    gap: 16
+  },
+  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#e0e7ff', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 24, fontWeight: 'bold', color: '#4f46e5' },
+  profileName: { fontSize: 18, fontWeight: 'bold', color: '#1f2937', textAlign: 'right' },
+  profileEmail: { fontSize: 14, color: '#6b7280', textAlign: 'right' },
+
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#6b7280', marginBottom: 10, textAlign: 'right', marginRight: 10 },
+  section: { backgroundColor: 'white', borderRadius: 16, overflow: 'hidden', marginBottom: 24, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1 },
+  
+  itemContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  rightContent: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  leftAction: { alignItems: 'flex-start' }, // המתג יהיה בצד שמאל
+  
+  itemText: { fontSize: 16, fontWeight: '500' },
+  iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  divider: { height: 1, backgroundColor: '#f3f4f6', marginLeft: 16 },
+  
+  version: { textAlign: 'center', color: '#9ca3af', fontSize: 12, marginTop: 10 },
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' }
 });
