@@ -21,6 +21,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
+import * as LocalAuthentication from 'expo-local-authentication'; // <--- הייבוא החשוב
 import { 
   LogOut, 
   Trash2, 
@@ -41,7 +42,6 @@ import { auth, db } from '../services/firebaseConfig';
 import { deleteUser, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
-// הגדרת צבעים למצב בהיר/כהה
 const COLORS = {
   light: {
     background: '#F2F2F7',
@@ -67,22 +67,17 @@ const COLORS = {
 
 export default function SettingsScreen() {
   const [userData, setUserData] = useState({ name: '', email: '', photoURL: null });
-  
-  // מתגים - State נפרד לכל אחד למניעת באגים
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [biometricsEnabled, setBiometricsEnabled] = useState(false); // פיצ'ר חדש!
+  const [biometricsEnabled, setBiometricsEnabled] = useState(false);
 
   const [loading, setLoading] = useState(false); 
   const [initialLoading, setInitialLoading] = useState(true);
-  
-  // מודל עריכת שם
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
 
   const theme = isDarkMode ? COLORS.dark : COLORS.light;
 
-  // שימוש ב-useFocusEffect מבטיח שהמידע יתרענן בכל פעם שנכנסים למסך
   useFocusEffect(
     useCallback(() => {
       fetchUserData();
@@ -105,7 +100,6 @@ export default function SettingsScreen() {
           photoURL: data.photoURL || user.photoURL || null
         });
         
-        // טעינת הגדרות שמורות
         if (data.settings) {
           if (data.settings.isDarkMode !== undefined) setIsDarkMode(data.settings.isDarkMode);
           if (data.settings.notificationsEnabled !== undefined) setNotificationsEnabled(data.settings.notificationsEnabled);
@@ -125,57 +119,11 @@ export default function SettingsScreen() {
     }
   };
 
-  // --- פונקציות לוגיקה ---
-
-  // 1. החלפת תמונת פרופיל
-  const handlePickImage = async () => {
-    // בקשת הרשאה
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('שגיאה', 'צריך הרשאה לגישה לתמונות כדי לשנות תמונת פרופיל');
-      return;
-    }
-
-    // פתיחת הגלריה
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
-
-    if (!result.canceled) {
-      setLoading(true);
-      const newImageUri = result.assets[0].uri;
-      
-      try {
-        const user = auth.currentUser;
-        if (user) {
-          // עדכון ב-Firestore
-          const userRef = doc(db, 'users', user.uid);
-          await updateDoc(userRef, { photoURL: newImageUri });
-          
-          // עדכון ב-Auth (אופציונלי, לפעמים נכשל עם URI מקומי)
-          await updateProfile(user, { photoURL: newImageUri }).catch(() => {});
-
-          // עדכון מקומי
-          setUserData(prev => ({ ...prev, photoURL: newImageUri }));
-        }
-      } catch (error) {
-        Alert.alert('שגיאה', 'לא הצלחנו לשמור את התמונה');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  // 2. עדכון הגדרות ב-DB (פונקציה גנרית ששומרת ל-Firestore)
   const saveSettingToDB = async (key: string, value: boolean) => {
     try {
       const user = auth.currentUser;
       if (user) {
         const userRef = doc(db, 'users', user.uid);
-        // שימוש ב-setDoc עם merge כדי לא לדרוס שדות אחרים
         await setDoc(userRef, { 
           settings: { 
             [key]: value 
@@ -187,10 +135,46 @@ export default function SettingsScreen() {
     }
   };
 
-  // 3. הנדלרים למתגים (מופרדים לחלוטין!)
+  // --- לוגיקה ביומטרית ---
+  const handleBiometricsToggle = async (value: boolean) => {
+    // אם מכבים - אין בעיה
+    if (!value) {
+      setBiometricsEnabled(false);
+      saveSettingToDB('biometricsEnabled', false);
+      return;
+    }
+
+    // אם מדליקים - צריך לוודא שהמשתמש הוא הבעלים
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+      if (!hasHardware || !isEnrolled) {
+        Alert.alert('שגיאה', 'המכשיר לא תומך ב-Face ID או שלא הוגדר קוד גישה');
+        return;
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'אימות להפעלת הגנה ביומטרית',
+        fallbackLabel: 'השתמש בסיסמה'
+      });
+
+      if (result.success) {
+        setBiometricsEnabled(true);
+        saveSettingToDB('biometricsEnabled', true);
+      } else {
+        // המשתמש ביטל או נכשל
+        setBiometricsEnabled(false);
+      }
+    } catch (error) {
+      Alert.alert('שגיאה', 'אירעה שגיאה בתהליך האימות');
+      setBiometricsEnabled(false);
+    }
+  };
+
   const handleDarkModeToggle = (value: boolean) => {
-    setIsDarkMode(value); // עדכון UI מיידי
-    saveSettingToDB('isDarkMode', value); // שמירה ברקע
+    setIsDarkMode(value); 
+    saveSettingToDB('isDarkMode', value); 
   };
 
   const handleNotificationsToggle = (value: boolean) => {
@@ -198,20 +182,40 @@ export default function SettingsScreen() {
     saveSettingToDB('notificationsEnabled', value);
   };
 
-  const handleBiometricsToggle = (value: boolean) => {
-    setBiometricsEnabled(value);
-    saveSettingToDB('biometricsEnabled', value);
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('שגיאה', 'צריך הרשאה לגישה לתמונות');
+      return;
+    }
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled) {
+      setLoading(true);
+      const newImageUri = result.assets[0].uri;
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, { photoURL: newImageUri });
+          await updateProfile(user, { photoURL: newImageUri }).catch(() => {});
+          setUserData(prev => ({ ...prev, photoURL: newImageUri }));
+        }
+      } catch (error) {
+        Alert.alert('שגיאה', 'לא הצלחנו לשמור את התמונה');
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
-  // 4. שיתוף האפליקציה
   const handleShareApp = async () => {
-    try {
-      await Share.share({
-        message: 'היי! אני משתמש באפליקציית CalmParent וזה ממש עוזר לי. ממליץ בחום! 📱',
-      });
-    } catch (error) {
-      // התעלמות משגיאות ביטול
-    }
+    try { await Share.share({ message: 'היי! אני ב-CalmParent וזה ממש עוזר לי. 📱' }); } catch (error) {}
   };
 
   const handleSaveName = async () => {
@@ -249,7 +253,11 @@ export default function SettingsScreen() {
     ]);
   };
 
-  // --- UI Components ---
+  const handleDeleteAccount = async () => {
+    Alert.alert('מחיקת חשבון ⚠️', 'בלתי הפיך!', [{ text: 'ביטול' }, { text: 'מחק', style: 'destructive', onPress: async () => {
+        if (auth.currentUser) await deleteUser(auth.currentUser);
+    }}]);
+  };
 
   const SettingItem = ({ icon: Icon, title, type = 'arrow', value, onPress, color, isDestructive }: any) => {
     const iconColor = color || theme.primary;
@@ -267,14 +275,12 @@ export default function SettingsScreen() {
             <Switch
               trackColor={{ false: '#767577', true: theme.primary }}
               thumbColor={'#fff'}
-              ios_backgroundColor="#3e3e3e"
               onValueChange={onPress}
               value={value}
             />
           )}
           {type === 'arrow' && <ChevronLeft size={20} color={theme.textSecondary} />}
         </View>
-
         <View style={styles.itemRight}>
           <Text style={[styles.itemText, { color: textColor }]}>{title}</Text>
           <View style={[styles.iconBox, { backgroundColor: isDarkMode ? '#2C2C2E' : '#EEF2FF' }]}>
@@ -288,14 +294,11 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
-      
       <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.divider }]}>
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>הגדרות</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* כרטיס פרופיל */}
         <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
           <TouchableOpacity onPress={handlePickImage} activeOpacity={0.8} style={styles.avatarContainer}>
             {userData.photoURL ? (
@@ -307,15 +310,10 @@ export default function SettingsScreen() {
                 </Text>
               </View>
             )}
-            <View style={styles.editIconBadge}>
-              <Camera size={12} color="white" />
-            </View>
+            <View style={styles.editIconBadge}><Camera size={12} color="white" /></View>
           </TouchableOpacity>
-          
           <View style={styles.profileInfo}>
-            <Text style={[styles.profileName, { color: theme.textPrimary }]}>
-              {initialLoading ? '...' : userData.name}
-            </Text>
+            <Text style={[styles.profileName, { color: theme.textPrimary }]}>{initialLoading ? '...' : userData.name}</Text>
             <Text style={[styles.profileEmail, { color: theme.textSecondary }]}>{userData.email}</Text>
             <TouchableOpacity onPress={() => { setNewName(userData.name); setEditModalVisible(true); }}>
               <Text style={[styles.editLink, { color: theme.primary }]}>ערוך פרטים</Text>
@@ -323,52 +321,34 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Section: הגדרות מערכת */}
         <Text style={styles.sectionHeader}>מערכת</Text>
         <View style={styles.sectionContainer}>
-          <SettingItem 
-            icon={Moon} title="מצב לילה" type="switch" 
-            value={isDarkMode} onPress={handleDarkModeToggle} color="#5856D6" 
-          />
-          <SettingItem 
-            icon={Bell} title="התראות" type="switch" 
-            value={notificationsEnabled} onPress={handleNotificationsToggle} color="#FF9500" 
-          />
-          <SettingItem 
-            icon={Lock} title="כניסה ביומטרית" type="switch" 
-            value={biometricsEnabled} onPress={handleBiometricsToggle} color="#34C759" 
-          />
+          <SettingItem icon={Moon} title="מצב לילה" type="switch" value={isDarkMode} onPress={handleDarkModeToggle} color="#5856D6" />
+          <SettingItem icon={Bell} title="התראות" type="switch" value={notificationsEnabled} onPress={handleNotificationsToggle} color="#FF9500" />
+          <SettingItem icon={Lock} title="כניסה ביומטרית" type="switch" value={biometricsEnabled} onPress={handleBiometricsToggle} color="#34C759" />
         </View>
 
-        {/* Section: חשבון ופרטיות */}
         <Text style={styles.sectionHeader}>חשבון</Text>
         <View style={styles.sectionContainer}>
           <SettingItem icon={Lock} title="שינוי סיסמה" onPress={handleChangePassword} color="#007AFF" />
           <SettingItem icon={FileText} title="מדיניות פרטיות" onPress={() => Linking.openURL('https://policies.google.com')} color="#8E8E93" />
         </View>
 
-        {/* Section: תמיכה ופירגון */}
-        <Text style={styles.sectionHeader}>תמיכה ופירגון</Text>
+        <Text style={styles.sectionHeader}>תמיכה</Text>
         <View style={styles.sectionContainer}>
           <SettingItem icon={Mail} title="צור קשר" onPress={() => Linking.openURL('mailto:support@app.com')} color="#5AC8FA" />
           <SettingItem icon={Share2} title="שתף חברים" onPress={handleShareApp} color="#AF52DE" />
-          <SettingItem icon={Star} title="דרג אותנו" onPress={() => Alert.alert('תודה!', 'נתראה בחנות האפליקציות בקרוב')} color="#FFCC00" />
         </View>
 
-        {/* Section: איזור מסוכן */}
         <Text style={styles.sectionHeader}>איזור מסוכן</Text>
         <View style={styles.sectionContainer}>
           <SettingItem icon={LogOut} title="התנתקות" isDestructive onPress={handleLogout} />
-          {/* הוספתי כאן מזהה משתמש קטן למטה, טיפ של מקצוענים לדיבוג */}
-          <View style={{padding: 10, alignItems: 'center'}}>
-             <Text style={{fontSize: 10, color: '#ccc'}}>ID: {auth.currentUser?.uid?.slice(0,8)}...</Text>
-          </View>
+          <SettingItem icon={Trash2} title="מחיקת חשבון" isDestructive onPress={handleDeleteAccount} />
         </View>
-
-        <Text style={[styles.version, { color: theme.textSecondary }]}>CalmParent v1.0.2</Text>
+        <Text style={[styles.version, { color: theme.textSecondary }]}>CalmParent v1.0.3</Text>
       </ScrollView>
 
-      {/* Modal עריכה */}
+      {/* Modal */}
       <Modal visible={isEditModalVisible} transparent animationType="fade" onRequestClose={() => setEditModalVisible(false)}>
         <TouchableWithoutFeedback onPress={() => setEditModalVisible(false)}>
           <View style={styles.modalOverlay}>
@@ -378,11 +358,7 @@ export default function SettingsScreen() {
                   <TouchableOpacity onPress={() => setEditModalVisible(false)}><X size={24} color={theme.textSecondary} /></TouchableOpacity>
                   <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>עריכת שם</Text>
                 </View>
-                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>שם מלא</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: isDarkMode ? '#2C2C2E' : '#F2F2F7', color: theme.textPrimary }]}
-                  value={newName} onChangeText={setNewName} textAlign="right" autoFocus
-                />
+                <TextInput style={[styles.input, { backgroundColor: isDarkMode ? '#2C2C2E' : '#F2F2F7', color: theme.textPrimary }]} value={newName} onChangeText={setNewName} textAlign="right" autoFocus />
                 <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.primary }]} onPress={handleSaveName}>
                   {loading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>שמור</Text>}
                 </TouchableOpacity>
@@ -391,13 +367,7 @@ export default function SettingsScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-
-      {/* Loading Overlay */}
-      {loading && !isEditModalVisible && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={theme.primary} />
-        </View>
-      )}
+      {loading && !isEditModalVisible && <View style={styles.loadingOverlay}><ActivityIndicator size="large" color={theme.primary} /></View>}
     </View>
   );
 }
@@ -407,40 +377,28 @@ const styles = StyleSheet.create({
   header: { paddingTop: 60, paddingBottom: 15, paddingHorizontal: 20, borderBottomWidth: 0.5 },
   headerTitle: { fontSize: 32, fontWeight: '700', textAlign: 'right' },
   scrollContent: { padding: 16, paddingBottom: 100 },
-  
-  profileCard: {
-    flexDirection: 'row-reverse', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
-  },
+  profileCard: { flexDirection: 'row-reverse', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
   avatarContainer: { position: 'relative', marginLeft: 16 },
   avatarImage: { width: 64, height: 64, borderRadius: 32 },
   avatarPlaceholder: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 24, fontWeight: '600' },
-  editIconBadge: {
-    position: 'absolute', bottom: 0, right: 0, backgroundColor: '#007AFF',
-    width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'white'
-  },
+  editIconBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#007AFF', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'white' },
   profileInfo: { flex: 1, alignItems: 'flex-end' },
   profileName: { fontSize: 20, fontWeight: '700', marginBottom: 2 },
   profileEmail: { fontSize: 14 },
   editLink: { fontSize: 13, marginTop: 4, fontWeight: '500' },
-
   sectionHeader: { fontSize: 13, fontWeight: '600', color: '#8E8E93', marginBottom: 8, marginRight: 12, textAlign: 'right' },
   sectionContainer: { backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', marginBottom: 24 },
-  
   itemContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 0.5 },
   itemRight: { flexDirection: 'row', alignItems: 'center' },
   itemLeft: { flexDirection: 'row', alignItems: 'center' },
   itemText: { fontSize: 16, marginRight: 12, fontWeight: '400' },
   iconBox: { width: 30, height: 30, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-  
   version: { textAlign: 'center', fontSize: 12, marginTop: 10, opacity: 0.5 },
-  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modalContent: { borderRadius: 20, padding: 24, width: '100%', maxWidth: 400, alignSelf: 'center' },
   modalHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: '700' },
-  inputLabel: { fontSize: 14, marginBottom: 8, textAlign: 'right', fontWeight: '500' },
   input: { borderRadius: 10, padding: 14, fontSize: 16, marginBottom: 24, textAlign: 'right' },
   saveButton: { borderRadius: 12, padding: 16, alignItems: 'center' },
   saveButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },

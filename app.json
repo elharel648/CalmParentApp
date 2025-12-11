@@ -15,7 +15,7 @@
           "photosPermission": "האפליקציה צריכה גישה לתמונות כדי להגדיר תמונת פרופיל"
         }
       ],
-      "expo-asset"
+      "expo-local-authentication"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -26,7 +26,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.harel.calmparentapp",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "האפליקציה צריכה גישה לתמונות כדי להגדיר תמונת פרופיל"
+        "NSPhotoLibraryUsageDescription": "האפליקציה צריכה גישה לתמונות כדי להגדיר תמונת פרופיל",
+        "NSFaceIDUsageDescription": "אפשר כניסה מהירה ומאובטחת באמצעות Face ID"
       }
     },
     "android": {
@@ -38,7 +39,9 @@
       "permissions": [
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "CAMERA"
+        "CAMERA",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
       ]
     },
     "web": {

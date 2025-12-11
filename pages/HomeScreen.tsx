@@ -1,246 +1,499 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, StatusBar, Modal, Image, TextInput, FlatList } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  StyleSheet, 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  ScrollView, 
+  Dimensions,
+  Modal,
+  Alert,
+  ActivityIndicator,
+  TextInput,
+  Image,
+  TouchableWithoutFeedback,
+  Keyboard
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { Home, BarChart2, User, Settings, Mic, Moon, Baby, Droplets, HeartPulse, Trash2, Sun, X, Plus, Minus, Clock, Play, Pause, Thermometer, Pill, Sparkles, Calendar, Lightbulb } from 'lucide-react-native';
+import * as Location from 'expo-location';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { 
+  Moon, Sun, Droplets, Utensils, Clock, Plus, Thermometer, Baby, 
+  ChevronLeft, X, Play, Pause, Save, CheckCircle
+} from 'lucide-react-native';
+import { auth, db } from '../services/firebaseConfig';
+import { doc, getDoc, collection, addDoc } from 'firebase/firestore';
 
-// --- מודל היומן ---
-const JournalModal = ({ visible, onClose, activities, onDelete }: any) => {
-  if (!visible) return null;
-  return (
-    <Modal animationType="slide" visible={visible} presentationStyle="pageSheet">
-      <View style={styles.journalContainer}>
-        <View style={styles.journalHeader}>
-          <Text style={styles.journalTitle}>יומן פעילות מלא</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}><X size={24} color="#374151" /></TouchableOpacity>
-        </View>
-        <FlatList
-          data={activities}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 20 }}
-          renderItem={({ item }) => (
-            <View style={styles.journalRow}>
-               <View style={styles.journalRowContent}>
-                  <Text style={styles.journalTime}>{new Date(item.time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</Text>
-                  <View>
-                    <Text style={styles.journalItemTitle}>{item.title}</Text>
-                    {item.detail ? <Text style={styles.journalItemDetail}>{item.detail}</Text> : null}
-                  </View>
-               </View>
-               <TouchableOpacity onPress={() => onDelete(item.id)}><Trash2 size={18} color="#ef4444" /></TouchableOpacity>
-            </View>
-          )}
-          ListEmptyComponent={<Text style={{textAlign: 'center', marginTop: 50, color: '#9ca3af'}}>אין פעילויות רשומות</Text>}
-        />
-      </View>
-    </Modal>
-  );
+const { width } = Dimensions.get('window');
+
+const SMART_TIPS: Record<string, string> = {
+  '0': 'מגע עור-לעור הוא קריטי. הוא מווסת חום גוף ומרגיע את התינוק.',
+  '1': 'התינוק מתחיל לעקוב אחרי חפצים. נסו להזיז רעשן לאט מול עיניו.',
+  'default': 'סמכו על האינטואיציה. אתם ההורים הכי טובים לילד שלכם.'
 };
 
-// --- המודל החכם ---
-const ActionModal = ({ visible, type, onClose, onSave }: any) => {
-  const [feedType, setFeedType] = useState<'bottle' | 'nursing'>('bottle');
-  const [amount, setAmount] = useState(120);
-  const [nursingSide, setNursingSide] = useState<'left' | 'right' | null>(null);
-  const [timerLeft, setTimerLeft] = useState(0);
-  const [timerRight, setTimerRight] = useState(0);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [diaperSelections, setDiaperSelections] = useState<string[]>([]);
-  const [healthTab, setHealthTab] = useState<'fever' | 'meds'>('fever');
-  const [temp, setTemp] = useState(36.6);
-  const [medication, setMedication] = useState<string | null>(null);
-  const [otherMedText, setOtherMedText] = useState('');
+export default function HomeScreen() {
+  const navigation = useNavigation<any>();
+  
+  // נתונים
+  const [babyData, setBabyData] = useState<any>(null);
+  const [weather, setWeather] = useState<any>(null);
+  const [currentTip, setCurrentTip] = useState(SMART_TIPS['default']);
+  const [todayStats, setTodayStats] = useState({ food: 0, diapers: 0, sleep: 0 });
+  const [lastAction, setLastAction] = useState('ממתין לפעילות...');
+  const [greeting, setGreeting] = useState(''); // ברכה דינמית
+
+  // מודלים
+  const [isMenuVisible, setMenuVisible] = useState(false);
+  const [isFeedingModalVisible, setFeedingModalVisible] = useState(false);
+  const [isDiaperModalVisible, setDiaperModalVisible] = useState(false);
+  
+  // האכלה
+  const [feedingType, setFeedingType] = useState<'bottle' | 'breast'>('bottle');
+  const [bottleAmount, setBottleAmount] = useState('');
+  
+  // הנקה (צדדים)
+  const [activeBreastSide, setActiveBreastSide] = useState<'left' | 'right' | null>(null);
+  const [leftTimer, setLeftTimer] = useState(0);
+  const [rightTimer, setRightTimer] = useState(0);
+  
+  // החתלה
+  const [diaperType, setDiaperType] = useState<'pee' | 'poo' | 'both'>('pee');
+
+  const [loadingSave, setLoadingSave] = useState(false);
+  
+  // טיימר שינה ראשי
+  const [isSleeping, setIsSleeping] = useState(false);
+  const [sleepTimer, setSleepTimer] = useState(0);
+
+  // עיצוב דינמי
+  const currentHour = new Date().getHours();
+  // לילה נחשב מ-19:00 עד 06:00 בבוקר
+  const isNight = currentHour >= 19 || currentHour < 6;
+
+  const gradientColors = isNight 
+    ? ['#1e1b4b', '#4338ca', '#6366f1'] // לילה עמוק
+    : ['#2563eb', '#3b82f6', '#60a5fa']; // כחול יום
+
+  const textColor = '#ffffff';
+  const subTextColor = '#e2e8f0';
+  const cardBg = 'rgba(255, 255, 255, 0.15)';
+
+  // --- טיימרים ---
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isSleeping) interval = setInterval(() => setSleepTimer(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isSleeping]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isTimerRunning && nursingSide) {
-      interval = setInterval(() => { if (nursingSide === 'left') setTimerLeft(t => t + 1); else setTimerRight(t => t + 1); }, 1000);
+    if (activeBreastSide === 'left') {
+      interval = setInterval(() => setLeftTimer(t => t + 1), 1000);
+    } else if (activeBreastSide === 'right') {
+      interval = setInterval(() => setRightTimer(t => t + 1), 1000);
     }
     return () => clearInterval(interval);
-  }, [isTimerRunning, nursingSide]);
+  }, [activeBreastSide]);
 
-  if (!visible) return null;
-  const formatTime = (seconds: number) => { const m = Math.floor(seconds / 60).toString().padStart(2, '0'); const s = (seconds % 60).toString().padStart(2, '0'); return `${m}:${s}`; };
-  const toggleDiaperSelection = (sel: string) => { if (diaperSelections.includes(sel)) setDiaperSelections(diaperSelections.filter(s => s !== sel)); else setDiaperSelections([...diaperSelections, sel]); };
-  const handleSave = () => {
-    let details = '', displayTitle = '';
-    if (type === 'feeding') { displayTitle = feedType === 'bottle' ? 'בקבוק' : 'הנקה'; details = feedType === 'bottle' ? `${amount} מ״ל` : `שמאל: ${formatTime(timerLeft)}, ימין: ${formatTime(timerRight)}`; } 
-    else if (type === 'diaper') { displayTitle = 'החלפה'; details = diaperSelections.length > 0 ? diaperSelections.join(' + ') : 'נקי'; } 
-    else if (type === 'health') { displayTitle = healthTab === 'fever' ? 'מדידת חום' : 'תרופה'; details = healthTab === 'fever' ? `חום: ${temp.toFixed(1)}°` : (medication === 'אחר' ? otherMedText : medication) || 'תרופה כללית'; }
-    onSave({ type, displayTitle, details });
-    setTimerLeft(0); setTimerRight(0); setIsTimerRunning(false); setDiaperSelections([]); setOtherMedText(''); setMedication(null);
-  };
-  const getTitle = () => { if (type === 'feeding') return 'פרטי האכלה'; if (type === 'diaper') return 'פרטי החתלה'; if (type === 'health') return 'תיעוד בריאות'; return ''; };
-
-  return (
-    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="dark" />
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}><TouchableOpacity onPress={onClose} style={styles.closeButton}><X size={24} color="#6b7280" /></TouchableOpacity><Text style={styles.modalTitle}>{getTitle()}</Text><View style={{width: 24}} /></View>
-          {type === 'feeding' && (
-            <View style={{width: '100%'}}>
-              <View style={styles.tabsContainer}><TouchableOpacity onPress={() => setFeedType('bottle')} style={[styles.tab, feedType === 'bottle' && styles.activeTab]}><Baby size={18} color={feedType === 'bottle' ? '#db2777' : '#6b7280'} /><Text style={[styles.tabText, feedType === 'bottle' && styles.activeTabText]}>בקבוק</Text></TouchableOpacity><TouchableOpacity onPress={() => setFeedType('nursing')} style={[styles.tab, feedType === 'nursing' && styles.activeTab]}><Clock size={18} color={feedType === 'nursing' ? '#db2777' : '#6b7280'} /><Text style={[styles.tabText, feedType === 'nursing' && styles.activeTabText]}>הנקה</Text></TouchableOpacity></View>
-              {feedType === 'bottle' ? (
-                <View style={{alignItems: 'center'}}><Text style={styles.bigValue}>{amount}</Text><Text style={styles.unitLabel}>מ״ל</Text><View style={styles.rowControls}><TouchableOpacity onPress={() => setAmount(a => Math.max(0, a - 10))} style={styles.roundBtn}><Minus size={24} color="#374151"/></TouchableOpacity><TouchableOpacity onPress={() => setAmount(a => a + 10)} style={styles.roundBtn}><Plus size={24} color="#374151"/></TouchableOpacity></View></View>
-              ) : (
-                <View style={styles.rowControls}><TouchableOpacity style={[styles.nursingCard, nursingSide === 'left' && styles.nursingCardActive]} onPress={() => { if (nursingSide === 'left' && isTimerRunning) setIsTimerRunning(false); else { setNursingSide('left'); setIsTimerRunning(true); } }}>{nursingSide === 'left' && isTimerRunning ? <Pause size={32} color="#db2777" /> : <Play size={32} color="#6b7280" />}<Text style={styles.nursingLabel}>שמאל</Text><Text style={styles.nursingTimer}>{formatTime(timerLeft)}</Text></TouchableOpacity><TouchableOpacity style={[styles.nursingCard, nursingSide === 'right' && styles.nursingCardActive]} onPress={() => { if (nursingSide === 'right' && isTimerRunning) setIsTimerRunning(false); else { setNursingSide('right'); setIsTimerRunning(true); } }}>{nursingSide === 'right' && isTimerRunning ? <Pause size={32} color="#db2777" /> : <Play size={32} color="#6b7280" />}<Text style={styles.nursingLabel}>ימין</Text><Text style={styles.nursingTimer}>{formatTime(timerRight)}</Text></TouchableOpacity></View>
-              )}
-            </View>
-          )}
-          {type === 'diaper' && (
-            <View style={{width: '100%'}}>
-              <View style={styles.rowControls}><TouchableOpacity style={[styles.diaperCard, diaperSelections.includes('פיפי') && styles.diaperCardSelected]} onPress={() => toggleDiaperSelection('פיפי')}><Droplets size={40} color={diaperSelections.includes('פיפי') ? '#0891b2' : '#9ca3af'} /><Text style={[styles.diaperText, diaperSelections.includes('פיפי') && {color:'#0891b2', fontWeight:'bold'}]}>פיפי</Text></TouchableOpacity><TouchableOpacity style={[styles.diaperCard, diaperSelections.includes('קקי') && styles.diaperCardSelected]} onPress={() => toggleDiaperSelection('קקי')}><Baby size={40} color={diaperSelections.includes('קקי') ? '#854d0e' : '#9ca3af'} /><Text style={[styles.diaperText, diaperSelections.includes('קקי') && {color:'#854d0e', fontWeight:'bold'}]}>קקי</Text></TouchableOpacity></View><Text style={styles.statusText}>סטטוס: {diaperSelections.length === 0 ? 'יבש (נקי)' : diaperSelections.join(' + ')}</Text>
-            </View>
-          )}
-          {type === 'health' && (
-            <View style={{width: '100%', alignItems: 'center'}}>
-               <View style={styles.tabsContainer}><TouchableOpacity onPress={() => setHealthTab('fever')} style={[styles.tab, healthTab === 'fever' && styles.activeTab]}><Thermometer size={18} color={healthTab === 'fever' ? '#ef4444' : '#6b7280'} /><Text style={[styles.tabText, healthTab === 'fever' && {color:'#ef4444'}]}>חום</Text></TouchableOpacity><TouchableOpacity onPress={() => setHealthTab('meds')} style={[styles.tab, healthTab === 'meds' && styles.activeTab]}><Pill size={18} color={healthTab === 'meds' ? '#ef4444' : '#6b7280'} /><Text style={[styles.tabText, healthTab === 'meds' && {color:'#ef4444'}]}>תרופה</Text></TouchableOpacity></View>
-               {healthTab === 'fever' ? (
-                 <><Text style={[styles.bigValue, {color: '#ef4444'}]}>{temp.toFixed(1)}</Text><Text style={styles.unitLabel}>מעלות צלזיוס</Text><View style={styles.rowControls}><TouchableOpacity onPress={() => setTemp(t => +(t - 0.1).toFixed(1))} style={styles.roundBtn}><Minus size={24} color="#374151"/></TouchableOpacity><TouchableOpacity onPress={() => setTemp(t => +(t + 0.1).toFixed(1))} style={styles.roundBtn}><Plus size={24} color="#374151"/></TouchableOpacity></View></>
-               ) : (
-                 <View style={{width: '100%'}}><View style={styles.medsContainer}>{['אקמולי', 'נורופן', 'סימפוקל', 'אחר'].map((med) => (<TouchableOpacity key={med} style={[styles.medChip, medication === med && styles.medChipActive]} onPress={() => setMedication(med === medication ? null : med)}><Text style={[styles.medText, medication === med && {color:'white'}]}>{med}</Text></TouchableOpacity>))}</View>{medication === 'אחר' && <TextInput style={styles.inputField} placeholder="איזו תרופה?" value={otherMedText} onChangeText={setOtherMedText} />}</View>
-               )}
-            </View>
-          )}
-          <TouchableOpacity style={[styles.saveButton, { backgroundColor: type === 'feeding' ? '#db2777' : type === 'diaper' ? '#0891b2' : '#ef4444' }]} onPress={handleSave}><Text style={styles.saveButtonText}>שמור פעילות</Text></TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+  // --- טעינת נתונים וחישוב זמן ---
+  useFocusEffect(
+    useCallback(() => {
+      calculateGreeting(); // חישוב ברכה בכל כניסה
+      
+      let isActive = true;
+      const loadAll = async () => {
+        if (!auth.currentUser) return;
+        try {
+          const docRef = doc(db, 'users', auth.currentUser.uid);
+          const snap = await getDoc(docRef);
+          if (isActive && snap.exists()) {
+            const data = snap.data();
+            const profile = data.babyProfile || {};
+            setBabyData({
+              name: profile.name || data.displayName || 'הבייבי שלי',
+              photoURL: profile.photoURL || data.photoURL,
+              birthDate: profile.birthDate
+            });
+            if (profile.birthDate) calculateSmartTip(profile.birthDate);
+          }
+          getLocationAndWeather();
+        } catch (e) { console.log(e); }
+      };
+      loadAll();
+      return () => { isActive = false; };
+    }, [])
   );
-};
 
-// --- קומפוננטת מסך הבית הראשית ---
-export default function HomeScreen() {
-  const insets = useSafeAreaInsets();
-  const [isSleeping, setIsSleeping] = useState(false);
-  const [greeting, setGreeting] = useState('');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [journalVisible, setJournalVisible] = useState(false);
-  const [activeModalType, setActiveModalType] = useState('feeding');
-  const [bannerMode, setBannerMode] = useState<'prediction' | 'tip'>('prediction');
-  const [activities, setActivities] = useState([
-    { id: '1', type: 'feeding', title: 'האכלה', time: new Date().toISOString(), detail: '120 מ״ל' },
-    { id: '2', type: 'diaper', title: 'החלפה', time: new Date(Date.now() - 3600000).toISOString(), detail: 'פיפי' }
-  ]);
-
-  useEffect(() => {
+  // לוגיקה מדויקת לשעות היום בישראל
+  const calculateGreeting = () => {
     const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) setGreeting('בוקר טוב');
-    else if (hour >= 12 && hour < 18) setGreeting('צהריים טובים');
-    else if (hour >= 18 && hour < 22) setGreeting('ערב טוב');
-    else setGreeting('לילה טוב');
-  }, []);
+    if (hour >= 5 && hour < 12) setGreeting('בוקר טוב ☀️');
+    else if (hour >= 12 && hour < 17) setGreeting('צהריים טובים 🌤️');
+    else if (hour >= 17 && hour < 21) setGreeting('ערב טוב ✨');
+    else setGreeting('לילה טוב 🌙');
+  };
 
-  const openModal = (type: string) => { setActiveModalType(type); setModalVisible(true); };
-  const handleSaveActivity = (data: any) => { setActivities([{ id: Date.now().toString(), type: data.type, title: data.displayTitle || (data.type === 'feeding' ? 'האכלה' : data.type === 'diaper' ? 'החלפה' : 'בריאות'), time: new Date().toISOString(), detail: data.details }, ...activities]); setModalVisible(false); };
-  const handleDeleteActivity = (id: string) => { setActivities(activities.filter(a => a.id !== id)); };
-  const ActivityIcon = ({ type }: { type: string }) => { if (type === 'sleep') return <Moon size={18} color="#4f46e5" />; if (type === 'feeding') return <Baby size={18} color="#db2777" />; if (type === 'diaper') return <Droplets size={18} color="#0891b2" />; if (type === 'health') return <HeartPulse size={18} color="#ef4444" />; return <Sun size={18} color="gray" />; };
+  const calculateSmartTip = (birthDateString: string) => {
+    if (!birthDateString) return;
+    const parts = birthDateString.split('/');
+    const birthDate = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+    const now = new Date();
+    const months = (now.getFullYear() - birthDate.getFullYear()) * 12 + (now.getMonth() - birthDate.getMonth());
+    setCurrentTip(SMART_TIPS[months.toString()] || SMART_TIPS['default']);
+  };
+
+  const getLocationAndWeather = async () => {
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${location.coords.latitude}&longitude=${location.coords.longitude}&current_weather=true`);
+      const data = await res.json();
+      setWeather(data.current_weather);
+    } catch (e) {}
+  };
+
+  // --- שמירה ---
+  const handleSaveFeeding = async () => {
+    const totalBreastTime = leftTimer + rightTimer;
+    if (feedingType === 'bottle' && !bottleAmount) return Alert.alert('חסר מידע', 'כמה מ"ל אכל?');
+    if (feedingType === 'breast' && totalBreastTime === 0) return Alert.alert('לא נרשם זמן', 'הטיימרים על 0');
+
+    setLoadingSave(true);
+    try {
+      await addDoc(collection(db, 'events'), {
+        userId: auth.currentUser?.uid,
+        type: 'feeding',
+        subType: feedingType,
+        timestamp: new Date(),
+        amount: feedingType === 'bottle' ? parseInt(bottleAmount) : 0,
+        durationLeft: feedingType === 'breast' ? leftTimer : 0,
+        durationRight: feedingType === 'breast' ? rightTimer : 0,
+        totalDuration: totalBreastTime
+      });
+      
+      setTodayStats(prev => ({ ...prev, food: prev.food + (feedingType === 'bottle' ? parseInt(bottleAmount) : 0) }));
+      const actionText = feedingType === 'bottle' ? `בקבוק ${bottleAmount} מ"ל` : `הנקה ${formatTime(totalBreastTime)}`;
+      setLastAction(actionText);
+      
+      setFeedingModalVisible(false);
+      setMenuVisible(false);
+      setBottleAmount('');
+      setActiveBreastSide(null);
+      setLeftTimer(0);
+      setRightTimer(0);
+    } catch (error) { Alert.alert('שגיאה', 'לא נשמר'); } 
+    finally { setLoadingSave(false); }
+  };
+
+  const handleSaveDiaper = async () => {
+    setLoadingSave(true);
+    try {
+      await addDoc(collection(db, 'events'), {
+        userId: auth.currentUser?.uid,
+        type: 'diaper',
+        subType: diaperType,
+        timestamp: new Date()
+      });
+      setTodayStats(prev => ({ ...prev, diapers: prev.diapers + 1 }));
+      const typeText = diaperType === 'pee' ? 'פיפי' : diaperType === 'poo' ? 'קקי' : 'מלא';
+      setLastAction(`החלפת חיתול (${typeText})`);
+      setDiaperModalVisible(false);
+      setMenuVisible(false);
+    } catch (error) { Alert.alert('שגיאה', 'לא נשמר'); } 
+    finally { setLoadingSave(false); }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const toggleBreastSide = (side: 'left' | 'right') => {
+    if (activeBreastSide === side) setActiveBreastSide(null);
+    else setActiveBreastSide(side);
+  };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle={isSleeping ? 'light-content' : 'dark-content'} />
-      <LinearGradient colors={isSleeping ? ['#1e1b4b', '#312e81'] : ['#fff7ed', '#ffffff']} style={StyleSheet.absoluteFill} />
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 10 }]} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}><View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}><Image source={{uri: 'https://images.unsplash.com/photo-1522771753035-4a5000b5ad88?q=80&w=200&auto=format&fit=crop'}} style={styles.avatar} /><View><Text style={styles.greeting}>{greeting},</Text><Text style={[styles.childName, { color: isSleeping ? '#fff' : '#111827' }]}>עלמא</Text></View></View><TouchableOpacity style={styles.micButton}><Mic size={24} color={isSleeping ? '#fff' : '#4f46e5'} /></TouchableOpacity></View>
-        <View style={styles.dailyStatsRow}><View style={styles.dailyStatItem}><Text style={styles.dailyStatValue}>0.0</Text><Text style={styles.dailyStatLabel}>ש׳ שינה</Text></View><View style={styles.dailyStatItem}><Text style={styles.dailyStatValue}>0</Text><Text style={styles.dailyStatLabel}>מ״ל אוכל</Text></View><View style={styles.dailyStatItem}><Text style={styles.dailyStatValue}>0</Text><Text style={styles.dailyStatLabel}>החלפות</Text></View></View>
-        {!isSleeping && (
-            <View style={styles.smartBanner}>
-                <View style={styles.bannerHeader}><TouchableOpacity onPress={() => setBannerMode('prediction')} style={styles.bannerTab}><Text style={[styles.bannerTabTitle, bannerMode === 'prediction' && styles.bannerTabActive]}>הצעד הבא</Text>{bannerMode === 'prediction' && <View style={styles.bannerIndicator} />}</TouchableOpacity><View style={{width: 1, height: 16, backgroundColor: '#f3f4f6'}} /><TouchableOpacity onPress={() => setBannerMode('tip')} style={styles.bannerTab}><Text style={[styles.bannerTabTitle, bannerMode === 'tip' && styles.bannerTabActive]}>טיפ יומי</Text>{bannerMode === 'tip' && <View style={styles.bannerIndicator} />}</TouchableOpacity></View>
-                <View style={styles.bannerContent}>{bannerMode === 'prediction' ? (<View style={{flexDirection: 'row-reverse', alignItems: 'center', gap: 10}}><Sparkles size={18} color="#6366f1" /><Text style={styles.bannerText}>עלמא כנראה תהיה רעבה סביב 14:30. כדאי להכין בקבוק בקרוב.</Text></View>) : (<View style={{flexDirection: 'row-reverse', alignItems: 'center', gap: 10}}><Lightbulb size={18} color="#f59e0b" /><Text style={styles.bannerText}>בגיל 3 חודשים תינוקות מתחילים לזהות פרצופים. נסו לחייך אליה מקרוב!</Text></View>)}</View>
+      <StatusBar style="light" />
+      <LinearGradient colors={gradientColors} style={StyleSheet.absoluteFill} start={{x:0, y:0}} end={{x:1, y:1}} />
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.greeting, { color: subTextColor }]}>{greeting}</Text>
+            <Text style={[styles.babyName, { color: textColor }]}>
+              {babyData?.name || 'טוען...'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('פרופיל')} activeOpacity={0.8} style={styles.profileImageContainer}>
+             {babyData?.photoURL ? (
+               <Image source={{ uri: babyData.photoURL }} style={styles.profileImage} />
+             ) : (
+               <Baby size={28} color="#fff" />
+             )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Hero Card */}
+        <View style={[styles.heroCard, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
+          <View style={styles.heroHeader}>
+            <View style={[styles.statusBadge, { backgroundColor: isSleeping ? '#818cf8' : '#fbbf24' }]}>
+              <Text style={[styles.statusText, { color: isSleeping ? '#fff' : '#78350f' }]}>
+                {isSleeping ? 'בשינה 😴' : 'זמן ערות 👶'}
+              </Text>
             </View>
-        )}
-        <View style={[styles.heroCard, isSleeping ? { backgroundColor: 'rgba(30,41,59,0.8)' } : { backgroundColor: '#fff' }]}><View style={styles.heroContent}><View style={styles.heroIconCircle}>{isSleeping ? <Moon size={32} color="#fff" /> : <Sun size={32} color="#f97316" />}</View><Text style={[styles.heroStatus, { color: isSleeping ? '#a5b4fc' : '#fb923c' }]}>{isSleeping ? 'לילה טוב' : 'בוקר אור'}</Text><TouchableOpacity onPress={() => setIsSleeping(!isSleeping)} style={styles.heroButton}><Text style={styles.heroButtonText}>{isSleeping ? 'התעוררנו' : 'לישון עכשיו'}</Text></TouchableOpacity></View></View>
-        {!isSleeping && (
-            <View style={styles.controlGrid}><TouchableOpacity style={styles.controlItem} onPress={() => openModal('feeding')}><View style={[styles.controlIcon, { backgroundColor: '#ec4899' }]}><Baby size={28} color="#fff" /></View><Text style={styles.controlLabel}>האכלה</Text></TouchableOpacity><TouchableOpacity style={styles.controlItem} onPress={() => openModal('diaper')}><View style={[styles.controlIcon, { backgroundColor: '#06b6d4' }]}><Droplets size={28} color="#fff" /></View><Text style={styles.controlLabel}>החתלה</Text></TouchableOpacity><TouchableOpacity style={styles.controlItem} onPress={() => openModal('health')}><View style={[styles.controlIcon, { backgroundColor: '#ef4444' }]}><HeartPulse size={28} color="#fff" /></View><Text style={styles.controlLabel}>בריאות</Text></TouchableOpacity><TouchableOpacity style={styles.controlItem} onPress={() => setJournalVisible(true)}><View style={[styles.controlIcon, { backgroundColor: '#8b5cf6' }]}><Calendar size={28} color="#fff" /></View><Text style={styles.controlLabel}>יומן</Text></TouchableOpacity></View>
-        )}
-        <View style={styles.timelineSection}><View style={{flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}}><Text style={styles.sectionTitle}>הפעילות היום</Text></View>{activities.slice(0, 3).map((activity, index) => (
-                <View key={activity.id} style={styles.timelineRow}><View style={styles.timelineLineContainer}><View style={[styles.timelineDot, { backgroundColor: activity.type === 'feeding' ? '#fce7f3' : '#ecfeff' }]}><ActivityIcon type={activity.type} /></View>{index !== activities.length - 1 && <View style={styles.timelineLine} />}</View><View style={styles.timelineContent}><Text style={styles.timelineTime}>{new Date(activity.time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</Text><Text style={styles.timelineTitle}>{activity.title}</Text>{activity.detail ? <Text style={styles.timelineDetail}>{activity.detail}</Text> : null}</View></View>
-            ))}</View>
+            {/* אייקון משתנה לפי לילה/יום */}
+            {isNight ? <Moon size={24} color="#a5b4fc" /> : <Sun size={24} color="#fcd34d" />}
+          </View>
+          
+          <View style={styles.timerContainer}>
+            <Text style={[styles.timerText, { color: '#fff' }]}>
+              {isSleeping ? formatTime(sleepTimer) : lastAction}
+            </Text>
+            <Text style={[styles.timerLabel, { color: subTextColor }]}>
+              {isSleeping ? 'זמן שינה נוכחי' : 'הפעילות האחרונה שנרשמה'}
+            </Text>
+          </View>
+
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => { setIsSleeping(!isSleeping); if (!isSleeping) setSleepTimer(0); }}
+          >
+            <Text style={styles.actionButtonText}>
+              {isSleeping ? 'התעורר/ה? סיום שינה' : 'הולכים לישון'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* סטטיסטיקה */}
+        <Text style={[styles.sectionTitle, { color: textColor }]}>היום עד כה</Text>
+        <View style={styles.statsRow}>
+          <View style={[styles.glassCard, { backgroundColor: cardBg }]}>
+            <Utensils size={24} color="#f472b6" />
+            <Text style={[styles.statValue, { color: textColor }]}>{todayStats.food}</Text>
+            <Text style={[styles.statLabel, { color: subTextColor }]}>מ"ל אוכל</Text>
+          </View>
+          <View style={[styles.glassCard, { backgroundColor: cardBg }]}>
+            <Droplets size={24} color="#38bdf8" />
+            <Text style={[styles.statValue, { color: textColor }]}>{todayStats.diapers}</Text>
+            <Text style={[styles.statLabel, { color: subTextColor }]}>חיתולים</Text>
+          </View>
+          <View style={[styles.glassCard, { backgroundColor: cardBg }]}>
+            <Moon size={24} color="#a78bfa" />
+            <Text style={[styles.statValue, { color: textColor }]}>{todayStats.sleep}</Text>
+            <Text style={[styles.statLabel, { color: subTextColor }]}>שעות שינה</Text>
+          </View>
+        </View>
+
+        {/* מזג אוויר וטיפ */}
+        <View style={[styles.wideCard, { backgroundColor: cardBg, marginTop: 20 }]}>
+          <View style={styles.iconCircle}>
+            <Thermometer size={24} color="#34d399" />
+          </View>
+          <View style={{ flex: 1, marginRight: 16 }}>
+            <Text style={[styles.widgetTitle, { color: textColor }]}>
+              {weather ? `${weather.temperature}° בחוץ` : 'טוען...'}
+            </Text>
+            <Text style={[styles.widgetText, { color: subTextColor }]}>
+              {weather && weather.temperature < 20 ? 'קריר, מומלץ ארוך' : 'נעים וכיפי בחוץ'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.wideCard, { backgroundColor: cardBg, marginTop: 16, marginBottom: 100 }]}>
+          <View style={{ width: '100%' }}>
+            <Text style={[styles.widgetTitle, { color: textColor }]}>💡 הטיפ היומי</Text>
+            <Text style={[styles.widgetText, { color: subTextColor }]}>{currentTip}</Text>
+          </View>
+        </View>
       </ScrollView>
-      <ActionModal visible={modalVisible} type={activeModalType} onClose={() => setModalVisible(false)} onSave={handleSaveActivity} />
-      <JournalModal visible={journalVisible} onClose={() => setJournalVisible(false)} activities={activities} onDelete={handleDeleteActivity} />
+
+      {/* FAB */}
+      <TouchableOpacity style={styles.fab} onPress={() => setMenuVisible(true)} activeOpacity={0.8}>
+        <Plus size={32} color="white" />
+      </TouchableOpacity>
+
+      {/* Modals - Action Sheet */}
+      <Modal visible={isMenuVisible} transparent animationType="slide" onRequestClose={() => setMenuVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
+          <View style={styles.actionSheet}>
+            <Text style={styles.sheetTitle}>הוספת פעילות</Text>
+            <TouchableOpacity style={styles.actionItem} onPress={() => { setMenuVisible(false); setTimeout(() => setFeedingModalVisible(true), 100); }}>
+              <View style={[styles.actionIcon, { backgroundColor: '#fce7f3' }]}><Utensils size={24} color="#db2777" /></View>
+              <Text style={styles.actionText}>האכלה / הנקה</Text>
+              <ChevronLeft size={20} color="#9ca3af" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionItem} onPress={() => { setMenuVisible(false); setTimeout(() => setDiaperModalVisible(true), 100); }}>
+              <View style={[styles.actionIcon, { backgroundColor: '#e0f2fe' }]}><Droplets size={24} color="#0284c7" /></View>
+              <Text style={styles.actionText}>החלפת חיתול</Text>
+              <ChevronLeft size={20} color="#9ca3af" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setMenuVisible(false)}>
+              <Text style={styles.closeButtonText}>ביטול</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Modals - Feeding */}
+      <Modal visible={isFeedingModalVisible} transparent animationType="slide">
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.feedingModalOverlay}>
+            <View style={styles.feedingModalContent}>
+              <View style={styles.modalHeaderRow}>
+                <TouchableOpacity onPress={() => setFeedingModalVisible(false)}><X size={24} color="#6b7280" /></TouchableOpacity>
+                <Text style={styles.feedingTitle}>רישום האכלה</Text>
+                <View style={{width: 24}}/> 
+              </View>
+              <View style={styles.tabsContainer}>
+                <TouchableOpacity style={[styles.tabButton, feedingType === 'bottle' && styles.activeTab]} onPress={() => setFeedingType('bottle')}>
+                  <Text style={[styles.tabText, feedingType === 'bottle' && styles.activeTabText]}>בקבוק</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tabButton, feedingType === 'breast' && styles.activeTab]} onPress={() => setFeedingType('breast')}>
+                  <Text style={[styles.tabText, feedingType === 'breast' && styles.activeTabText]}>הנקה</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalBody}>
+                {feedingType === 'bottle' ? (
+                  <View style={styles.bottleContainer}>
+                    <Text style={styles.inputLabel}>כמות (מ"ל)</Text>
+                    <TextInput style={styles.amountInput} value={bottleAmount} onChangeText={setBottleAmount} keyboardType="numeric" placeholder="0" autoFocus />
+                  </View>
+                ) : (
+                  <View style={styles.breastContainer}>
+                    <View style={styles.breastTimersRow}>
+                      <TouchableOpacity style={[styles.breastSideCard, activeBreastSide === 'right' && styles.activeBreastCard]} onPress={() => toggleBreastSide('right')}>
+                        <Text style={[styles.breastSideLabel, activeBreastSide === 'right' && styles.activeBreastText]}>צד ימין</Text>
+                        <Text style={[styles.breastTimerText, activeBreastSide === 'right' && styles.activeBreastText]}>{formatTime(rightTimer)}</Text>
+                        <View style={styles.breastIcon}>{activeBreastSide === 'right' ? <Pause size={20} color="white" /> : <Play size={20} color="#6b7280" />}</View>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.breastSideCard, activeBreastSide === 'left' && styles.activeBreastCard]} onPress={() => toggleBreastSide('left')}>
+                        <Text style={[styles.breastSideLabel, activeBreastSide === 'left' && styles.activeBreastText]}>צד שמאל</Text>
+                        <Text style={[styles.breastTimerText, activeBreastSide === 'left' && styles.activeBreastText]}>{formatTime(leftTimer)}</Text>
+                        <View style={styles.breastIcon}>{activeBreastSide === 'left' ? <Pause size={20} color="white" /> : <Play size={20} color="#6b7280" />}</View>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.totalTimeLabel}>סה״כ: {formatTime(leftTimer + rightTimer)}</Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity style={styles.saveFeedingBtn} onPress={handleSaveFeeding}>
+                {loadingSave ? <ActivityIndicator color="white" /> : <Text style={styles.saveFeedingText}>שמירה</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Modals - Diaper */}
+      <Modal visible={isDiaperModalVisible} transparent animationType="slide">
+        <View style={styles.feedingModalOverlay}>
+          <View style={styles.feedingModalContent}>
+            <View style={styles.modalHeaderRow}>
+              <TouchableOpacity onPress={() => setDiaperModalVisible(false)}><X size={24} color="#6b7280" /></TouchableOpacity>
+              <Text style={styles.feedingTitle}>רישום החתלה</Text>
+              <View style={{width: 24}}/> 
+            </View>
+            <View style={styles.diaperOptionsContainer}>
+              <TouchableOpacity style={[styles.diaperOption, diaperType === 'pee' && styles.activeDiaperOption]} onPress={() => setDiaperType('pee')}>
+                <Droplets size={32} color={diaperType === 'pee' ? '#fff' : '#0ea5e9'} />
+                <Text style={[styles.diaperText, diaperType === 'pee' && styles.activeDiaperText]}>פיפי</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.diaperOption, diaperType === 'poo' && styles.activeDiaperOption, {borderColor: '#b45309'}]} onPress={() => setDiaperType('poo')}>
+                <View style={{width:32, height:32, borderRadius:16, backgroundColor: diaperType === 'poo' ? '#fff' : '#b45309'}} />
+                <Text style={[styles.diaperText, diaperType === 'poo' && styles.activeDiaperText, {color: diaperType === 'poo' ? '#fff' : '#b45309'}]}>קקי</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.diaperOption, diaperType === 'both' && styles.activeDiaperOption, {borderColor: '#8b5cf6'}]} onPress={() => setDiaperType('both')}>
+                <CheckCircle size={32} color={diaperType === 'both' ? '#fff' : '#8b5cf6'} />
+                <Text style={[styles.diaperText, diaperType === 'both' && styles.activeDiaperText, {color: diaperType === 'both' ? '#fff' : '#8b5cf6'}]}>גם וגם</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.saveFeedingBtn} onPress={handleSaveDiaper}>
+              {loadingSave ? <ActivityIndicator color="white" /> : <Text style={styles.saveFeedingText}>שמירה</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 120 },
-  header: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: 'white' },
-  greeting: { fontSize: 13, color: '#6b7280', textAlign: 'right' },
-  childName: { fontSize: 22, fontWeight: '900', textAlign: 'right' },
-  micButton: { padding: 8, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 50 },
-  dailyStatsRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 16, gap: 8 },
-  dailyStatItem: { flex: 1, backgroundColor: 'white', borderRadius: 16, paddingVertical: 10, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
-  dailyStatValue: { fontSize: 18, fontWeight: '900', color: '#111827' },
-  dailyStatLabel: { fontSize: 11, color: '#9ca3af', fontWeight: 'bold', marginTop: 2 },
-  smartBanner: { backgroundColor: 'white', borderRadius: 20, marginBottom: 20, padding: 0, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 2, overflow: 'hidden' },
-  bannerHeader: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, gap: 16 },
-  bannerTab: { paddingBottom: 4 },
-  bannerTabTitle: { fontSize: 13, fontWeight: '600', color: '#9ca3af' },
-  bannerTabActive: { color: '#4f46e5', fontWeight: '800' },
-  bannerIndicator: { width: 12, height: 3, borderRadius: 2, backgroundColor: '#4f46e5', marginTop: 2, alignSelf: 'center' },
-  bannerContent: { padding: 16, paddingTop: 8, alignItems: 'center', backgroundColor: '#fafafa' },
-  bannerText: { fontSize: 14, color: '#374151', textAlign: 'right', lineHeight: 20 },
-  heroCard: { borderRadius: 28, padding: 20, marginBottom: 24, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowOffset: {width:0, height:4}, elevation: 6 },
-  heroContent: { alignItems: 'center' },
-  heroIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.4)', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  heroStatus: { fontSize: 16, fontWeight: 'bold', marginBottom: 16, letterSpacing: 1 },
-  heroButton: { backgroundColor: '#0f172a', paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14 },
-  heroButtonText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
-  controlGrid: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 24 },
-  controlItem: { alignItems: 'center', gap: 6, width: '23%' },
-  controlIcon: { width: 56, height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center', elevation: 4 },
-  controlLabel: { fontSize: 11, fontWeight: '600', color: '#4b5563' },
-  timelineSection: { marginBottom: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', marginBottom: 12, textAlign: 'right', color: '#374151' },
-  timelineRow: { flexDirection: 'row-reverse', minHeight: 60 },
-  timelineLineContainer: { alignItems: 'center', width: 40 },
-  timelineDot: { width: 32, height: 32, borderRadius: 12, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  timelineLine: { width: 2, flex: 1, backgroundColor: '#f3f4f6', marginVertical: 4 },
-  timelineContent: { flex: 1, paddingRight: 12, paddingBottom: 20 },
-  timelineTime: { fontSize: 11, color: '#9ca3af', textAlign: 'right', marginBottom: 2 },
-  timelineTitle: { fontSize: 15, fontWeight: '700', color: '#1f2937', textAlign: 'right' },
-  timelineDetail: { fontSize: 13, color: '#6b7280', textAlign: 'right' },
-  activeDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#4f46e5', marginTop: 4 },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: 'white', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 40, minHeight: 420, shadowColor: '#000', shadowOpacity: 0.15, elevation: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
-  closeButton: { padding: 8, backgroundColor: '#f3f4f6', borderRadius: 50 },
-  tabsContainer: { flexDirection: 'row-reverse', backgroundColor: '#f3f4f6', borderRadius: 14, padding: 4, marginBottom: 24 },
-  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12, gap: 6 },
-  activeTab: { backgroundColor: 'white', shadowColor: '#000', shadowOpacity: 0.05, elevation: 1 },
+  container: { flex: 1 },
+  scrollContent: { padding: 20, paddingTop: 60 },
+  header: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  greeting: { fontSize: 16, fontWeight: '500', textAlign: 'right' },
+  babyName: { fontSize: 32, fontWeight: '800', textAlign: 'right' },
+  profileImageContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
+  profileImage: { width: 46, height: 46, borderRadius: 23 },
+  heroCard: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 24, padding: 24, marginBottom: 30 },
+  heroHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  statusText: { fontSize: 14, fontWeight: '700' },
+  timerContainer: { alignItems: 'center', marginBottom: 24 },
+  timerText: { fontSize: 40, fontWeight: '800', textAlign: 'center' },
+  timerLabel: { fontSize: 14, fontWeight: '500' },
+  actionButton: { backgroundColor: '#ffffff', paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
+  actionButtonText: { color: '#1e3a8a', fontSize: 18, fontWeight: 'bold' },
+  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16, textAlign: 'right' },
+  statsRow: { flexDirection: 'row-reverse', justifyContent: 'space-between' },
+  glassCard: { width: width / 3.6, height: 110, borderRadius: 20, alignItems: 'center', justifyContent: 'center', padding: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  wideCard: { flexDirection: 'row-reverse', alignItems: 'center', padding: 20, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  iconCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.2)' },
+  statValue: { fontSize: 22, fontWeight: '800', marginVertical: 4 },
+  statLabel: { fontSize: 12, fontWeight: '600' },
+  widgetTitle: { fontSize: 16, fontWeight: '700', textAlign: 'right', marginBottom: 4 },
+  widgetText: { fontSize: 14, textAlign: 'right', lineHeight: 20 },
+  fab: { position: 'absolute', bottom: 110, left: 24, width: 64, height: 64, borderRadius: 32, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+  
+  // Modals
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  actionSheet: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: '#1f2937', textAlign: 'center', marginBottom: 24 },
+  actionItem: { flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  actionIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginLeft: 16 },
+  actionText: { flex: 1, fontSize: 16, fontWeight: '600', color: '#374151', textAlign: 'right' },
+  closeButton: { marginTop: 24, paddingVertical: 16, backgroundColor: '#f3f4f6', borderRadius: 16, alignItems: 'center' },
+  closeButtonText: { fontSize: 16, fontWeight: '700', color: '#4b5563' },
+  
+  feedingModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  feedingModalContent: { backgroundColor: 'white', borderRadius: 24, padding: 24, minHeight: 350 },
+  modalHeaderRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  feedingTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
+  tabsContainer: { flexDirection: 'row-reverse', backgroundColor: '#f3f4f6', borderRadius: 12, padding: 4, marginBottom: 24 },
+  tabButton: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  activeTab: { backgroundColor: 'white', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   tabText: { fontWeight: '600', color: '#6b7280' },
-  activeTabText: { color: '#db2777' },
-  bigValue: { fontSize: 60, fontWeight: '900', color: '#111827', textAlign: 'center', letterSpacing: -1 },
-  unitLabel: { fontSize: 15, color: '#6b7280', textAlign: 'center', marginBottom: 20 },
-  rowControls: { flexDirection: 'row-reverse', justifyContent: 'center', gap: 16, marginBottom: 20, width: '100%' },
-  roundBtn: { width: 56, height: 56, borderRadius: 20, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
-  nursingCard: { width: 140, height: 130, borderRadius: 20, borderWidth: 2, borderColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  nursingCardActive: { borderColor: '#db2777', backgroundColor: '#fff1f2' },
-  nursingLabel: { fontSize: 15, fontWeight: 'bold', color: '#374151' },
-  nursingTimer: { fontSize: 22, fontWeight: '900', fontVariant: ['tabular-nums'], color: '#111827' },
-  diaperCard: { width: 140, height: 130, borderRadius: 20, borderWidth: 2, borderColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#f9fafb' },
-  diaperCardSelected: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
-  diaperText: { fontSize: 16, fontWeight: '600', color: '#9ca3af' },
-  statusText: { textAlign: 'center', marginTop: 12, fontSize: 15, fontWeight: 'bold', color: '#059669', backgroundColor: '#d1fae5', padding: 10, borderRadius: 10, overflow: 'hidden' },
-  medsContainer: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 20 },
-  medChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb' },
-  medChipActive: { backgroundColor: '#ef4444', borderColor: '#ef4444' },
-  medText: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  inputField: { width: '100%', backgroundColor: '#f3f4f6', padding: 14, borderRadius: 14, textAlign: 'right', fontSize: 15 },
-  saveButton: { width: '100%', paddingVertical: 16, borderRadius: 18, alignItems: 'center', marginTop: 'auto' },
-  saveButtonText: { color: 'white', fontSize: 17, fontWeight: 'bold' },
-  journalContainer: { flex: 1, backgroundColor: 'white', paddingTop: 20 },
-  journalHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  journalTitle: { fontSize: 22, fontWeight: '900' },
-  journalRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  journalRowContent: { flexDirection: 'row-reverse', gap: 16 },
-  journalTime: { fontSize: 14, fontWeight: '600', color: '#6b7280', width: 50 },
-  journalItemTitle: { fontSize: 16, fontWeight: 'bold', color: '#111827', textAlign: 'right' },
-  journalItemDetail: { fontSize: 14, color: '#9ca3af', textAlign: 'right' }
+  activeTabText: { color: '#2563eb', fontWeight: '800' },
+  modalBody: { alignItems: 'center', marginBottom: 30 },
+  bottleContainer: { width: '100%', alignItems: 'center' },
+  inputLabel: { fontSize: 16, fontWeight: '600', marginBottom: 12, color: '#374151' },
+  amountInput: { fontSize: 40, fontWeight: '800', color: '#2563eb', textAlign: 'center', borderBottomWidth: 2, borderBottomColor: '#e5e7eb', width: 100, paddingBottom: 8 },
+  
+  breastContainer: { width: '100%', alignItems: 'center' },
+  breastTimersRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', gap: 15, marginBottom: 20 },
+  breastSideCard: { flex: 1, backgroundColor: '#f3f4f6', borderRadius: 16, padding: 15, alignItems: 'center', justifyContent: 'center', height: 120 },
+  activeBreastCard: { backgroundColor: '#2563eb', shadowColor: '#2563eb', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  breastSideLabel: { fontSize: 16, fontWeight: '600', color: '#6b7280', marginBottom: 5 },
+  breastTimerText: { fontSize: 24, fontWeight: '800', color: '#111827', fontVariant: ['tabular-nums'], marginBottom: 5 },
+  activeBreastText: { color: 'white' },
+  breastIcon: { marginTop: 5 },
+  totalTimeLabel: { fontSize: 16, fontWeight: '600', color: '#6b7280', marginTop: 10 },
+
+  saveFeedingBtn: { backgroundColor: '#2563eb', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 16 },
+  saveFeedingText: { color: 'white', fontSize: 16, fontWeight: '700' },
+
+  diaperOptionsContainer: { flexDirection: 'row-reverse', justifyContent: 'space-between', width: '100%', marginBottom: 30, gap: 10 },
+  diaperOption: { flex: 1, height: 100, borderRadius: 16, borderWidth: 2, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  activeDiaperOption: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  diaperText: { fontSize: 16, fontWeight: '600', color: '#6b7280' },
+  activeDiaperText: { color: 'white' }
 });

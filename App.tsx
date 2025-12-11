@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ActivityIndicator, Text } from 'react-native'; // הוספתי כאן את Text
+import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Home, BarChart2, User, Settings } from 'lucide-react-native';
+import { Home, BarChart2, User, Settings, Lock } from 'lucide-react-native';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth } from './services/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { auth, db } from './services/firebaseConfig';
 
 // ייבוא המסכים
 import HomeScreen from './pages/HomeScreen';
@@ -27,51 +29,115 @@ const LoaderScreen = () => (
   </View>
 );
 
+const BiometricLockScreen = ({ onUnlock }: { onUnlock: () => void }) => (
+  <View style={styles.loaderContainer}>
+    <View style={styles.lockIconContainer}>
+      <Lock size={50} color="#4f46e5" />
+    </View>
+    <Text style={styles.lockTitle}>האפליקציה נעולה</Text>
+    <Text style={styles.lockSubtitle}>נדרש אימות ביומטרי לכניסה</Text>
+    
+    <TouchableOpacity style={styles.unlockButton} onPress={onUnlock}>
+      <Text style={styles.unlockButtonText}>לחץ לאימות</Text>
+    </TouchableOpacity>
+  </View>
+);
+
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [hasBabyProfile, setHasBabyProfile] = useState<boolean | null>(null); // null = עדיין לא נבדק
-  const [isAppLoading, setIsAppLoading] = useState(true); // טעינה ראשונית
+  const [hasBabyProfile, setHasBabyProfile] = useState<boolean | null>(null);
+  const [isAppLoading, setIsAppLoading] = useState(true);
+  const [isLocked, setIsLocked] = useState(false);
 
   useEffect(() => {
-    // מנגנון שמירת סשן (Persistence) יפעל אוטומטית כעת
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        // ודא שהמשתמש מחובר לפני בדיקת פרופיל
-        if (currentUser && hasBabyProfile === null) {
-          try {
-            const babyExists = await checkIfBabyExists();
-            setHasBabyProfile(babyExists);
-          } catch (e) {
-            console.error(e);
-            setHasBabyProfile(false); // במקרה של שגיאה, נניח שאין
-          }
-        }
+        // שלב קריטי: בודקים נעילה *לפני* שמסיימים לטעון את האפליקציה
+        await checkBiometricSettingsAndProfile(currentUser.uid);
       } else {
         setUser(null);
         setHasBabyProfile(false);
+        setIsLocked(false);
+        setIsAppLoading(false);
       }
-      setIsAppLoading(false); // סיימנו את הטעינה הראשונית
     });
 
     return unsubscribe;
-  }, []); // לרוץ רק פעם אחת בטעינה
+  }, []);
 
-  // 1. מסך טעינה כללי (בזמן שהוא בודק Auth ו-Baby Profile)
-  if (isAppLoading || (user && hasBabyProfile === null)) {
-    return <LoaderScreen />;
-  }
+  // פונקציה מאוחדת לבדיקת הכל לפני פתיחת האפליקציה
+  const checkBiometricSettingsAndProfile = async (uid: string) => {
+    try {
+      // 1. בדיקת הגדרות ביומטריה
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+      
+      let needsUnlock = false;
+      if (userSnap.exists()) {
+        const settings = userSnap.data().settings;
+        if (settings && settings.biometricsEnabled) {
+          needsUnlock = true;
+          setIsLocked(true);
+        }
+      }
 
-  // 2. אם לא מחובר -> מסך לוגין
+      // 2. בדיקת פרופיל תינוק (במקביל)
+      const babyExists = await checkIfBabyExists();
+      setHasBabyProfile(babyExists);
+
+      // סיימנו את כל הבדיקות - אפשר להוריד את מסך הטעינה
+      setIsAppLoading(false);
+
+      // אם צריך נעילה, ננסה לאמת מיד אחרי שהטעינה הסתיימה
+      if (needsUnlock) {
+        setTimeout(() => authenticateUser(), 100);
+      }
+
+    } catch (error) {
+      console.log('Error during startup checks:', error);
+      setIsAppLoading(false); // שלא נתקע על מסך טעינה במקרה של שגיאה
+    }
+  };
+
+  const authenticateUser = async () => {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      if (!hasHardware) {
+        setIsLocked(false); // אם אין חומרה, שחרר נעילה
+        return;
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'ברוך שובך ל-CalmParent',
+        fallbackLabel: 'השתמש בסיסמה',
+        disableDeviceFallback: false, // מאפשר שימוש בקוד גישה של הטלפון אם הפנים נכשלו
+      });
+      
+      if (result.success) {
+        setIsLocked(false);
+      }
+    } catch (e) {
+      console.log('Authentication error:', e);
+    }
+  };
+
+  // תצוגה מותנית
+  if (isAppLoading) return <LoaderScreen />;
+  
+  // אם האפליקציה נעולה - מציגים מסך נעילה
+  if (isLocked) return <BiometricLockScreen onUnlock={authenticateUser} />;
+
+  // אם לא מחובר - מסך לוגין
   if (!user) {
     return (
       <SafeAreaProvider>
         <LoginScreen onLoginSuccess={() => setIsAppLoading(true)} />
-      </SafeAreaProvider> // נפעיל טעינה מחדש אחרי לוגין מוצלח
+      </SafeAreaProvider>
     );
   }
 
-  // 3. מחובר אבל אין תינוק -> מסך יצירת פרופיל
+  // אם אין פרופיל תינוק
   if (user && !hasBabyProfile) {
     return (
       <SafeAreaProvider>
@@ -80,7 +146,7 @@ export default function App() {
     );
   }
 
-  // 4. מחובר ויש תינוק -> האפליקציה הראשית
+  // האפליקציה הראשית
   return (
     <SafeAreaProvider>
       <NavigationContainer>
@@ -180,5 +246,34 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
     backgroundColor: '#4f46e5',
     marginTop: 6
+  },
+  // עיצוב מסך נעילה
+  lockIconContainer: {
+    marginBottom: 20,
+    padding: 20,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 50
+  },
+  lockTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 8
+  },
+  lockSubtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    marginBottom: 30
+  },
+  unlockButton: {
+    backgroundColor: '#4f46e5',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+  },
+  unlockButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold'
   }
 });
