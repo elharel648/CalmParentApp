@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -22,6 +22,8 @@ import { checkIfBabyExists } from './services/babyService';
 
 const Tab = createBottomTabNavigator();
 
+// --- רכיבים עזר ---
+
 const LoaderScreen = () => (
   <View style={styles.loaderContainer}>
     <ActivityIndicator size="large" color="#4f46e5" />
@@ -43,6 +45,43 @@ const BiometricLockScreen = ({ onUnlock }: { onUnlock: () => void }) => (
   </View>
 );
 
+// --- רכיב אייקון מותאם אישית לבר התחתון (המתוקן) ---
+const CustomTabIcon = ({ focused, color, icon: Icon, label }: any) => {
+  return (
+    <View style={{ 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      // נותן לזה קצת אוויר מלמעלה, במיוחד באייפון
+      top: Platform.OS === 'ios' ? 14 : 0,
+      width: 60 // רוחב קבוע מונע מהטקסט להישבר או להימעך
+    }}>
+      <Icon 
+        color={color} 
+        size={24} 
+        strokeWidth={focused ? 2.5 : 2} 
+      />
+      
+      {/* טקסט מתחת לאייקון - נקי ומסודר */}
+      <Text 
+        numberOfLines={1} // מכריח שורה אחת בלבד
+        style={{ 
+          color: color, 
+          fontSize: 10, 
+          marginTop: 6, 
+          fontWeight: focused ? '600' : '400',
+          textAlign: 'center',
+          width: '100%'
+      }}>
+        {label}
+      </Text>
+      
+      {/* הורדנו את הנקודה למראה נקי יותר (High Level) */}
+    </View>
+  );
+};
+
+// --- האפליקציה הראשית ---
+
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [hasBabyProfile, setHasBabyProfile] = useState<boolean | null>(null);
@@ -53,7 +92,6 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        // שלב קריטי: בודקים נעילה *לפני* שמסיימים לטעון את האפליקציה
         await checkBiometricSettingsAndProfile(currentUser.uid);
       } else {
         setUser(null);
@@ -66,10 +104,8 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  // פונקציה מאוחדת לבדיקת הכל לפני פתיחת האפליקציה
   const checkBiometricSettingsAndProfile = async (uid: string) => {
     try {
-      // 1. בדיקת הגדרות ביומטריה
       const userRef = doc(db, 'users', uid);
       const userSnap = await getDoc(userRef);
       
@@ -82,21 +118,17 @@ export default function App() {
         }
       }
 
-      // 2. בדיקת פרופיל תינוק (במקביל)
       const babyExists = await checkIfBabyExists();
       setHasBabyProfile(babyExists);
-
-      // סיימנו את כל הבדיקות - אפשר להוריד את מסך הטעינה
       setIsAppLoading(false);
 
-      // אם צריך נעילה, ננסה לאמת מיד אחרי שהטעינה הסתיימה
       if (needsUnlock) {
         setTimeout(() => authenticateUser(), 100);
       }
 
     } catch (error) {
       console.log('Error during startup checks:', error);
-      setIsAppLoading(false); // שלא נתקע על מסך טעינה במקרה של שגיאה
+      setIsAppLoading(false);
     }
   };
 
@@ -104,14 +136,14 @@ export default function App() {
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       if (!hasHardware) {
-        setIsLocked(false); // אם אין חומרה, שחרר נעילה
+        setIsLocked(false); 
         return;
       }
 
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'ברוך שובך ל-CalmParent',
         fallbackLabel: 'השתמש בסיסמה',
-        disableDeviceFallback: false, // מאפשר שימוש בקוד גישה של הטלפון אם הפנים נכשלו
+        disableDeviceFallback: false,
       });
       
       if (result.success) {
@@ -122,13 +154,9 @@ export default function App() {
     }
   };
 
-  // תצוגה מותנית
   if (isAppLoading) return <LoaderScreen />;
-  
-  // אם האפליקציה נעולה - מציגים מסך נעילה
   if (isLocked) return <BiometricLockScreen onUnlock={authenticateUser} />;
 
-  // אם לא מחובר - מסך לוגין
   if (!user) {
     return (
       <SafeAreaProvider>
@@ -137,7 +165,6 @@ export default function App() {
     );
   }
 
-  // אם אין פרופיל תינוק
   if (user && !hasBabyProfile) {
     return (
       <SafeAreaProvider>
@@ -146,14 +173,15 @@ export default function App() {
     );
   }
 
-  // האפליקציה הראשית
   return (
     <SafeAreaProvider>
       <NavigationContainer>
         <Tab.Navigator
+          // הגדרת הבית כברירת מחדל
+          initialRouteName="בית"
           screenOptions={{
             headerShown: false,
-            tabBarShowLabel: false,
+            tabBarShowLabel: false, // אנחנו משתמשים בלייבל משלנו בתוך האייקון
             tabBarActiveTintColor: '#4f46e5',
             tabBarInactiveTintColor: '#9ca3af',
             tabBarStyle: { 
@@ -164,7 +192,7 @@ export default function App() {
               elevation: 0,
               backgroundColor: '#ffffff',
               borderRadius: 25,
-              height: 70,
+              height: 80, // גובה מרווח
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 5 },
               shadowOpacity: 0.1,
@@ -173,54 +201,51 @@ export default function App() {
             }
           }}
         >
-          <Tab.Screen 
-            name="בית" 
-            component={HomeScreen} 
-            options={{ 
-              tabBarIcon: ({ color, focused }) => (
-                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                    <Home color={color} size={26} strokeWidth={focused ? 2.5 : 2} />
-                    {focused && <View style={styles.activeDot} />}
-                </View>
-              ) 
-            }} 
-          />
-          <Tab.Screen 
-            name="דוחות" 
-            component={ReportsScreen} 
-            options={{ 
-              tabBarIcon: ({ color, focused }) => (
-                  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                     <BarChart2 color={color} size={26} strokeWidth={focused ? 2.5 : 2} />
-                     {focused && <View style={[styles.activeDot, { backgroundColor: color }]} />}
-                  </View>
-              ) 
-            }} 
-          />
-          <Tab.Screen 
-            name="פרופיל" 
-            component={ProfileScreen} 
-            options={{ 
-              tabBarIcon: ({ color, focused }) => (
-                  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                    <User color={color} size={26} strokeWidth={focused ? 2.5 : 2} />
-                    {focused && <View style={[styles.activeDot, { backgroundColor: color }]} />}
-                  </View>
-              ) 
-            }} 
-          />
+          {/* הסדר בקוד הוא משמאל לימין.
+             כדי שבעברית "בית" יהיה בימין - הוא צריך להיות אחרון ברשימה.
+             וכדי ש"הגדרות" יהיה בשמאל - הוא צריך להיות ראשון.
+          */}
+
           <Tab.Screen 
             name="הגדרות" 
             component={SettingsScreen} 
             options={{ 
               tabBarIcon: ({ color, focused }) => (
-                  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                     <Settings color={color} size={26} strokeWidth={focused ? 2.5 : 2} />
-                     {focused && <View style={[styles.activeDot, { backgroundColor: color }]} />}
-                  </View>
+                <CustomTabIcon focused={focused} color={color} icon={Settings} label="הגדרות" />
               ) 
             }} 
           />
+
+          <Tab.Screen 
+            name="פרופיל" 
+            component={ProfileScreen} 
+            options={{ 
+              tabBarIcon: ({ color, focused }) => (
+                <CustomTabIcon focused={focused} color={color} icon={User} label="פרופיל" />
+              ) 
+            }} 
+          />
+
+          <Tab.Screen 
+            name="דוחות" 
+            component={ReportsScreen} 
+            options={{ 
+              tabBarIcon: ({ color, focused }) => (
+                <CustomTabIcon focused={focused} color={color} icon={BarChart2} label="דוחות" />
+              ) 
+            }} 
+          />
+
+          <Tab.Screen 
+            name="בית" 
+            component={HomeScreen} 
+            options={{ 
+              tabBarIcon: ({ color, focused }) => (
+                <CustomTabIcon focused={focused} color={color} icon={Home} label="בית" />
+              ) 
+            }} 
+          />
+
         </Tab.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
@@ -240,14 +265,7 @@ const styles = StyleSheet.create({
     color: '#4f46e5',
     fontWeight: '600',
   },
-  activeDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#4f46e5',
-    marginTop: 6
-  },
-  // עיצוב מסך נעילה
+  // הסרנו את activeDot כי אנחנו לא משתמשים בו יותר, אבל אפשר להשאיר אם תרצה להחזיר
   lockIconContainer: {
     marginBottom: 20,
     padding: 20,
