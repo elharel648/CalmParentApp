@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Modal, StyleSheet, TouchableOpacity, Animated, Easing, Vibration } from 'react-native';
-import { X, Wind, Music, CheckCircle, Play, Pause } from 'lucide-react-native';
-import { Audio } from 'expo-av';
-import * as Haptics from 'expo-haptics';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Linking, Platform, Alert } from 'react-native';
+import { X, Phone, ListChecks, Siren, Stethoscope, Activity } from 'lucide-react-native';
 
 interface CalmModeModalProps {
   visible: boolean;
@@ -10,163 +8,100 @@ interface CalmModeModalProps {
 }
 
 export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) {
-  const [activeTab, setActiveTab] = useState<'noise' | 'breathe' | 'checklist'>('noise');
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  
-  // אנימציה לנשימה
-  const breatheAnim = useRef(new Animated.Value(1)).current;
+  const [activeTab, setActiveTab] = useState<'emergency' | 'checklist'>('emergency');
 
-  // רשימת בדיקה
+  const makeCall = async (phoneNumber: string) => {
+    const url = Platform.OS === 'android' ? `tel:${phoneNumber}` : `telprompt:${phoneNumber}`;
+    const supported = await Linking.canOpenURL(url);
+
+    if (supported) {
+      await Linking.openURL(url);
+    } else {
+      // הודעה מיוחדת לסימולטור
+      Alert.alert(
+        "סימולטור זוהה", 
+        `במכשיר אמיתי השיחה הייתה יוצאת למספר: ${phoneNumber}`,
+        [{ text: "הבנתי" }]
+      );
+    }
+  };
+
+  const emergencyContacts = [
+    { name: 'מד"א (חירום)', number: '101', icon: <Siren size={24} color="#EF4444" />, color: '#FEE2E2' },
+    { name: 'משטרה', number: '100', icon: <Activity size={24} color="#3B82F6" />, color: '#DBEAFE' },
+    { name: 'מוקד הרעלים', number: '048541900', icon: <Text style={{fontSize:20}}>☠️</Text>, color: '#F3E8FF' },
+  ];
+
+  const hmoContacts = [
+    { name: 'כללית - אחיות', number: '*2700', color: '#E0F2FE' },
+    { name: 'מכבי - אחיות', number: '*3555', color: '#FEF3C7' },
+    { name: 'מאוחדת - היריון', number: '*3833', color: '#FCE7F3' },
+    { name: 'לאומית', number: '*507', color: '#DCFCE7' },
+  ];
+
   const checklistItems = [
     "האם החיתול נקי?",
     "האם עברו פחות מ-3 שעות מהאוכל?",
     "האם חם/קר לו מדי? (בדיקה בעורף)",
-    "האם יש משהו שמציק בבגד (תווית/שערה)?",
+    "האם יש שערה כרוכה באצבעות?",
     "האם הוא פשוט עייף מדי (Over-tired)?",
-    "נסה: חיבוק עור-לעור או מנשא"
   ];
 
-  // ניהול סאונד (רעש לבן)
-  useEffect(() => {
-    return sound
-      ? () => { sound.unloadAsync(); }
-      : undefined;
-  }, [sound]);
-
-  const toggleSound = async () => {
-    if (sound) {
-      if (isPlaying) {
-        await sound.pauseAsync();
-        setIsPlaying(false);
-      } else {
-        await sound.playAsync();
-        setIsPlaying(true);
-      }
-    } else {
-      // כאן טוענים סאונד. שמתי לינק לדוגמה, מומלץ להחליף לקובץ מקומי assets/white_noise.mp3
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: 'https://actions.google.com/sounds/v1/water/rain_heavy_loud.ogg' },
-        { shouldPlay: true, isLooping: true }
-      );
-      setSound(newSound);
-      setIsPlaying(true);
-    }
-  };
-
-  // ניהול נשימה
-  useEffect(() => {
-    let loop: Animated.CompositeAnimation;
-    
-    if (activeTab === 'breathe') {
-      const breatheIn = Animated.timing(breatheAnim, {
-        toValue: 1.5,
-        duration: 4000,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      });
-
-      const breatheOut = Animated.timing(breatheAnim, {
-        toValue: 1,
-        duration: 4000,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      });
-
-      loop = Animated.loop(Animated.sequence([breatheIn, breatheOut]));
-      loop.start();
-
-      // אינטרוול לרטט עדין
-      const interval = setInterval(() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }, 4000);
-
-      return () => {
-        loop.stop();
-        clearInterval(interval);
-        breatheAnim.setValue(1);
-      };
-    }
-  }, [activeTab]);
-
   return (
-    <Modal visible={visible} animationType="slide" transparent={true}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.container}>
-        <View style={styles.content}>
-          {/* כותרת וסגירה */}
-          <View style={styles.header}>
-            <Text style={styles.title}>מצב רוגע (SOS)</Text>
-            <TouchableOpacity onPress={() => {
-                if(isPlaying && sound) sound.stopAsync();
-                setIsPlaying(false);
-                onClose();
-            }}>
-              <X color="#374151" size={24} />
-            </TouchableOpacity>
-          </View>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}><X size={24} color="#374151" /></TouchableOpacity>
+          <Text style={styles.mainTitle}>מצב חירום / SOS 🚨</Text>
+          <View style={{width: 24}} /> 
+        </View>
 
-          {/* טאבים */}
-          <View style={styles.tabs}>
-            <TouchableOpacity 
-                style={[styles.tab, activeTab === 'noise' && styles.activeTab]} 
-                onPress={() => setActiveTab('noise')}
-            >
-                <Music size={20} color={activeTab === 'noise' ? '#fff' : '#6b7280'} />
-                <Text style={[styles.tabText, activeTab === 'noise' && styles.activeTabText]}>רעש לבן</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-                style={[styles.tab, activeTab === 'breathe' && styles.activeTab]} 
-                onPress={() => setActiveTab('breathe')}
-            >
-                <Wind size={20} color={activeTab === 'breathe' ? '#fff' : '#6b7280'} />
-                <Text style={[styles.tabText, activeTab === 'breathe' && styles.activeTabText]}>נשימה</Text>
-            </TouchableOpacity>
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity style={[styles.tab, activeTab === 'emergency' && styles.activeTab]} onPress={() => setActiveTab('emergency')}>
+            <Phone size={20} color={activeTab === 'emergency' ? '#fff' : '#6B7280'} />
+            <Text style={[styles.tabText, activeTab === 'emergency' && styles.activeTabText]}>טלפונים</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.tab, activeTab === 'checklist' && styles.activeTab]} onPress={() => setActiveTab('checklist')}>
+            <ListChecks size={20} color={activeTab === 'checklist' ? '#fff' : '#6B7280'} />
+            <Text style={[styles.tabText, activeTab === 'checklist' && styles.activeTabText]}>בדיקה</Text>
+          </TouchableOpacity>
+        </View>
 
-            <TouchableOpacity 
-                style={[styles.tab, activeTab === 'checklist' && styles.activeTab]} 
-                onPress={() => setActiveTab('checklist')}
-            >
-                <CheckCircle size={20} color={activeTab === 'checklist' ? '#fff' : '#6b7280'} />
-                <Text style={[styles.tabText, activeTab === 'checklist' && styles.activeTabText]}>צ'ק ליסט</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* תוכן מתחלף */}
-          <View style={styles.body}>
-            
-            {activeTab === 'noise' && (
-              <View style={styles.centerContent}>
-                <TouchableOpacity style={styles.playButton} onPress={toggleSound}>
-                  {isPlaying ? <Pause size={40} color="#fff" /> : <Play size={40} color="#fff" style={{marginLeft: 4}} />}
-                </TouchableOpacity>
-                <Text style={styles.instructionText}>
-                  {isPlaying ? "מנגן רעש לבן..." : "לחץ לניגון רעש מרגיע"}
-                </Text>
-              </View>
-            )}
-
-            {activeTab === 'breathe' && (
-              <View style={styles.centerContent}>
-                <Animated.View style={[styles.breathingCircle, { transform: [{ scale: breatheAnim }] }]}>
-                  <Text style={styles.breatheText}>לנשום</Text>
-                </Animated.View>
-                <Text style={styles.instructionText}>שאף עמוק... ונשוף לאט</Text>
-              </View>
-            )}
-
-            {activeTab === 'checklist' && (
-              <View style={styles.listContainer}>
-                {checklistItems.map((item, index) => (
-                  <View key={index} style={styles.listItem}>
-                    <View style={styles.bullet} />
-                    <Text style={styles.listItemText}>{item}</Text>
-                  </View>
+        <View style={styles.contentArea}>
+          {activeTab === 'emergency' ? (
+            <ScrollView contentContainerStyle={styles.scrollContainer}>
+              <Text style={styles.sectionHeader}>📞 עזרה דחופה</Text>
+              <View style={styles.grid}>
+                {emergencyContacts.map((contact, index) => (
+                  <TouchableOpacity key={index} style={[styles.contactCard, { backgroundColor: contact.color }]} onPress={() => makeCall(contact.number)}>
+                    {contact.icon}
+                    <Text style={styles.contactName}>{contact.name}</Text>
+                    <Text style={styles.contactNumber}>{contact.number}</Text>
+                  </TouchableOpacity>
                 ))}
               </View>
-            )}
-          </View>
-
+              <Text style={styles.sectionHeader}>🏥 מוקד אחיות</Text>
+              <View style={styles.listContainer}>
+                {hmoContacts.map((hmo, index) => (
+                  <TouchableOpacity key={index} style={styles.hmoRow} onPress={() => makeCall(hmo.number)}>
+                    <View style={[styles.hmoIcon, { backgroundColor: hmo.color }]}><Stethoscope size={20} color="#374151" /></View>
+                    <Text style={styles.hmoName}>{hmo.name}</Text>
+                    <View style={styles.callBtn}><Phone size={16} color="#fff" /><Text style={styles.callBtnText}>חייג</Text></View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          ) : (
+            <ScrollView contentContainerStyle={styles.scrollContainer}>
+              <Text style={styles.sectionHeader}>📋 צ'ק ליסט בכי</Text>
+              {checklistItems.map((item, index) => (
+                <View key={index} style={styles.checkRow}>
+                  <View style={styles.bullet} />
+                  <Text style={styles.checkText}>{item}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
         </View>
       </View>
     </Modal>
@@ -174,126 +109,29 @@ export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) 
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  content: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    padding: 20,
-    height: '70%',
-  },
-  header: {
-    flexDirection: 'row-reverse', // RTL header fix
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  tabs: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-around',
-    marginBottom: 30,
-    backgroundColor: '#f3f4f6',
-    padding: 5,
-    borderRadius: 15,
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 12,
-  },
-  activeTab: {
-    backgroundColor: '#4f46e5',
-  },
-  tabText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-  activeTabText: {
-    color: 'white',
-  },
-  body: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  centerContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  // עיצוב רעש לבן
-  playButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#4f46e5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    shadowColor: "#4f46e5",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  // עיצוב נשימה
-  breathingCircle: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: '#e0e7ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 30,
-    borderWidth: 2,
-    borderColor: '#4f46e5',
-  },
-  breatheText: {
-    color: '#4f46e5',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  instructionText: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginTop: 20,
-  },
-  // עיצוב צ'ק ליסט
-  listContainer: {
-    width: '100%',
-    paddingHorizontal: 10,
-  },
-  listItem: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginBottom: 15,
-    backgroundColor: '#f9fafb',
-    padding: 15,
-    borderRadius: 10,
-  },
-  bullet: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4f46e5',
-    marginLeft: 15,
-  },
-  listItemText: {
-    fontSize: 16,
-    color: '#374151',
-    textAlign: 'right',
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#F9FAFB', paddingTop: 20 },
+  header: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 20 },
+  closeButton: { padding: 8, backgroundColor: '#E5E7EB', borderRadius: 20 },
+  mainTitle: { fontSize: 20, fontWeight: '800', color: '#EF4444' },
+  tabsContainer: { flexDirection: 'row-reverse', paddingHorizontal: 20, marginBottom: 20, gap: 10 },
+  tab: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', gap: 6 },
+  activeTab: { backgroundColor: '#EF4444', borderColor: '#EF4444' },
+  tabText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
+  activeTabText: { color: '#fff' },
+  contentArea: { flex: 1, paddingHorizontal: 20 },
+  scrollContainer: { paddingBottom: 40 },
+  sectionHeader: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 15, textAlign: 'right', width: '100%' },
+  grid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12, marginBottom: 30 },
+  contactCard: { width: '30%', aspectRatio: 1, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8 }, // כרטיסים קטנים יותר
+  contactName: { fontSize: 12, fontWeight: 'bold', color: '#1F2937', textAlign: 'center' },
+  contactNumber: { fontSize: 12, color: '#4B5563', fontWeight: '600' },
+  listContainer: { gap: 10 },
+  hmoRow: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#fff', padding: 12, borderRadius: 12, justifyContent: 'space-between', shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
+  hmoIcon: { padding: 8, borderRadius: 10 },
+  hmoName: { flex: 1, marginRight: 12, fontSize: 16, fontWeight: '600', textAlign: 'right', color: '#374151' },
+  callBtn: { flexDirection: 'row-reverse', backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, alignItems: 'center', gap: 4 },
+  callBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
+  checkRow: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 10 },
+  bullet: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#6366F1', marginLeft: 12 },
+  checkText: { fontSize: 16, color: '#374151', textAlign: 'right', flex: 1 },
 });
