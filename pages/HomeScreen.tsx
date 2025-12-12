@@ -1,13 +1,16 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Alert, ActivityIndicator, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Anchor, Moon, Sun, Utensils, Layers, Sparkles, User, CheckCircle, Share2, Trophy, Music, Droplets } from 'lucide-react-native';
+import { Anchor, Moon, Sun, Utensils, Layers, Sparkles, User, CheckCircle, Share2, Music, Droplets, Trophy } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 
 import { auth } from '../services/firebaseConfig';
-import { getLastEvent, formatTimeFromTimestamp, saveEventToFirebase, getRecentHistory } from '../services/firebaseService';
+// 🔑 ייבוא פונקציות מעודכנות
+import { getLastEvent, formatTimeFromTimestamp, saveEventToFirebase, getRecentHistory, getChildProfile } from '../services/firebaseService';
 import { getAIPrediction } from '../services/geminiService';
+// 🔑 ייבוא פונקציות מעודכנות
+import { isPremiumUser, getMaxSharedUsers } from '../services/subscriptionService'; 
 
 import DailyTimeline from '../components/DailyTimeline';
 import CalmModeModal from '../components/CalmModeModal';
@@ -15,7 +18,24 @@ import TrackingModal from '../components/TrackingModal';
 import WhiteNoiseModal from '../components/WhiteNoiseModal';
 
 const WEATHER_API_KEY = "bd5e378503939ddaee76f12ad7a97608";
-const BABY_BIRTH_DATE = new Date('2023-09-12'); 
+const BABY_BIRTH_DATE = new Date('2023-09-12'); // ברירת מחדל אם אין פרופיל
+
+// --- 💡 ממשק לפרופיל הילד ---
+interface ChildProfile {
+    id: string; // ה-childId
+    name: string;
+    birthDate: Date;
+    ageMonths: number;
+}
+
+// --- 💡 פרופיל ילד ברירת מחדל ---
+const DEFAULT_CHILD_PROFILE: ChildProfile = {
+    id: 'alma_default_id', // מזהה כללי לילד יחיד
+    name: 'עלמא',
+    birthDate: BABY_BIRTH_DATE,
+    ageMonths: 0, 
+};
+
 
 export default function HomeScreen({ navigation }: any) {
   const [isNightMode, setIsNightMode] = useState(false);
@@ -28,29 +48,50 @@ export default function HomeScreen({ navigation }: any) {
   const [babyStatus, setBabyStatus] = useState<'sleeping' | 'awake'>('awake');
   const [currentGuardian, setCurrentGuardian] = useState('אבא');
   const [greeting, setGreeting] = useState('שלום');
-  const [babyAgeMonths, setBabyAgeMonths] = useState(0);
+  
+  const [childProfile, setChildProfile] = useState<ChildProfile>(DEFAULT_CHILD_PROFILE);
+  const [maxSharedUsers, setMaxSharedUsers] = useState(2); // ברירת מחדל חינם (הורה + 1)
   
   const [meds, setMeds] = useState({ vitaminD: false, iron: false });
-  // ברירת מחדל כדי לא להיתקע
   const [weather, setWeather] = useState({ temp: 24, city: 'תל אביב', recommendation: 'יום נעים בחוץ ☀️', loading: false });
   const [aiTip, setAiTip] = useState('אוסף נתונים...');
   const [loadingAI, setLoadingAI] = useState(false);
+  const [isPremium, setIsPremium] = useState(false); 
 
   const user = auth.currentUser;
 
   useEffect(() => {
+    // עדכון גיל הילד וברכה
+    const now = new Date();
+    const months = (now.getFullYear() - childProfile.birthDate.getFullYear()) * 12 + (now.getMonth() - childProfile.birthDate.getMonth());
+    setChildProfile(p => ({ ...p, ageMonths: months }));
+
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 12) setGreeting('בוקר טוב ☀️');
     else if (hour >= 12 && hour < 18) setGreeting('צהריים טובים 🌤️');
     else setGreeting('ערב טוב 🌙');
+    
+    // טעינת פרופיל מהשרת
+    const loadProfile = async () => {
+        if (user) {
+            const profile = await getChildProfile(user.uid);
+            if (profile) {
+                // 🔑 עדכון כל שדות הפרופיל, כולל ה-ID מה-DB
+                setChildProfile({
+                    id: profile.childId,
+                    name: profile.name,
+                    birthDate: profile.birthDate,
+                    ageMonths: months, 
+                });
+            }
+        }
+    }
+    loadProfile();
+  }, [user, childProfile.birthDate]); 
 
-    const now = new Date();
-    const months = (now.getFullYear() - BABY_BIRTH_DATE.getFullYear()) * 12 + (now.getMonth() - BABY_BIRTH_DATE.getMonth());
-    setBabyAgeMonths(months);
-  }, []);
-
-  // ניסיון טעינת מזג אוויר
+  // טעינת מזג אוויר
   useEffect(() => {
+    // ... לוגיקת מזג אוויר נשארה ללא שינוי ...
     (async () => {
       try {
         let { status } = await Location.requestForegroundPermissionsAsync();
@@ -62,7 +103,6 @@ export default function HomeScreen({ navigation }: any) {
         );
         
         if (!response.ok) return;
-
         const data = await response.json();
         const temp = Math.round(data.main.temp);
         
@@ -74,7 +114,7 @@ export default function HomeScreen({ navigation }: any) {
 
         setWeather({ temp, city: data.name || 'כאן', recommendation: rec, loading: false });
       } catch (e) { 
-          // שגיאה שקטה - נשארים עם ברירת המחדל
+          // שגיאה שקטה
       }
     })();
   }, []);
@@ -82,24 +122,40 @@ export default function HomeScreen({ navigation }: any) {
   useFocusEffect(
     useCallback(() => {
       const fetchData = async () => {
-        if (user) {
-          const lastFeed = await getLastEvent(user.uid, 'food');
-          const lastSleep = await getLastEvent(user.uid, 'sleep');
+        if (user && childProfile.id) {
+          
+          // 🔑 בדיקת מנוי והגבלת משתמשים
+          const premium = await isPremiumUser(user.uid);
+          setIsPremium(premium);
+          const maxUsers = await getMaxSharedUsers(user.uid);
+          setMaxSharedUsers(maxUsers);
+          
+          // 🔑 שימוש ב-childId ולא ב-userId
+          const lastFeed = await getLastEvent(childProfile.id, 'food');
+          const lastSleep = await getLastEvent(childProfile.id, 'sleep');
           setLastFeedTime(formatTimeFromTimestamp(lastFeed?.timestamp));
           setLastSleepTime(formatTimeFromTimestamp(lastSleep?.timestamp));
+          
           generateInsight();
         }
       };
       fetchData();
-    }, [user])
+    }, [user, childProfile.id]) // הוספת childProfile.id כ-dependency
   );
 
   const generateInsight = async () => {
-    if (!user) return;
+    if (!user || !childProfile.id) return;
     setLoadingAI(true);
     try {
-      const history = await getRecentHistory(user.uid);
-      const prediction = await getAIPrediction(history);
+      // 🔑 שליפת היסטוריה לפי childId
+      const history = await getRecentHistory(childProfile.id); 
+      
+      const profileData = {
+          name: childProfile.name,
+          ageMonths: childProfile.ageMonths,
+      };
+      
+      const prediction = await getAIPrediction(history, user.uid, profileData); 
       setAiTip(prediction.tip);
     } catch (e) { setAiTip("לא הצלחתי לנתח כרגע."); } finally { setLoadingAI(false); }
   };
@@ -109,17 +165,22 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const handleSaveTracking = async (data: any) => {
-      if (!user) return;
+      if (!user || !childProfile.id) return;
       try {
-          await saveEventToFirebase(user.uid, data); 
+          // 🔑 שמירת אירוע עם childId
+          await saveEventToFirebase(user.uid, childProfile.id, data); 
           Alert.alert("נשמר!", "התיעוד עודכן בהצלחה");
+          
+          if (data.type === 'food') setLastFeedTime(formatTimeFromTimestamp(data.timestamp));
+          if (data.type === 'sleep') setLastSleepTime(formatTimeFromTimestamp(data.timestamp));
+
           generateInsight(); 
       } catch (error) { Alert.alert("שגיאה בשמירה"); }
   };
 
   const shareStatus = async () => {
     try {
-      const message = `👶 סטטוס עלמא: ${babyStatus === 'sleeping' ? 'ישנה' : 'ערה'} | 🌡️ ${weather.temp}° | 💡 ${aiTip}`;
+      const message = `👶 סטטוס ${childProfile.name}: ${babyStatus === 'sleeping' ? 'ישנה' : 'ערה'} | 🌡️ ${weather.temp}° | 💡 הטיפ היומי: ${aiTip}`;
       await Share.share({ message: message });
     } catch (error) { console.log(error); }
   };
@@ -128,6 +189,44 @@ export default function HomeScreen({ navigation }: any) {
       bg: isNightMode ? '#000000' : '#f9fafb',
       text: isNightMode ? '#EF4444' : '#111827',
       textSub: isNightMode ? '#7F1D1D' : '#6b7280',
+      aiBg: isNightMode ? '#1A0000' : '#f5f3ff', 
+      aiBorder: isNightMode ? '#550000' : '#ddd6fe',
+      aiTextNight: isNightMode ? "#FCA5A5" : "#5b21b6",
+  };
+
+  const GUARDIAN_ROLES = ['אבא', 'אמא', 'סבתא', 'בייביסיטר'];
+  const activeRoles = GUARDIAN_ROLES.slice(0, maxSharedUsers);
+  
+  // פונקציית רינדור ה-AI
+  const renderAITipContent = () => {
+      if (aiTip.includes('שדרגו לגרסת פרימיום') || aiTip.includes('**שדרגו לפרימיום**')) {
+          return (
+              <View style={{ alignItems: 'center' }}>
+                  <Text style={[styles.aiText, { color: dynamicStyles.aiTextNight, marginBottom: 10 }]}>
+                    {`לפענוח "המוח השני" של ${childProfile.name} והפיכת הנתונים לתובנות. 🧠`}
+                  </Text>
+                  <TouchableOpacity 
+                    style={styles.premiumButton} 
+                    // 🚨 התיקון הקריטי 1: חזרה ל-navigate פשוט ליעד בתוך ה-Stack
+                    onPress={() => navigation.navigate('Subscription' as never)}
+                  >
+                      <Trophy size={20} color="#fff" />
+                      <Text style={styles.premiumButtonText}>שדרג ל"הורה רגוע+"</Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.aiText, { color: dynamicStyles.aiTextNight, marginTop: 10, fontSize: 14 }]}>
+                    (טיפ: זמין למנויי Premium / Family)
+                  </Text>
+              </View>
+          );
+      }
+      
+      if (loadingAI) {
+          return <ActivityIndicator color={dynamicStyles.aiTextNight} />;
+      }
+
+      return (
+          <Text style={[styles.aiText, { color: dynamicStyles.aiTextNight }]}>{aiTip}</Text>
+      );
   };
 
   return (
@@ -139,7 +238,8 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.headerContainer}>
             <View>
                 <Text style={[styles.greetingText, { color: dynamicStyles.text }]}>{greeting},</Text>
-                <Text style={[styles.parentName, { color: dynamicStyles.textSub }]}>הכל בשליטה 💪</Text>
+                {/* 🔑 עדכון תצוגת הגיל */}
+                <Text style={[styles.parentName, { color: dynamicStyles.textSub }]}>{childProfile.name} בן/בת {childProfile.ageMonths} חודשים</Text>
             </View>
             <TouchableOpacity onPress={() => setIsNightMode(!isNightMode)} style={styles.nightModeBtn}>
                 {isNightMode ? <Sun size={24} color="#EF4444" /> : <Moon size={24} color="#1f2937" />}
@@ -148,10 +248,10 @@ export default function HomeScreen({ navigation }: any) {
 
         {/* Status Badge */}
         <View style={[styles.statusBadge, babyStatus === 'sleeping' ? styles.statusSleep : styles.statusAwake]}>
-            <Text style={styles.statusText}>{babyStatus === 'sleeping' ? 'עלמא ישנה 😴' : 'עלמא ערה 😃'}</Text>
+            <Text style={styles.statusText}>{babyStatus === 'sleeping' ? `${childProfile.name} ישנה 😴` : `${childProfile.name} ערה 😃`}</Text>
         </View>
 
-        {/* Weather */}
+        {/* Weather - נשאר ללא שינוי */}
         {!isNightMode && (
             <View style={styles.weatherCard}>
                 <View style={styles.weatherIcon}>
@@ -166,9 +266,12 @@ export default function HomeScreen({ navigation }: any) {
 
         {/* Guardian Section */}
         <View style={styles.guardianSection}>
-            <Text style={[styles.sectionTitleSmall, { color: dynamicStyles.text }]}>מי אחראי כרגע?</Text>
+            {/* 🔑 עדכון הודעת הפייוול */}
+            <Text style={[styles.sectionTitleSmall, { color: dynamicStyles.text }]}>
+                מי אחראי כרגע? {maxSharedUsers <= 2 && '(🔒 הוסף עוד מטפלים בפרימיום)'}
+            </Text>
             <View style={styles.guardianRow}>
-                {['אבא', 'אמא', 'סבתא'].map((role) => (
+                {activeRoles.map((role) => ( // רינדור מוגבל לפי maxSharedUsers
                     <TouchableOpacity 
                         key={role} 
                         style={[styles.guardianChip, currentGuardian === role && styles.guardianActive]}
@@ -179,19 +282,29 @@ export default function HomeScreen({ navigation }: any) {
                         {currentGuardian === role && <CheckCircle size={14} color="#fff" style={{marginLeft: 4}} />}
                     </TouchableOpacity>
                 ))}
+                {maxSharedUsers <= 2 && (
+                    <TouchableOpacity 
+                        style={[styles.guardianChip, styles.premiumPlaceholder]} 
+                        // 🚨 התיקון הסופי 2: שימוש ב-navigate פשוט ליעד בתוך ה-Stack
+                        onPress={() => navigation.navigate('Subscription' as never)}
+                    >
+                        <Trophy size={16} color="#4f46e5" />
+                        <Text style={styles.premiumPlaceholderText}>שדרג</Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </View>
 
         {/* AI Insight */}
-        <View style={[styles.aiCard, { backgroundColor: isNightMode ? '#111' : '#f5f3ff', borderColor: isNightMode ? '#333' : '#ddd6fe' }]}>
+        <View style={[styles.aiCard, { backgroundColor: dynamicStyles.aiBg, borderColor: dynamicStyles.aiBorder }]}>
              <View style={styles.aiHeader}>
                 <Sparkles size={20} color={isNightMode ? "#EF4444" : "#7c3aed"} />
                 <Text style={[styles.aiTitle, { color: isNightMode ? "#EF4444" : "#7c3aed" }]}>תובנה יומית (AI)</Text>
              </View>
-             <Text style={[styles.aiText, { color: isNightMode ? "#FECACA" : "#5b21b6" }]}>{aiTip}</Text>
+             {renderAITipContent()}
         </View>
 
-        {/* Quick Actions Slider */}
+        {/* Quick Actions Slider - נשאר ללא שינוי */}
         <Text style={[styles.sectionTitle, { color: dynamicStyles.text }]}>תיעוד מהיר</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionsSlider}>
             
@@ -224,7 +337,6 @@ export default function HomeScreen({ navigation }: any) {
                 <View style={[styles.actionIcon, { backgroundColor: '#8B5CF6' }]}>
                    <Music size={28} color="#fff" />
                 </View>
-                {/* --- התיקון כאן למטה: הוספתי סוגריים מרובעים [] --- */}
                 <Text style={[styles.actionText, { color: '#5B21B6' }]}>רעש לבן</Text>
             </TouchableOpacity>
 
@@ -238,7 +350,7 @@ export default function HomeScreen({ navigation }: any) {
 
         </ScrollView>
 
-        {/* Vitamins */}
+        {/* Vitamins - נשאר ללא שינוי */}
         <View style={styles.medsContainer}>
             <Text style={[styles.sectionTitleSmall, { color: dynamicStyles.text }]}>מדד יומי (חובה!)</Text>
             <View style={styles.medsGrid}>
@@ -251,7 +363,7 @@ export default function HomeScreen({ navigation }: any) {
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                    style={[styles.medBtn, meds.iron && styles.medBtnActive]} 
+                    style={[styles.medBtn, meds.iron && meds.iron]} 
                     onPress={() => setMeds(p => ({...p, iron: !p.iron}))}
                 >
                     <Text style={[styles.medText, meds.iron && styles.medTextActive]}>ברזל</Text>
@@ -260,7 +372,7 @@ export default function HomeScreen({ navigation }: any) {
             </View>
         </View>
 
-        {/* Share & Timeline */}
+        {/* Share & Timeline - נשאר ללא שינוי */}
         <TouchableOpacity style={styles.handoffButton} onPress={shareStatus}>
             <Share2 size={20} color="#4f46e5" />
             <Text style={styles.handoffText}>שתף סטטוס משמרת (לוואטסאפ)</Text>
@@ -304,6 +416,10 @@ const styles = StyleSheet.create({
   guardianActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
   guardianText: { fontSize: 14, color: '#374151', fontWeight: '500' },
   guardianTextActive: { color: '#fff', fontWeight: 'bold' },
+  
+  // 🔑 סטייל חדש לכפתור השדרוג של המטפלים
+  premiumPlaceholder: { backgroundColor: '#F3E8FF', borderColor: '#C4B5FD', paddingHorizontal: 10 },
+  premiumPlaceholderText: { color: '#5B21B6', fontWeight: '700', fontSize: 14, marginRight: 4 },
 
   sectionTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'right' },
   actionsSlider: { flexDirection: 'row-reverse', gap: 16, paddingLeft: 20, paddingBottom: 20 },
@@ -335,6 +451,28 @@ const styles = StyleSheet.create({
   aiHeader: { flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 12 },
   aiTitle: { fontSize: 18, fontWeight: 'bold', marginRight: 10 },
   aiText: { fontSize: 16, lineHeight: 24, textAlign: 'right' },
+
+  premiumButton: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7c3aed',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginTop: 10,
+    elevation: 2,
+    shadowColor: '#7c3aed',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+  },
+  premiumButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginRight: 8,
+  },
 
   medsContainer: { marginBottom: 30 },
   medsGrid: { flexDirection: 'row-reverse', gap: 12 },
