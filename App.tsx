@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack'; 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Home, BarChart2, User, Settings, Lock } from 'lucide-react-native';
+import { Home, BarChart2, User, Settings, Lock, Baby } from 'lucide-react-native';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -16,11 +17,17 @@ import ProfileScreen from './pages/ProfileScreen';
 import SettingsScreen from './pages/SettingsScreen';
 import LoginScreen from './pages/LoginScreen';
 import BabyProfileScreen from './pages/BabyProfileScreen';
+import BabySitterScreen from './pages/BabySitterScreen';
+// ✅ הוספנו את הייבוא של מסך הפרופיל
+import SitterProfileScreen from './pages/SitterProfileScreen'; 
 
 // שירותים
 import { checkIfBabyExists } from './services/babyService';
 
 const Tab = createBottomTabNavigator();
+const HomeStack = createNativeStackNavigator();
+// ✅ יצירת Stack חדש עבור הבייביסיטר
+const BabysitterStack = createNativeStackNavigator(); 
 
 // --- רכיבים עזר ---
 
@@ -45,25 +52,21 @@ const BiometricLockScreen = ({ onUnlock }: { onUnlock: () => void }) => (
   </View>
 );
 
-// --- רכיב אייקון מותאם אישית לבר התחתון (המתוקן) ---
 const CustomTabIcon = ({ focused, color, icon: Icon, label }: any) => {
   return (
     <View style={{ 
       alignItems: 'center', 
       justifyContent: 'center', 
-      // נותן לזה קצת אוויר מלמעלה, במיוחד באייפון
       top: Platform.OS === 'ios' ? 14 : 0,
-      width: 60 // רוחב קבוע מונע מהטקסט להישבר או להימעך
+      width: 60 
     }}>
       <Icon 
         color={color} 
         size={24} 
         strokeWidth={focused ? 2.5 : 2} 
       />
-      
-      {/* טקסט מתחת לאייקון - נקי ומסודר */}
       <Text 
-        numberOfLines={1} // מכריח שורה אחת בלבד
+        numberOfLines={1} 
         style={{ 
           color: color, 
           fontSize: 10, 
@@ -74,11 +77,33 @@ const CustomTabIcon = ({ focused, color, icon: Icon, label }: any) => {
       }}>
         {label}
       </Text>
-      
-      {/* הורדנו את הנקודה למראה נקי יותר (High Level) */}
     </View>
   );
 };
+
+// --- הגדרת ה-Stacks ---
+
+// Stack לבית
+function HomeStackScreen() {
+  return (
+    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+      <HomeStack.Screen name="Home" component={HomeScreen} />
+      {/* כאן תוכל להוסיף עוד מסכים שקשורים לבית אם צריך */}
+    </HomeStack.Navigator>
+  );
+}
+
+// ✅ Stack לבייביסיטר (זה החלק הקריטי!)
+function BabysitterStackScreen() {
+  return (
+    <BabysitterStack.Navigator screenOptions={{ headerShown: false }}>
+      {/* מסך 1: הרשימה */}
+      <BabysitterStack.Screen name="SitterList" component={BabySitterScreen} />
+      {/* מסך 2: הפרופיל (אליו מנווטים בלחיצה) */}
+      <BabysitterStack.Screen name="SitterProfile" component={SitterProfileScreen} />
+    </BabysitterStack.Navigator>
+  );
+}
 
 // --- האפליקציה הראשית ---
 
@@ -177,11 +202,10 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer>
         <Tab.Navigator
-          // הגדרת הבית כברירת מחדל
           initialRouteName="בית"
           screenOptions={{
             headerShown: false,
-            tabBarShowLabel: false, // אנחנו משתמשים בלייבל משלנו בתוך האייקון
+            tabBarShowLabel: false,
             tabBarActiveTintColor: '#4f46e5',
             tabBarInactiveTintColor: '#9ca3af',
             tabBarStyle: { 
@@ -192,7 +216,7 @@ export default function App() {
               elevation: 0,
               backgroundColor: '#ffffff',
               borderRadius: 25,
-              height: 80, // גובה מרווח
+              height: 80,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 5 },
               shadowOpacity: 0.1,
@@ -201,11 +225,6 @@ export default function App() {
             }
           }}
         >
-          {/* הסדר בקוד הוא משמאל לימין.
-             כדי שבעברית "בית" יהיה בימין - הוא צריך להיות אחרון ברשימה.
-             וכדי ש"הגדרות" יהיה בשמאל - הוא צריך להיות ראשון.
-          */}
-
           <Tab.Screen 
             name="הגדרות" 
             component={SettingsScreen} 
@@ -232,6 +251,17 @@ export default function App() {
             options={{ 
               tabBarIcon: ({ color, focused }) => (
                 <CustomTabIcon focused={focused} color={color} icon={BarChart2} label="דוחות" />
+              ) 
+            }} 
+          />
+
+          {/* 👇 התיקון כאן: במקום להצביע לדף, אנחנו מצביעים ל-Stack 👇 */}
+          <Tab.Screen 
+            name="בייביסיטר" 
+            component={BabysitterStackScreen} 
+            options={{ 
+              tabBarIcon: ({ color, focused }) => (
+                <CustomTabIcon focused={focused} color={color} icon={Baby} label="בייביסיטר" />
               ) 
             }} 
           />
@@ -265,7 +295,6 @@ const styles = StyleSheet.create({
     color: '#4f46e5',
     fontWeight: '600',
   },
-  // הסרנו את activeDot כי אנחנו לא משתמשים בו יותר, אבל אפשר להשאיר אם תרצה להחזיר
   lockIconContainer: {
     marginBottom: 20,
     padding: 20,

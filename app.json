@@ -15,7 +15,8 @@
           "photosPermission": "האפליקציה צריכה גישה לתמונות כדי להגדיר תמונת פרופיל"
         }
       ],
-      "expo-local-authentication"
+      "expo-local-authentication",
+      "expo-font"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -42,7 +43,7 @@
         "CAMERA",
         "USE_BIOMETRIC",
         "USE_FINGERPRINT"
-      ] 
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
