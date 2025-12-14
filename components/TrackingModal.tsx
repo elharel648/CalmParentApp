@@ -15,19 +15,19 @@ interface TrackingModalProps {
 const TYPE_CONFIG = {
   food: {
     title: 'תיעוד אוכל',
-    emoji: '🍼',
+    icon: Utensils,
     gradient: ['#FEF3C7', '#FDE68A'] as [string, string],
     accent: '#F59E0B',
   },
   sleep: {
     title: 'תיעוד שינה',
-    emoji: '😴',
+    icon: Moon,
     gradient: ['#E0E7FF', '#C7D2FE'] as [string, string],
     accent: '#6366F1',
   },
   diaper: {
     title: 'החלפת חיתול',
-    emoji: '🧷',
+    icon: Baby,
     gradient: ['#D1FAE5', '#A7F3D0'] as [string, string],
     accent: '#10B981',
   },
@@ -170,28 +170,36 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           style={[styles.foodTab, foodType === 'breast' && styles.activeFoodTab]}
           onPress={() => { setFoodType('breast'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Text style={styles.foodTabEmoji}>🤱</Text>
+          <View style={styles.foodTabIconContainer}>
+            <Baby size={24} color={foodType === 'breast' ? '#6366F1' : '#9CA3AF'} strokeWidth={2} />
+          </View>
           <Text style={[styles.foodTabText, foodType === 'breast' && styles.activeFoodTabText]}>הנקה</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.foodTab, foodType === 'bottle' && styles.activeFoodTab]}
           onPress={() => { setFoodType('bottle'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Text style={styles.foodTabEmoji}>🍼</Text>
+          <View style={styles.foodTabIconContainer}>
+            <Utensils size={24} color={foodType === 'bottle' ? '#6366F1' : '#9CA3AF'} strokeWidth={2} />
+          </View>
           <Text style={[styles.foodTabText, foodType === 'bottle' && styles.activeFoodTabText]}>בקבוק</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.foodTab, foodType === 'solids' && styles.activeFoodTab]}
           onPress={() => { setFoodType('solids'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Text style={styles.foodTabEmoji}>🥣</Text>
+          <View style={styles.foodTabIconContainer}>
+            <Utensils size={24} color={foodType === 'solids' ? '#6366F1' : '#9CA3AF'} strokeWidth={2} />
+          </View>
           <Text style={[styles.foodTabText, foodType === 'solids' && styles.activeFoodTabText]}>מזון{"\n"}לתינוקות</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.foodTab, foodType === 'pumping' && styles.activeFoodTab]}
           onPress={() => { setFoodType('pumping'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Text style={styles.foodTabEmoji}>🫙</Text>
+          <View style={styles.foodTabIconContainer}>
+            <Droplets size={24} color={foodType === 'pumping' ? '#6366F1' : '#9CA3AF'} strokeWidth={2} />
+          </View>
           <Text style={[styles.foodTabText, foodType === 'pumping' && styles.activeFoodTabText]}>שאיבה</Text>
         </TouchableOpacity>
       </View>
@@ -316,7 +324,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
   const renderSleepContent = () => (
     <View style={{ width: '100%', alignItems: 'center' }}>
       <Text style={styles.subtitle}>
-        {sleepContext.isRunning ? '😴 התינוק ישנה...' : 'מפעילים טיימר או שומרים ידנית?'}
+        {sleepContext.isRunning ? 'התינוק ישנה...' : 'מפעילים טיימר או שומרים ידנית?'}
       </Text>
       <TouchableOpacity
         style={[styles.timerCircle, sleepContext.isRunning && styles.timerCircleActive]}
@@ -358,8 +366,8 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
       <Text style={[styles.subtitle, { textAlign: 'center' }]}>מה היה?</Text>
       <View style={styles.diaperOptions}>
         {[
-          { key: 'pee', label: 'פיפי 💧', color: '#3B82F6' },
-          { key: 'poop', label: 'קקי 💩', color: '#8B5CF6' },
+          { key: 'pee', label: 'פיפי', color: '#3B82F6' },
+          { key: 'poop', label: 'קקי', color: '#8B5CF6' },
           { key: 'both', label: 'שניהם', color: '#10B981' },
         ].map(opt => (
           <TouchableOpacity
@@ -410,7 +418,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           {/* Header */}
           <LinearGradient colors={config.gradient} style={styles.header}>
             <View style={styles.emojiCircle}>
-              <Text style={styles.emoji}>{config.emoji}</Text>
+              {React.createElement(config.icon, { size: 28, color: config.accent, strokeWidth: 2.5 })}
             </View>
             <Text style={styles.title}>{config.title}</Text>
           </LinearGradient>
@@ -457,8 +465,12 @@ const styles = StyleSheet.create({
   foodTabs: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 24, gap: 8 },
   foodTab: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 16, backgroundColor: '#F3F4F6' },
   activeFoodTab: { backgroundColor: '#6366F1' },
-  foodTabEmoji: { fontSize: 24, marginBottom: 4 },
-  foodTabText: { fontSize: 11, color: '#6B7280', fontWeight: '600', textAlign: 'center' },
+  foodTabIconContainer: {
+    marginBottom: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  foodTabText: { fontSize: 13, color: '#6B7280', textAlign: 'center', fontWeight: '600' },
   activeFoodTabText: { color: '#fff' },
 
   // Bottle/Pumping

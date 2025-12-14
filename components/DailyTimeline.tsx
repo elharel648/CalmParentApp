@@ -1,361 +1,459 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Animated, TouchableOpacity, Platform } from 'react-native';
-import { Moon, Utensils, Layers, Clock, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect } from '@react-navigation/native';
-import * as Haptics from 'expo-haptics';
-import { auth } from '../services/firebaseConfig';
-import { getRecentHistory, getChildProfile } from '../services/firebaseService';
+import React, { memo, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { Utensils, Moon, Baby, ChevronDown, ChevronUp, Milk, Cookie } from 'lucide-react-native';
+import { useChildProfile } from '../hooks/useChildProfile';
+import { getRecentHistory } from '../services/firebaseService';
 
 interface TimelineEvent {
   id: string;
   type: 'food' | 'sleep' | 'diaper';
   timestamp: Date;
-  subType?: string;
   amount?: string;
   note?: string;
+  subType?: string;
+  [key: string]: any;
 }
 
 interface DailyTimelineProps {
   refreshTrigger?: number;
 }
 
-// Type configurations
 const TYPE_CONFIG = {
-  food: { icon: Utensils, colors: ['#F59E0B', '#D97706'], bg: '#FEF3C7', emoji: '🍼' },
-  sleep: { icon: Moon, colors: ['#818CF8', '#6366F1'], bg: '#E0E7FF', emoji: '😴' },
-  diaper: { icon: Layers, colors: ['#34D399', '#10B981'], bg: '#D1FAE5', emoji: '🧷' },
+  food: {
+    icon: Utensils,
+    color: '#F59E0B',
+    label: 'אוכל',
+  },
+  sleep: {
+    icon: Moon,
+    color: '#8B5CF6',
+    label: 'שינה',
+  },
+  diaper: {
+    icon: Baby,
+    color: '#10B981',
+    label: 'חיתול',
+  },
 } as const;
 
-const getLabel = (event: TimelineEvent): string => {
-  switch (event.type) {
-    case 'food':
-      if (event.subType === 'bottle') return `בקבוק ${event.amount || ''}`.trim();
-      if (event.subType === 'breast') return 'הנקה';
-      if (event.subType === 'pumping') return 'שאיבה';
-      if (event.subType === 'solids') return 'מזון מוצק';
-      return 'אוכל';
-    case 'sleep':
-      return event.note ? `שינה` : 'שינה';
-    case 'diaper':
-      if (event.subType === 'pee') return 'פיפי 💧';
-      if (event.subType === 'poop') return 'קקי 💩';
-      if (event.subType === 'both') return 'גם וגם';
-      return 'חיתול';
-    default: return 'אירוע';
-  }
-};
+const INITIAL_VISIBLE_COUNT = 4;
 
-const formatTime = (date: Date): string => {
-  return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false });
-};
-
-const formatRelativeTime = (date: Date): string => {
-  const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
-  if (diffMins < 1) return 'עכשיו';
-  if (diffMins < 60) return `לפני ${diffMins} דק׳`;
-  const diffHours = Math.floor(diffMins / 60);
-  return `לפני ${diffHours} שעות`;
-};
-
-export default function DailyTimeline({ refreshTrigger }: DailyTimelineProps) {
+const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
+  const { profile } = useChildProfile();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [childName, setChildName] = useState('הבייבי');
-  const [fadeAnim] = useState(new Animated.Value(0));
   const [isExpanded, setIsExpanded] = useState(false);
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
-  const user = auth.currentUser;
-
-  const fetchEvents = useCallback(async () => {
-    if (!user) { setLoading(false); return; }
-
-    try {
-      const profile = await getChildProfile(user.uid);
-      if (profile) {
-        setChildName(profile.name || 'הבייבי');
-        const childId = profile.childId || profile.id;
-        if (childId) {
-          const history = await getRecentHistory(childId);
-          // Filter today's events
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const todayEvents = (history || [])
-            .filter((e: any) => new Date(e.timestamp).getTime() >= today.getTime())
-            .slice(0, 20);
-          setEvents(todayEvents);
-        }
-      }
-    } catch (error) {
-      console.error('DailyTimeline error:', error);
-    } finally {
-      setLoading(false);
-      Animated.spring(fadeAnim, { toValue: 1, useNativeDriver: true }).start();
+  useEffect(() => {
+    if (profile.id) {
+      loadTimeline();
     }
-  }, [user, fadeAnim]);
+  }, [profile.id, refreshTrigger]);
 
-  useFocusEffect(useCallback(() => { fetchEvents(); }, [fetchEvents]));
-  useEffect(() => { if (refreshTrigger) fetchEvents(); }, [refreshTrigger, fetchEvents]);
-
-  // Calculate summary stats
-  const stats = useMemo(() => {
-    const counts = { food: 0, sleep: 0, diaper: 0 };
-    events.forEach(e => { if (counts[e.type] !== undefined) counts[e.type]++; });
-    return counts;
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
   }, [events]);
 
-  const toggleExpand = () => {
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsExpanded(!isExpanded);
+  const loadTimeline = async () => {
+    try {
+      const history = await getRecentHistory(profile.id);
+      // Map Firebase data directly
+      const mapped: TimelineEvent[] = history.map((item: any) => ({
+        ...item,
+        timestamp: item.timestamp instanceof Date ? item.timestamp : new Date(item.timestamp),
+      }));
+      setEvents(mapped);
+    } catch (error) {
+      console.error('Timeline load error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Show only 3 events when collapsed
-  const visibleEvents = isExpanded ? events : events.slice(0, 3);
-  const hasMore = events.length > 3;
+  const getTimeAgo = (date: Date) => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    if (seconds < 60) return 'עכשיו';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}ד׳`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}ש׳`;
+  };
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>📋 סדר היום</Text>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color="#6366F1" size="small" />
-        </View>
-      </View>
-    );
-  }
+  // Format event details
+  const getEventDetails = (event: TimelineEvent) => {
+    if (event.type === 'food') {
+      if (event.subType === 'bottle') {
+        return event.amount || 'בקבוק';
+      } else if (event.subType === 'breast') {
+        return 'הנקה';
+      } else if (event.subType === 'pumping') {
+        return `שאיבה ${event.amount || ''}`;
+      } else if (event.subType === 'solids') {
+        return event.note || 'מזון מוצק';
+      }
+      return event.amount || event.note || 'אוכל';
+    } else if (event.type === 'sleep') {
+      return event.note || 'שינה';
+    } else if (event.type === 'diaper') {
+      if (event.subType === 'pee') return 'פיפי';
+      if (event.subType === 'poop') return 'קקי';
+      if (event.subType === 'both') return 'שניהם';
+      return 'החלפת חיתול';
+    }
+    return '';
+  };
+
+  const getEventSubtext = (event: TimelineEvent) => {
+    if (event.type === 'food') {
+      if (event.subType === 'bottle') return 'בקבוק';
+      if (event.subType === 'breast') return event.note ? event.note.substring(0, 30) : '';
+      if (event.subType === 'solids') return 'מזון מוצקים';
+      if (event.subType === 'pumping') return 'שאיבה';
+    } else if (event.type === 'sleep') {
+      return event.note ? event.note.substring(0, 35) : '';
+    }
+    return '';
+  };
+
+  const stats = events.reduce((acc, event) => {
+    acc[event.type] = (acc[event.type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const visibleEvents = isExpanded ? events : events.slice(0, INITIAL_VISIBLE_COUNT);
+  const hasMore = events.length > INITIAL_VISIBLE_COUNT;
+
+  if (loading) return null;
 
   if (events.length === 0) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>סדר היום</Text>
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>עוד אין תיעודים להיום 📝</Text>
-          <Text style={styles.emptySubtext}>התחל לתעד עם הכפתורים למעלה</Text>
+        <View style={styles.header}>
+          <View style={styles.titleSection}>
+            <View style={styles.accentLine} />
+            <Text style={styles.title}>סדר היום</Text>
+          </View>
+        </View>
+
+        <View style={styles.emptyCard}>
+          <View style={styles.emptyIcon}>
+            <Text style={styles.emptyEmoji}>📝</Text>
+          </View>
+          <Text style={styles.emptyText}>אין תיעודים להיום</Text>
+          <Text style={styles.emptyHint}>השתמש בכפתורים למעלה כדי להתחיל</Text>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header with title */}
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>סדר היום</Text>
-        <View style={styles.todayBadge}>
-          <Text style={styles.todayText}>היום</Text>
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.titleSection}>
+          <View style={styles.accentLine} />
+          <Text style={styles.title}>סדר היום</Text>
+        </View>
+
+        {/* Stats Pills */}
+        <View style={styles.statsContainer}>
+          {Object.entries(stats).map(([type, count]) => {
+            const config = TYPE_CONFIG[type as keyof typeof TYPE_CONFIG];
+            const Icon = config.icon;
+            return (
+              <View key={type} style={styles.statPill}>
+                <Text style={styles.statCount}>{count}</Text>
+                <Icon size={11} color="#6B7280" strokeWidth={2.5} />
+              </View>
+            );
+          })}
         </View>
       </View>
 
-      {/* Summary Stats Row */}
-      <View style={styles.summaryRow}>
-        {Object.entries(stats).map(([type, count]) => {
-          if (count === 0) return null;
-          const config = TYPE_CONFIG[type as keyof typeof TYPE_CONFIG];
+      {/* Timeline */}
+      <View style={styles.timeline}>
+        {visibleEvents.map((event, index) => {
+          const config = TYPE_CONFIG[event.type];
           const Icon = config.icon;
+          const isLast = index === visibleEvents.length - 1;
+          const details = getEventDetails(event);
+          const subtext = getEventSubtext(event);
+
           return (
-            <View key={type} style={[styles.summaryChip, { backgroundColor: config.bg }]}>
-              <LinearGradient colors={config.colors} style={styles.summaryIcon}>
-                <Icon size={14} color="#fff" />
-              </LinearGradient>
-              <Text style={[styles.summaryCount, { color: config.colors[1] }]}>×{count}</Text>
+            <View key={event.id} style={styles.eventRow}>
+              {/* Left side: Time + Dot */}
+              <View style={styles.leftSection}>
+                <Text style={styles.time}>
+                  {event.timestamp.toLocaleTimeString('he-IL', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  })}
+                </Text>
+                <Text style={styles.timeAgo}>{getTimeAgo(event.timestamp)}</Text>
+              </View>
+
+              {/* Timeline dot + line */}
+              <View style={styles.timelineTrack}>
+                <View style={[styles.dot, { backgroundColor: config.color }]} />
+                {!isLast && <View style={styles.connector} />}
+              </View>
+
+              {/* Right side: Content */}
+              <View style={styles.eventCard}>
+                <View style={styles.cardContent}>
+                  <View style={styles.eventHeader}>
+                    <Text style={styles.eventTitle}>{details}</Text>
+                    <View style={[styles.iconBadge, { backgroundColor: config.color + '10' }]}>
+                      <Icon size={14} color={config.color} strokeWidth={2.5} />
+                    </View>
+                  </View>
+                  {subtext && (
+                    <Text style={styles.eventSubtext}>{subtext}</Text>
+                  )}
+                </View>
+              </View>
             </View>
           );
         })}
       </View>
 
-      {/* Events List */}
-      <Animated.View style={{ opacity: fadeAnim }}>
-        {visibleEvents.map((event, index) => {
-          const config = TYPE_CONFIG[event.type];
-          const Icon = config.icon;
-
-          return (
-            <View key={event.id} style={[styles.eventCard, index === 0 && styles.firstCard]}>
-              <LinearGradient colors={config.colors} style={styles.iconCircle}>
-                <Icon size={16} color="#fff" />
-              </LinearGradient>
-
-              <View style={styles.eventContent}>
-                <Text style={styles.eventLabel}>{getLabel(event)}</Text>
-                {event.note && <Text style={styles.eventNote} numberOfLines={1}>{event.note}</Text>}
-              </View>
-
-              <View style={styles.timeContainer}>
-                <Text style={styles.timeText}>{formatTime(event.timestamp)}</Text>
-                {index === 0 && (
-                  <Text style={styles.relativeTime}>{formatRelativeTime(event.timestamp)}</Text>
-                )}
-              </View>
-            </View>
-          );
-        })}
-
-        {/* Show More/Less Button */}
-        {hasMore && (
-          <TouchableOpacity style={styles.expandBtn} onPress={toggleExpand} activeOpacity={0.7}>
-            {isExpanded ? (
-              <>
-                <ChevronUp size={18} color="#6366F1" />
-                <Text style={styles.expandText}>הסתר</Text>
-              </>
-            ) : (
-              <>
-                <ChevronDown size={18} color="#6366F1" />
-                <Text style={styles.expandText}>הצג עוד {events.length - 3} אירועים</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-      </Animated.View>
-    </View>
+      {/* Expand */}
+      {hasMore && (
+        <TouchableOpacity
+          style={styles.expandButton}
+          onPress={() => setIsExpanded(!isExpanded)}
+          activeOpacity={0.6}
+        >
+          {isExpanded ? (
+            <>
+              <ChevronUp size={14} color="#9CA3AF" strokeWidth={2.5} />
+              <Text style={styles.expandText}>הצג פחות</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.expandText}>הצג {events.length - INITIAL_VISIBLE_COUNT} נוספים</Text>
+              <ChevronDown size={14} color="#9CA3AF" strokeWidth={2.5} />
+            </>
+          )}
+        </TouchableOpacity>
+      )}
+    </Animated.View>
   );
-}
+});
+
+DailyTimeline.displayName = 'DailyTimeline';
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 20,
-    paddingHorizontal: 4,
+    marginTop: 32,
+    marginBottom: 32,
+    paddingHorizontal: 20,
   },
-  headerRow: {
+
+  // Header
+  header: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 24,
+  },
+  titleSection: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  accentLine: {
+    width: 3,
+    height: 20,
+    backgroundColor: '#6366F1',
+    borderRadius: 2,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  todayBadge: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  todayText: {
-    color: '#6366F1',
-    fontSize: 12,
+    fontSize: 17,
     fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.4,
   },
-
-  // Summary stats
-  summaryRow: {
+  statsContainer: {
     flexDirection: 'row-reverse',
-    gap: 8,
-    marginBottom: 16,
+    gap: 6,
   },
-  summaryChip: {
+  statPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  summaryIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  summaryCount: {
-    fontSize: 14,
+  statCount: {
+    fontSize: 12,
     fontWeight: '700',
+    color: '#374151',
+    fontVariant: ['tabular-nums'],
   },
 
-  // Event cards
-  eventCard: {
+  // Timeline
+  timeline: {
+    gap: 0,
+  },
+  eventRow: {
     flexDirection: 'row-reverse',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    marginBottom: 16,
   },
-  firstCard: {
-    borderWidth: 2,
-    borderColor: '#E0E7FF',
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  eventContent: {
-    flex: 1,
-    marginRight: 12,
+
+  // Left: Time
+  leftSection: {
+    width: 56,
+    paddingTop: 2,
     alignItems: 'flex-end',
   },
-  eventLabel: {
-    fontSize: 15,
+  time: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#111827',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.2,
   },
-  eventNote: {
-    fontSize: 12,
+  timeAgo: {
+    fontSize: 10,
+    fontWeight: '500',
     color: '#9CA3AF',
     marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
-  timeContainer: {
-    alignItems: 'flex-start',
+
+  // Center: Timeline
+  timelineTrack: {
+    width: 32,
+    alignItems: 'center',
+    position: 'relative',
   },
-  timeText: {
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    zIndex: 2,
+    marginTop: 6,
+  },
+  connector: {
+    position: 'absolute',
+    top: 14,
+    width: 1.5,
+    height: '100%',
+    backgroundColor: '#E5E7EB',
+    zIndex: 1,
+  },
+
+  // Right: Content
+  eventCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    overflow: 'hidden',
+  },
+  cardContent: {
+    padding: 12,
+  },
+  eventHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    width: '100%',
+    gap: 12,
+  },
+  eventTitle: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '600',
     color: '#6B7280',
+    lineHeight: 20,
+    letterSpacing: -0.2,
+    textAlign: 'right',
   },
-  relativeTime: {
-    fontSize: 11,
-    color: '#6366F1',
+  iconBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventSubtext: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    lineHeight: 16,
+    fontWeight: '500',
+    textAlign: 'right',
     marginTop: 2,
   },
 
-  // Expand button
-  expandBtn: {
-    flexDirection: 'row-reverse',
+  // Empty
+  emptyCard: {
+    backgroundColor: '#FAFAFA',
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  emptyEmoji: {
+    fontSize: 28,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+    letterSpacing: -0.2,
+  },
+  emptyHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+
+  // Expand
+  expandButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 12,
-    backgroundColor: '#F5F3FF',
-    borderRadius: 12,
-    marginTop: 4,
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   expandText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6366F1',
-  },
-
-  // Empty & Loading
-  loadingContainer: {
-    padding: 30,
-    alignItems: 'center',
-  },
-  emptyState: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
     color: '#6B7280',
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    marginTop: 4,
-    textAlign: 'center',
+    letterSpacing: -0.1,
   },
 });
+
+export default DailyTimeline;
