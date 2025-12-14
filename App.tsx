@@ -4,29 +4,31 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack'; 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+// ✅ הוספנו את Baby לאייקונים
 import { Home, BarChart2, User, Settings, Lock, Baby } from 'lucide-react-native';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { auth, db } from './services/firebaseConfig';
 
-// ייבוא המסכים
+// ייבוא המסכים הקיימים
 import HomeScreen from './pages/HomeScreen';
 import ReportsScreen from './pages/ReportsScreen';
 import ProfileScreen from './pages/ProfileScreen';
 import SettingsScreen from './pages/SettingsScreen';
 import LoginScreen from './pages/LoginScreen';
 import BabyProfileScreen from './pages/BabyProfileScreen';
-import BabySitterScreen from './pages/BabySitterScreen';
-// ✅ הוספנו את הייבוא של מסך הפרופיל
-import SitterProfileScreen from './pages/SitterProfileScreen'; 
 
-// שירותים
+// ✅ ייבוא מסכי הבייביסיטר החדשים (חובה!)
+import BabySitterScreen from './pages/BabySitterScreen';
+import SitterProfileScreen from './pages/SitterProfileScreen'; 
+import ChatScreen from './pages/ChatScreen'; 
+
 import { checkIfBabyExists } from './services/babyService';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
-// ✅ יצירת Stack חדש עבור הבייביסיטר
+// ✅ יצירת Stack לבייביסיטר
 const BabysitterStack = createNativeStackNavigator(); 
 
 // --- רכיבים עזר ---
@@ -60,20 +62,10 @@ const CustomTabIcon = ({ focused, color, icon: Icon, label }: any) => {
       top: Platform.OS === 'ios' ? 14 : 0,
       width: 60 
     }}>
-      <Icon 
-        color={color} 
-        size={24} 
-        strokeWidth={focused ? 2.5 : 2} 
-      />
-      <Text 
-        numberOfLines={1} 
-        style={{ 
-          color: color, 
-          fontSize: 10, 
-          marginTop: 6, 
-          fontWeight: focused ? '600' : '400',
-          textAlign: 'center',
-          width: '100%'
+      <Icon color={color} size={24} strokeWidth={focused ? 2.5 : 2} />
+      <Text numberOfLines={1} style={{ 
+          color: color, fontSize: 10, marginTop: 6, 
+          fontWeight: focused ? '600' : '400', textAlign: 'center', width: '100%'
       }}>
         {label}
       </Text>
@@ -83,24 +75,21 @@ const CustomTabIcon = ({ focused, color, icon: Icon, label }: any) => {
 
 // --- הגדרת ה-Stacks ---
 
-// Stack לבית
 function HomeStackScreen() {
   return (
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="Home" component={HomeScreen} />
-      {/* כאן תוכל להוסיף עוד מסכים שקשורים לבית אם צריך */}
     </HomeStack.Navigator>
   );
 }
 
-// ✅ Stack לבייביסיטר (זה החלק הקריטי!)
+// ✅ Stack לבייביסיטר - מחבר את הרשימה, הפרופיל והצ'אט
 function BabysitterStackScreen() {
   return (
     <BabysitterStack.Navigator screenOptions={{ headerShown: false }}>
-      {/* מסך 1: הרשימה */}
       <BabysitterStack.Screen name="SitterList" component={BabySitterScreen} />
-      {/* מסך 2: הפרופיל (אליו מנווטים בלחיצה) */}
       <BabysitterStack.Screen name="SitterProfile" component={SitterProfileScreen} />
+      <BabysitterStack.Screen name="ChatScreen" component={ChatScreen} />
     </BabysitterStack.Navigator>
   );
 }
@@ -125,7 +114,6 @@ export default function App() {
         setIsAppLoading(false);
       }
     });
-
     return unsubscribe;
   }, []);
 
@@ -146,10 +134,7 @@ export default function App() {
       const babyExists = await checkIfBabyExists();
       setHasBabyProfile(babyExists);
       setIsAppLoading(false);
-
-      if (needsUnlock) {
-        setTimeout(() => authenticateUser(), 100);
-      }
+      if (needsUnlock) setTimeout(() => authenticateUser(), 100);
 
     } catch (error) {
       console.log('Error during startup checks:', error);
@@ -160,10 +145,7 @@ export default function App() {
   const authenticateUser = async () => {
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      if (!hasHardware) {
-        setIsLocked(false); 
-        return;
-      }
+      if (!hasHardware) { setIsLocked(false); return; }
 
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'ברוך שובך ל-CalmParent',
@@ -171,12 +153,8 @@ export default function App() {
         disableDeviceFallback: false,
       });
       
-      if (result.success) {
-        setIsLocked(false);
-      }
-    } catch (e) {
-      console.log('Authentication error:', e);
-    }
+      if (result.success) setIsLocked(false);
+    } catch (e) { console.log('Authentication error:', e); }
   };
 
   if (isAppLoading) return <LoaderScreen />;
@@ -209,72 +187,33 @@ export default function App() {
             tabBarActiveTintColor: '#4f46e5',
             tabBarInactiveTintColor: '#9ca3af',
             tabBarStyle: { 
-              position: 'absolute',
-              bottom: 25,
-              left: 20,
-              right: 20,
-              elevation: 0,
-              backgroundColor: '#ffffff',
-              borderRadius: 25,
-              height: 80,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 5 },
-              shadowOpacity: 0.1,
-              shadowRadius: 10,
-              borderTopWidth: 0,
+              position: 'absolute', bottom: 25, left: 20, right: 20, elevation: 0,
+              backgroundColor: '#ffffff', borderRadius: 25, height: 80,
+              shadowColor: '#000', shadowOffset: { width: 0, height: 5 },
+              shadowOpacity: 0.1, shadowRadius: 10, borderTopWidth: 0,
             }
           }}
         >
-          <Tab.Screen 
-            name="הגדרות" 
-            component={SettingsScreen} 
-            options={{ 
-              tabBarIcon: ({ color, focused }) => (
-                <CustomTabIcon focused={focused} color={color} icon={Settings} label="הגדרות" />
-              ) 
-            }} 
-          />
+          <Tab.Screen name="הגדרות" component={SettingsScreen} options={{ 
+              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Settings} label="הגדרות" /> 
+            }} />
 
-          <Tab.Screen 
-            name="פרופיל" 
-            component={ProfileScreen} 
-            options={{ 
-              tabBarIcon: ({ color, focused }) => (
-                <CustomTabIcon focused={focused} color={color} icon={User} label="פרופיל" />
-              ) 
-            }} 
-          />
+          <Tab.Screen name="פרופיל" component={ProfileScreen} options={{ 
+              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={User} label="פרופיל" /> 
+            }} />
 
-          <Tab.Screen 
-            name="דוחות" 
-            component={ReportsScreen} 
-            options={{ 
-              tabBarIcon: ({ color, focused }) => (
-                <CustomTabIcon focused={focused} color={color} icon={BarChart2} label="דוחות" />
-              ) 
-            }} 
-          />
+          <Tab.Screen name="דוחות" component={ReportsScreen} options={{ 
+              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={BarChart2} label="דוחות" /> 
+            }} />
 
-          {/* 👇 התיקון כאן: במקום להצביע לדף, אנחנו מצביעים ל-Stack 👇 */}
-          <Tab.Screen 
-            name="בייביסיטר" 
-            component={BabysitterStackScreen} 
-            options={{ 
-              tabBarIcon: ({ color, focused }) => (
-                <CustomTabIcon focused={focused} color={color} icon={Baby} label="בייביסיטר" />
-              ) 
-            }} 
-          />
+          {/* ✅ הטאב של הבייביסיטר - מחובר ל-Stack */}
+          <Tab.Screen name="בייביסיטר" component={BabysitterStackScreen} options={{ 
+              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Baby} label="בייביסיטר" /> 
+            }} />
 
-          <Tab.Screen 
-            name="בית" 
-            component={HomeScreen} 
-            options={{ 
-              tabBarIcon: ({ color, focused }) => (
-                <CustomTabIcon focused={focused} color={color} icon={Home} label="בית" />
-              ) 
-            }} 
-          />
+          <Tab.Screen name="בית" component={HomeStackScreen} options={{ 
+              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Home} label="בית" /> 
+            }} />
 
         </Tab.Navigator>
       </NavigationContainer>
@@ -283,44 +222,11 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  loaderContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-  },
-  loaderText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#4f46e5',
-    fontWeight: '600',
-  },
-  lockIconContainer: {
-    marginBottom: 20,
-    padding: 20,
-    backgroundColor: '#EEF2FF',
-    borderRadius: 50
-  },
-  lockTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8
-  },
-  lockSubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginBottom: 30
-  },
-  unlockButton: {
-    backgroundColor: '#4f46e5',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 25,
-  },
-  unlockButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold'
-  }
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' },
+  loaderText: { marginTop: 10, fontSize: 16, color: '#4f46e5', fontWeight: '600' },
+  lockIconContainer: { marginBottom: 20, padding: 20, backgroundColor: '#EEF2FF', borderRadius: 50 },
+  lockTitle: { fontSize: 24, fontWeight: 'bold', color: '#1f2937', marginBottom: 8 },
+  lockSubtitle: { fontSize: 16, color: '#6b7280', marginBottom: 30 },
+  unlockButton: { backgroundColor: '#4f46e5', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 25 },
+  unlockButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' }
 });

@@ -21,27 +21,26 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
-import * as LocalAuthentication from 'expo-local-authentication'; // <--- הייבוא החשוב
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as Haptics from 'expo-haptics'; // ✅ הוספנו את זה!
 import { 
   LogOut, 
   Trash2, 
   Moon, 
   Bell, 
-  User, 
   ChevronLeft, 
-  Shield, 
   Mail,
   X,
   Lock,
   FileText,
   Share2,
-  Star,
   Camera
 } from 'lucide-react-native';
 import { auth, db } from '../services/firebaseConfig';
 import { deleteUser, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
+// --- צבעים ועיצוב ---
 const COLORS = {
   light: {
     background: '#F2F2F7',
@@ -50,7 +49,7 @@ const COLORS = {
     textSecondary: '#8E8E93',
     divider: '#E5E5EA',
     danger: '#FF3B30',
-    primary: '#007AFF',
+    primary: '#4f46e5',
     modalBg: 'rgba(0,0,0,0.5)'
   },
   dark: {
@@ -60,12 +59,13 @@ const COLORS = {
     textSecondary: '#98989D',
     divider: '#38383A',
     danger: '#FF453A',
-    primary: '#0A84FF',
+    primary: '#6366F1',
     modalBg: 'rgba(255,255,255,0.1)'
   }
 };
 
 export default function SettingsScreen() {
+  // --- States ---
   const [userData, setUserData] = useState({ name: '', email: '', photoURL: null });
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -73,11 +73,14 @@ export default function SettingsScreen() {
 
   const [loading, setLoading] = useState(false); 
   const [initialLoading, setInitialLoading] = useState(true);
+  
+  // Modal States
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
 
   const theme = isDarkMode ? COLORS.dark : COLORS.light;
 
+  // --- טעינת נתונים ---
   useFocusEffect(
     useCallback(() => {
       fetchUserData();
@@ -119,7 +122,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const saveSettingToDB = async (key: string, value: boolean) => {
+  const saveSettingToDB = async (key, value) => {
     try {
       const user = auth.currentUser;
       if (user) {
@@ -136,34 +139,37 @@ export default function SettingsScreen() {
   };
 
   // --- לוגיקה ביומטרית ---
-  const handleBiometricsToggle = async (value: boolean) => {
-    // אם מכבים - אין בעיה
+  const handleBiometricsToggle = async (value) => {
+    // ✅ רטט קטן כשלוחצים
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
     if (!value) {
       setBiometricsEnabled(false);
       saveSettingToDB('biometricsEnabled', false);
       return;
     }
 
-    // אם מדליקים - צריך לוודא שהמשתמש הוא הבעלים
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
       if (!hasHardware || !isEnrolled) {
-        Alert.alert('שגיאה', 'המכשיר לא תומך ב-Face ID או שלא הוגדר קוד גישה');
+        Alert.alert('לא זמין', 'המכשיר לא תומך ב-Face ID/Touch ID או שלא הוגדר קוד גישה.');
         return;
       }
 
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'אימות להפעלת הגנה ביומטרית',
+        promptMessage: 'אמת זהות כדי להפעיל הגנה ביומטרית',
         fallbackLabel: 'השתמש בסיסמה'
       });
 
       if (result.success) {
+        // ✅ רטט הצלחה (קצת שונה)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setBiometricsEnabled(true);
         saveSettingToDB('biometricsEnabled', true);
       } else {
-        // המשתמש ביטל או נכשל
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setBiometricsEnabled(false);
       }
     } catch (error) {
@@ -172,22 +178,29 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleDarkModeToggle = (value: boolean) => {
+  // --- שאר ההגדרות ---
+  const handleDarkModeToggle = (value) => {
+    // ✅ רטט קטן
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsDarkMode(value); 
     saveSettingToDB('isDarkMode', value); 
   };
 
-  const handleNotificationsToggle = (value: boolean) => {
+  const handleNotificationsToggle = (value) => {
+    // ✅ רטט קטן
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setNotificationsEnabled(value);
     saveSettingToDB('notificationsEnabled', value);
   };
 
+  // --- עדכון תמונה ---
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('שגיאה', 'צריך הרשאה לגישה לתמונות');
+      Alert.alert('שגיאה', 'חובה לאשר גישה לגלריה כדי להחליף תמונה');
       return;
     }
+
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -203,8 +216,11 @@ export default function SettingsScreen() {
         if (user) {
           const userRef = doc(db, 'users', user.uid);
           await updateDoc(userRef, { photoURL: newImageUri });
-          await updateProfile(user, { photoURL: newImageUri }).catch(() => {});
+          await updateProfile(user, { photoURL: newImageUri }).catch((e) => console.log('Auth profile update error', e));
+          
           setUserData(prev => ({ ...prev, photoURL: newImageUri }));
+          // ✅ רטט הצלחה
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
       } catch (error) {
         Alert.alert('שגיאה', 'לא הצלחנו לשמור את התמונה');
@@ -214,12 +230,9 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleShareApp = async () => {
-    try { await Share.share({ message: 'היי! אני ב-CalmParent וזה ממש עוזר לי. 📱' }); } catch (error) {}
-  };
-
   const handleSaveName = async () => {
-    if (newName.trim().length < 2) return Alert.alert('שגיאה', 'שם קצר מדי');
+    if (newName.trim().length < 2) return Alert.alert('שגיאה', 'השם חייב להכיל לפחות 2 תווים');
+    
     setLoading(true);
     try {
       const user = auth.currentUser;
@@ -227,6 +240,9 @@ export default function SettingsScreen() {
         await updateProfile(user, { displayName: newName });
         await setDoc(doc(db, 'users', user.uid), { displayName: newName }, { merge: true });
         setUserData(prev => ({ ...prev, name: newName }));
+        
+        // ✅ רטט הצלחה וסגירת מודל
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setEditModalVisible(false);
       }
     } catch (error) {
@@ -236,30 +252,62 @@ export default function SettingsScreen() {
     }
   };
 
+  // --- פונקציות כלליות ---
+  const handleShareApp = async () => {
+    try { await Share.share({ message: 'היי! אני משתמש/ת ב-CalmParent וזה ממש עוזר לי לנהל את הטיפול בבייבי. ממליץ/ה בחום! 👶📱' }); } catch (error) {}
+  };
+
   const handleChangePassword = async () => {
-    Alert.alert('איפוס סיסמה', `נשלח מייל לאיפוס לכתובת:\n${userData.email}`, [
-      { text: 'ביטול', style: 'cancel' },
-      { text: 'שלח', onPress: async () => {
-          if (userData.email) await sendPasswordResetEmail(auth, userData.email);
-          Alert.alert('נשלח!', 'בדוק את המייל.');
-      }}
-    ]);
+    Alert.alert(
+      'איפוס סיסמה', 
+      `האם לשלוח מייל לאיפוס סיסמה לכתובת:\n${userData.email}?`, 
+      [
+        { text: 'ביטול', style: 'cancel' },
+        { text: 'שלח מייל', onPress: async () => {
+            if (userData.email) {
+              try {
+                await sendPasswordResetEmail(auth, userData.email);
+                Alert.alert('נשלח בהצלחה!', 'בדוק/י את תיבת המייל שלך (גם בספאם).');
+              } catch (e) {
+                Alert.alert('שגיאה', 'לא הצלחנו לשלוח את המייל.');
+              }
+            }
+        }}
+      ]
+    );
   };
 
   const handleLogout = () => {
-    Alert.alert('התנתקות', 'בטוח?', [
+    // ✅ רטט אזהרה (שונה וקצת יותר חזק)
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert('התנתקות', 'האם את/ה בטוח/ה שברצונך להתנתק?', [
       { text: 'ביטול', style: 'cancel' },
-      { text: 'כן, צא', style: 'destructive', onPress: () => signOut(auth) }
+      { text: 'כן, התנתק', style: 'destructive', onPress: () => signOut(auth) }
     ]);
   };
 
   const handleDeleteAccount = async () => {
-    Alert.alert('מחיקת חשבון ⚠️', 'בלתי הפיך!', [{ text: 'ביטול' }, { text: 'מחק', style: 'destructive', onPress: async () => {
-        if (auth.currentUser) await deleteUser(auth.currentUser);
-    }}]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert(
+      'מחיקת חשבון לצמיתות ⚠️', 
+      'פעולה זו אינה הפיכה ותמחק את כל הנתונים שלך. האם להמשיך?', 
+      [
+        { text: 'ביטול', style: 'cancel' },
+        { text: 'מחק חשבון', style: 'destructive', onPress: async () => {
+            if (auth.currentUser) {
+              try {
+                await deleteUser(auth.currentUser);
+              } catch (e) {
+                Alert.alert('שגיאה', 'יש להתחבר מחדש כדי למחוק את החשבון.');
+              }
+            }
+        }}
+      ]
+    );
   };
 
-  const SettingItem = ({ icon: Icon, title, type = 'arrow', value, onPress, color, isDestructive }: any) => {
+  // --- רכיב שורה בהגדרות ---
+  const SettingItem = ({ icon: Icon, title, type = 'arrow', value, onPress, color, isDestructive }) => {
     const iconColor = color || theme.primary;
     const textColor = isDestructive ? theme.danger : theme.textPrimary;
 
@@ -267,7 +315,7 @@ export default function SettingsScreen() {
       <TouchableOpacity 
         style={[styles.itemContainer, { backgroundColor: theme.card, borderBottomColor: theme.divider }]} 
         onPress={onPress}
-        disabled={type === 'switch'}
+        disabled={type === 'switch'} 
         activeOpacity={0.7}
       >
         <View style={styles.itemLeft}>
@@ -281,6 +329,7 @@ export default function SettingsScreen() {
           )}
           {type === 'arrow' && <ChevronLeft size={20} color={theme.textSecondary} />}
         </View>
+
         <View style={styles.itemRight}>
           <Text style={[styles.itemText, { color: textColor }]}>{title}</Text>
           <View style={[styles.iconBox, { backgroundColor: isDarkMode ? '#2C2C2E' : '#EEF2FF' }]}>
@@ -294,11 +343,13 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
+      
       <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.divider }]}>
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>הגדרות</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
         <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
           <TouchableOpacity onPress={handlePickImage} activeOpacity={0.8} style={styles.avatarContainer}>
             {userData.photoURL ? (
@@ -310,10 +361,15 @@ export default function SettingsScreen() {
                 </Text>
               </View>
             )}
-            <View style={styles.editIconBadge}><Camera size={12} color="white" /></View>
+            <View style={[styles.editIconBadge, { backgroundColor: theme.primary }]}>
+              <Camera size={12} color="white" />
+            </View>
           </TouchableOpacity>
+          
           <View style={styles.profileInfo}>
-            <Text style={[styles.profileName, { color: theme.textPrimary }]}>{initialLoading ? '...' : userData.name}</Text>
+            <Text style={[styles.profileName, { color: theme.textPrimary }]}>
+              {initialLoading ? 'טוען...' : userData.name}
+            </Text>
             <Text style={[styles.profileEmail, { color: theme.textSecondary }]}>{userData.email}</Text>
             <TouchableOpacity onPress={() => { setNewName(userData.name); setEditModalVisible(true); }}>
               <Text style={[styles.editLink, { color: theme.primary }]}>ערוך פרטים</Text>
@@ -336,7 +392,7 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionHeader}>תמיכה</Text>
         <View style={styles.sectionContainer}>
-          <SettingItem icon={Mail} title="צור קשר" onPress={() => Linking.openURL('mailto:support@app.com')} color="#5AC8FA" />
+          <SettingItem icon={Mail} title="צור קשר" onPress={() => Linking.openURL('mailto:support@calmparent.com')} color="#5AC8FA" />
           <SettingItem icon={Share2} title="שתף חברים" onPress={handleShareApp} color="#AF52DE" />
         </View>
 
@@ -345,29 +401,50 @@ export default function SettingsScreen() {
           <SettingItem icon={LogOut} title="התנתקות" isDestructive onPress={handleLogout} />
           <SettingItem icon={Trash2} title="מחיקת חשבון" isDestructive onPress={handleDeleteAccount} />
         </View>
+        
         <Text style={[styles.version, { color: theme.textSecondary }]}>CalmParent v1.0.3</Text>
       </ScrollView>
 
-      {/* Modal */}
+      {/* Modal לעריכת שם */}
       <Modal visible={isEditModalVisible} transparent animationType="fade" onRequestClose={() => setEditModalVisible(false)}>
         <TouchableWithoutFeedback onPress={() => setEditModalVisible(false)}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.modalContent, { backgroundColor: theme.card }]}>
+                
                 <View style={styles.modalHeader}>
-                  <TouchableOpacity onPress={() => setEditModalVisible(false)}><X size={24} color={theme.textSecondary} /></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                    <X size={24} color={theme.textSecondary} />
+                  </TouchableOpacity>
                   <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>עריכת שם</Text>
                 </View>
-                <TextInput style={[styles.input, { backgroundColor: isDarkMode ? '#2C2C2E' : '#F2F2F7', color: theme.textPrimary }]} value={newName} onChangeText={setNewName} textAlign="right" autoFocus />
+                
+                <TextInput 
+                  style={[styles.input, { backgroundColor: isDarkMode ? '#2C2C2E' : '#F2F2F7', color: theme.textPrimary }]} 
+                  value={newName} 
+                  onChangeText={setNewName} 
+                  textAlign="right" 
+                  autoFocus 
+                  placeholder="הקלד שם חדש..."
+                />
+                
                 <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.primary }]} onPress={handleSaveName}>
-                  {loading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>שמור</Text>}
+                  {loading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>שמור שינויים</Text>}
                 </TouchableOpacity>
+
               </KeyboardAvoidingView>
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-      {loading && !isEditModalVisible && <View style={styles.loadingOverlay}><ActivityIndicator size="large" color={theme.primary} /></View>}
+
+      {/* Loading Overlay כללי */}
+      {loading && !isEditModalVisible && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      )}
+
     </View>
   );
 }
@@ -377,24 +454,33 @@ const styles = StyleSheet.create({
   header: { paddingTop: 60, paddingBottom: 15, paddingHorizontal: 20, borderBottomWidth: 0.5 },
   headerTitle: { fontSize: 32, fontWeight: '700', textAlign: 'right' },
   scrollContent: { padding: 16, paddingBottom: 100 },
+  
+  // פרופיל
   profileCard: { flexDirection: 'row-reverse', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
   avatarContainer: { position: 'relative', marginLeft: 16 },
   avatarImage: { width: 64, height: 64, borderRadius: 32 },
   avatarPlaceholder: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 24, fontWeight: '600' },
-  editIconBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#007AFF', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'white' },
+  editIconBadge: { position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'white' },
   profileInfo: { flex: 1, alignItems: 'flex-end' },
   profileName: { fontSize: 20, fontWeight: '700', marginBottom: 2 },
   profileEmail: { fontSize: 14 },
   editLink: { fontSize: 13, marginTop: 4, fontWeight: '500' },
+
+  // סקציות
   sectionHeader: { fontSize: 13, fontWeight: '600', color: '#8E8E93', marginBottom: 8, marginRight: 12, textAlign: 'right' },
   sectionContainer: { backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', marginBottom: 24 },
+  
+  // פריט ברשימה
   itemContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 0.5 },
   itemRight: { flexDirection: 'row', alignItems: 'center' },
   itemLeft: { flexDirection: 'row', alignItems: 'center' },
   itemText: { fontSize: 16, marginRight: 12, fontWeight: '400' },
   iconBox: { width: 30, height: 30, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  
   version: { textAlign: 'center', fontSize: 12, marginTop: 10, opacity: 0.5 },
+
+  // מודל
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modalContent: { borderRadius: 20, padding: 24, width: '100%', maxWidth: 400, alignSelf: 'center' },
   modalHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
