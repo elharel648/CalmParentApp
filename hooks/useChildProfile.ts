@@ -54,6 +54,7 @@ export const useChildProfile = (): UseChildProfileReturn => {
                     name: fetchedProfile.name,
                     birthDate: fetchedProfile.birthDate,
                     ageMonths: Math.max(0, months),
+                    photoUrl: fetchedProfile.photoUrl || undefined,
                 });
             }
         } catch (e) {

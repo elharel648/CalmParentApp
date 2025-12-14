@@ -2,10 +2,16 @@ import { useState, useCallback } from 'react';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../services/firebaseConfig';
 import { getLastEvent, formatTimeFromTimestamp, getRecentHistory } from '../services/firebaseService';
-import { getAIPrediction } from '../services/geminiService';
 import { HomeDataState } from '../types/home';
 
+interface DailyStats {
+    feedCount: number;
+    sleepMinutes: number;
+    diaperCount: number;
+}
+
 interface UseHomeDataReturn extends HomeDataState {
+    dailyStats: DailyStats;
     toggleBabyStatus: () => void;
     generateInsight: () => Promise<void>;
     refresh: () => Promise<void>;
@@ -24,6 +30,11 @@ export const useHomeData = (
     const [babyStatus, setBabyStatus] = useState<'sleeping' | 'awake'>('awake');
     const [aiTip, setAiTip] = useState('אוסף נתונים לניתוח...');
     const [loadingAI, setLoadingAI] = useState(false);
+    const [dailyStats, setDailyStats] = useState<DailyStats>({
+        feedCount: 0,
+        sleepMinutes: 0,
+        diaperCount: 0,
+    });
 
     const user = auth.currentUser;
 
@@ -44,21 +55,52 @@ export const useHomeData = (
     }, [babyStatus, updateRemoteStatus]);
 
     const generateInsight = useCallback(async () => {
-        if (!user || !childId) return;
+        // Disabled for now
+        setAiTip('');
+        setLoadingAI(false);
+    }, []);
 
-        setLoadingAI(true);
-        try {
-            const history = await getRecentHistory(childId);
-            const profileData = { name: childName, ageMonths };
-            const prediction = await getAIPrediction(history, user.uid, profileData);
-            setAiTip(prediction.tip);
-        } catch (e) {
-            console.error('AI error:', e);
-            setAiTip('לא הצלחתי לנתח כרגע.');
-        } finally {
-            setLoadingAI(false);
-        }
-    }, [user, childId, childName, ageMonths]);
+    const calculateDailyStats = useCallback((events: any[]) => {
+        const now = new Date();
+        const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+        let feedCount = 0;
+        let sleepMinutes = 0;
+        let diaperCount = 0;
+
+        events.forEach(event => {
+            let eventDate: Date;
+            if (event.timestamp?.seconds) {
+                eventDate = new Date(event.timestamp.seconds * 1000);
+            } else if (event.timestamp) {
+                eventDate = new Date(event.timestamp);
+            } else {
+                return;
+            }
+
+            if (eventDate >= last24h) {
+                switch (event.type) {
+                    case 'food':
+                        feedCount++;
+                        break;
+                    case 'sleep':
+                        // Extract sleep duration from note if available
+                        if (event.note) {
+                            const match = event.note.match(/(\d+):(\d+)/);
+                            if (match) {
+                                sleepMinutes += parseInt(match[1]) * 60 + parseInt(match[2]);
+                            }
+                        }
+                        break;
+                    case 'diaper':
+                        diaperCount++;
+                        break;
+                }
+            }
+        });
+
+        return { feedCount, sleepMinutes, diaperCount };
+    }, []);
 
     const refresh = useCallback(async () => {
         if (!childId) return;
@@ -80,12 +122,15 @@ export const useHomeData = (
                 if (data.status) setBabyStatus(data.status);
             }
 
-            // Generate AI insight
-            await generateInsight();
+            // Calculate daily stats from history
+            const history = await getRecentHistory(childId);
+            const stats = calculateDailyStats(history);
+            setDailyStats(stats);
+
         } catch (e) {
             console.error('Home data refresh error:', e);
         }
-    }, [childId, generateInsight]);
+    }, [childId, calculateDailyStats]);
 
     return {
         lastFeedTime,
@@ -93,6 +138,7 @@ export const useHomeData = (
         babyStatus,
         aiTip,
         loadingAI,
+        dailyStats,
         toggleBabyStatus,
         generateInsight,
         refresh,

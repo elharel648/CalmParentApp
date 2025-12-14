@@ -1,6 +1,7 @@
-node_modules/\n.expo/\n.DS_Store\n*.log
-node_modules
-node_modules
-node_modules
-node_modules
 node_modules/
+.expo/
+.DS_Store
+*.log
+.env
+.env.local
+.env.production

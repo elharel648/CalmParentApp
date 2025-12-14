@@ -10,20 +10,18 @@ import { useMedications } from '../hooks/useMedications';
 import { useGuardian } from '../hooks/useGuardian';
 
 // Components
-import {
-    HeaderSection,
-    GuardianSelector,
-    QuickActions,
-    MedicationsTracker,
-    ShareStatusButton,
-    HealthCard,
-    SmartStatusCard,
-} from '../components/Home';
+import HeaderSection from '../components/Home/HeaderSection';
+import GuardianSelector from '../components/Home/GuardianSelector';
+import QuickActions from '../components/Home/QuickActions';
+import MedicationsTracker from '../components/Home/MedicationsTracker'; // Keep this if it's still used
+import ShareStatusButton from '../components/Home/ShareStatusButton';
+import HealthCard from '../components/Home/HealthCard';
 
 import DailyTimeline from '../components/DailyTimeline';
 import CalmModeModal from '../components/CalmModeModal';
 import TrackingModal from '../components/TrackingModal';
 import WhiteNoiseModal from '../components/WhiteNoiseModal';
+import SupplementsModal from '../components/Home/SupplementsModal'; // Added this import
 
 // Services
 import { auth } from '../services/firebaseConfig';
@@ -42,6 +40,7 @@ export default function HomeScreen({ navigation }: any) {
     const {
         lastFeedTime,
         lastSleepTime,
+        dailyStats,
         refresh: refreshHomeData,
     } = useHomeData(profile.id, profile.name, profile.ageMonths);
     const { meds, toggleMed, syncStatus, refresh: refreshMeds } = useMedications(profile.id);
@@ -51,6 +50,7 @@ export default function HomeScreen({ navigation }: any) {
     const [isNightMode, setIsNightMode] = useState(false);
     const [isCalmModeOpen, setIsCalmModeOpen] = useState(false);
     const [isWhiteNoiseOpen, setIsWhiteNoiseOpen] = useState(false);
+    const [isSupplementsOpen, setIsSupplementsOpen] = useState(false);
     const [trackingModalType, setTrackingModalType] = useState<TrackingType>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [timelineRefresh, setTimelineRefresh] = useState(0);
@@ -117,10 +117,14 @@ export default function HomeScreen({ navigation }: any) {
         }
     }, [user, profile.id, refreshHomeData]);
 
+    const shareMessage = useMemo(() =>
+        `עדכון מ-CalmParent:\n👶 ${profile.name}\n🍼 אכל/ה לאחרונה: ${lastFeedTime}\n😴 ישן/ה לאחרונה: ${lastSleepTime}`,
+        [profile.name, lastFeedTime, lastSleepTime]
+    );
+
     const shareStatus = useCallback(async () => {
-        const message = `עדכון מ-CalmParent:\n👶 ${profile.name}\n🍼 אכל/ה לאחרונה: ${lastFeedTime}\n😴 ישן/ה לאחרונה: ${lastSleepTime}`;
-        await Share.share({ message });
-    }, [profile.name, lastFeedTime, lastSleepTime]);
+        await Share.share({ message: shareMessage });
+    }, [shareMessage]);
 
     // --- Loading State ---
     if (profileLoading) {
@@ -146,16 +150,12 @@ export default function HomeScreen({ navigation }: any) {
                 <HeaderSection
                     greeting={greeting}
                     profile={profile}
-                    isNightMode={isNightMode}
-                    onNightModeToggle={() => setIsNightMode(!isNightMode)}
+                    onProfileUpdate={onRefresh}
                     dynamicStyles={dynamicStyles}
-                />
-
-                <SmartStatusCard
-                    babyName={profile.name}
-                    birthDate={profile.birthDate}
+                    dailyStats={dailyStats}
                     lastFeedTime={lastFeedTime}
                     lastSleepTime={lastSleepTime}
+                    meds={meds}
                 />
 
                 <GuardianSelector
@@ -175,26 +175,29 @@ export default function HomeScreen({ navigation }: any) {
                     onDiaperPress={() => setTrackingModalType('diaper')}
                     onWhiteNoisePress={() => setIsWhiteNoiseOpen(true)}
                     onSOSPress={() => setIsCalmModeOpen(true)}
+                    onSupplementsPress={() => setIsSupplementsOpen(true)}
+                    meds={meds}
                     dynamicStyles={dynamicStyles}
                 />
+
+
 
                 <HealthCard dynamicStyles={dynamicStyles} />
 
-                <MedicationsTracker
-                    meds={meds}
-                    onToggle={toggleMed}
-                    syncStatus={syncStatus}
-                    dynamicStyles={dynamicStyles}
-                />
-
-                <ShareStatusButton onShare={shareStatus} />
-
                 {!isNightMode && <DailyTimeline refreshTrigger={timelineRefresh} />}
+
+                <ShareStatusButton onShare={shareStatus} message={shareMessage} />
             </ScrollView>
 
             {/* Modals */}
             <CalmModeModal visible={isCalmModeOpen} onClose={() => setIsCalmModeOpen(false)} />
             <WhiteNoiseModal visible={isWhiteNoiseOpen} onClose={() => setIsWhiteNoiseOpen(false)} />
+            <SupplementsModal
+                visible={isSupplementsOpen}
+                onClose={() => setIsSupplementsOpen(false)}
+                meds={meds}
+                onToggle={toggleMed}
+            />
             <TrackingModal
                 visible={!!trackingModalType}
                 type={trackingModalType}

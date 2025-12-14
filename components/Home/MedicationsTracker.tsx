@@ -1,6 +1,7 @@
 import React, { memo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { Sun, Droplets, CheckCircle } from 'lucide-react-native';
+import { Sun, Droplets, Check } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { MedicationsState } from '../../types/home';
 
@@ -12,71 +13,74 @@ interface MedicationsTrackerProps {
 }
 
 /**
- * Daily medications tracker with sync status
+ * Beautiful circular medication tracker
  */
 const MedicationsTracker = memo<MedicationsTrackerProps>(({
     meds,
     onToggle,
-    syncStatus = 'synced',
-    dynamicStyles,
 }) => {
     const handleToggle = useCallback((type: 'vitaminD' | 'iron') => {
         if (Platform.OS !== 'web') {
-            Haptics.notificationAsync(
+            Haptics.impactAsync(
                 meds[type]
-                    ? Haptics.NotificationFeedbackType.Warning
-                    : Haptics.NotificationFeedbackType.Success
+                    ? Haptics.ImpactFeedbackStyle.Light
+                    : Haptics.ImpactFeedbackStyle.Medium
             );
         }
         onToggle(type);
     }, [meds, onToggle]);
 
     return (
-        <View style={styles.medsContainer}>
-            <View style={styles.headerRow}>
-                <Text style={[styles.sectionTitleSmall, { color: dynamicStyles.text }]}>
-                    מדד יומי (מתאפס בלילה)
-                </Text>
-                {syncStatus === 'syncing' && (
-                    <Text style={styles.syncIndicator}>מסנכרן...</Text>
-                )}
+        <View style={styles.container}>
+            <View style={styles.header}>
+                <Text style={styles.title}>💊 תוספי תזונה יומיים</Text>
             </View>
 
-            <View style={styles.medsGrid}>
+            <View style={styles.pillsRow}>
                 {/* Vitamin D */}
                 <TouchableOpacity
-                    style={[styles.medBtn, meds.vitaminD && styles.medBtnActive]}
+                    style={styles.pillContainer}
                     onPress={() => handleToggle('vitaminD')}
-                    accessibilityLabel={`ויטמין D ${meds.vitaminD ? 'ניתן' : 'לא ניתן'}`}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: meds.vitaminD }}
+                    activeOpacity={0.8}
                 >
-                    <Text style={[styles.medText, meds.vitaminD && styles.medTextActive]}>
+                    <View style={[styles.pillCircle, meds.vitaminD && styles.pillCircleActive]}>
+                        {meds.vitaminD ? (
+                            <LinearGradient
+                                colors={['#10B981', '#059669']}
+                                style={styles.gradient}
+                            >
+                                <Check size={24} color="#fff" />
+                            </LinearGradient>
+                        ) : (
+                            <Sun size={24} color="#F59E0B" />
+                        )}
+                    </View>
+                    <Text style={[styles.pillLabel, meds.vitaminD && styles.pillLabelActive]}>
                         ויטמין D
                     </Text>
-                    {meds.vitaminD ? (
-                        <CheckCircle size={20} color="#fff" />
-                    ) : (
-                        <Sun size={20} color="#F59E0B" />
-                    )}
                 </TouchableOpacity>
 
                 {/* Iron */}
                 <TouchableOpacity
-                    style={[styles.medBtn, meds.iron && styles.medBtnActive]}
+                    style={styles.pillContainer}
                     onPress={() => handleToggle('iron')}
-                    accessibilityLabel={`ברזל ${meds.iron ? 'ניתן' : 'לא ניתן'}`}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: meds.iron }}
+                    activeOpacity={0.8}
                 >
-                    <Text style={[styles.medText, meds.iron && styles.medTextActive]}>
+                    <View style={[styles.pillCircle, meds.iron && styles.pillCircleActive]}>
+                        {meds.iron ? (
+                            <LinearGradient
+                                colors={['#10B981', '#059669']}
+                                style={styles.gradient}
+                            >
+                                <Check size={24} color="#fff" />
+                            </LinearGradient>
+                        ) : (
+                            <Droplets size={24} color="#EF4444" />
+                        )}
+                    </View>
+                    <Text style={[styles.pillLabel, meds.iron && styles.pillLabelActive]}>
                         ברזל
                     </Text>
-                    {meds.iron ? (
-                        <CheckCircle size={20} color="#fff" />
-                    ) : (
-                        <Droplets size={20} color="#EF4444" />
-                    )}
                 </TouchableOpacity>
             </View>
         </View>
@@ -86,53 +90,63 @@ const MedicationsTracker = memo<MedicationsTrackerProps>(({
 MedicationsTracker.displayName = 'MedicationsTracker';
 
 const styles = StyleSheet.create({
-    medsContainer: {
-        marginBottom: 30,
+    container: {
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 2,
     },
-    headerRow: {
-        flexDirection: 'row-reverse',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 10,
+    header: {
+        marginBottom: 12,
     },
-    sectionTitleSmall: {
-        fontSize: 16,
+    title: {
+        fontSize: 14,
         fontWeight: '600',
         color: '#374151',
-        textAlign: 'right',
+        textAlign: 'center',
     },
-    syncIndicator: {
-        fontSize: 12,
-        color: '#9CA3AF',
-        fontStyle: 'italic',
+    pillsRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 32,
     },
-    medsGrid: {
-        flexDirection: 'row-reverse',
-        gap: 12,
+    pillContainer: {
+        alignItems: 'center',
     },
-    medBtn: {
-        flex: 1,
-        flexDirection: 'row-reverse',
+    pillCircle: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#F9FAFB',
+        borderWidth: 2,
+        borderColor: '#E5E7EB',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 16,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        backgroundColor: '#fff',
+        overflow: 'hidden',
     },
-    medBtnActive: {
-        backgroundColor: '#10B981',
+    pillCircleActive: {
         borderColor: '#10B981',
+        borderWidth: 0,
     },
-    medText: {
-        fontSize: 16,
+    gradient: {
+        width: 56,
+        height: 56,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    pillLabel: {
+        marginTop: 8,
+        fontSize: 13,
         fontWeight: '600',
-        marginRight: 8,
-        color: '#374151',
+        color: '#6B7280',
     },
-    medTextActive: {
-        color: '#fff',
+    pillLabelActive: {
+        color: '#10B981',
     },
 });
 

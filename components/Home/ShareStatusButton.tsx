@@ -1,82 +1,106 @@
 import React, { memo, useCallback, useState } from 'react';
-import { TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
-import { Share2, CheckCircle } from 'lucide-react-native';
+import { TouchableOpacity, Text, StyleSheet, Platform, Linking, Alert, View } from 'react-native';
+import { Share2, CheckCircle, MessageCircle } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
 interface ShareStatusButtonProps {
     onShare: () => Promise<void>;
+    message?: string;
 }
 
 /**
- * Share status button with success feedback
+ * Circular WhatsApp share button
  */
-const ShareStatusButton = memo<ShareStatusButtonProps>(({ onShare }) => {
+const ShareStatusButton = memo<ShareStatusButtonProps>(({ onShare, message }) => {
     const [showSuccess, setShowSuccess] = useState(false);
 
     const handlePress = useCallback(async () => {
         if (Platform.OS !== 'web') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
 
         try {
-            await onShare();
-            setShowSuccess(true);
+            // Try to open WhatsApp with the message
+            const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message || 'עדכון מ-CalmParent')}`;
+            const canOpen = await Linking.canOpenURL(whatsappUrl);
 
-            if (Platform.OS !== 'web') {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            if (canOpen) {
+                await Linking.openURL(whatsappUrl);
+                setShowSuccess(true);
+
+                if (Platform.OS !== 'web') {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+
+                setTimeout(() => setShowSuccess(false), 2000);
+            } else {
+                // Fallback to regular share
+                await onShare();
             }
-
-            setTimeout(() => setShowSuccess(false), 2000);
         } catch (e) {
-            // Silent fail
+            // Fallback to regular share
+            await onShare();
         }
-    }, [onShare]);
+    }, [onShare, message]);
 
     return (
-        <TouchableOpacity
-            style={[styles.handoffButton, showSuccess && styles.successButton]}
-            onPress={handlePress}
-            accessibilityLabel="שתף סטטוס משמרת לוואטסאפ"
-            accessibilityRole="button"
-        >
-            {showSuccess ? (
-                <>
-                    <CheckCircle size={20} color="#10B981" />
-                    <Text style={[styles.handoffText, { color: '#10B981' }]}>שותף בהצלחה!</Text>
-                </>
-            ) : (
-                <>
-                    <Share2 size={20} color="#4f46e5" />
-                    <Text style={styles.handoffText}>שתף סטטוס משמרת (וואטסאפ)</Text>
-                </>
-            )}
-        </TouchableOpacity>
+        <View style={styles.container}>
+            <TouchableOpacity
+                style={[styles.button, showSuccess && styles.successButton]}
+                onPress={handlePress}
+                activeOpacity={0.8}
+            >
+                <LinearGradient
+                    colors={showSuccess ? ['#10B981', '#059669'] : ['#25D366', '#128C7E']}
+                    style={styles.gradient}
+                >
+                    {showSuccess ? (
+                        <CheckCircle size={22} color="#fff" />
+                    ) : (
+                        <MessageCircle size={22} color="#fff" fill="#fff" />
+                    )}
+                </LinearGradient>
+            </TouchableOpacity>
+            <Text style={styles.label}>
+                {showSuccess ? 'נשלח!' : 'שתף בוואטסאפ'}
+            </Text>
+        </View>
     );
 });
 
 ShareStatusButton.displayName = 'ShareStatusButton';
 
 const styles = StyleSheet.create({
-    handoffButton: {
-        flexDirection: 'row-reverse',
-        backgroundColor: '#fff',
-        padding: 16,
-        borderRadius: 20,
+    container: {
         alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 30,
-        borderWidth: 2,
-        borderColor: '#e5e7eb',
+        marginVertical: 16,
+    },
+    button: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        shadowColor: '#25D366',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     successButton: {
-        borderColor: '#10B981',
-        backgroundColor: '#ECFDF5',
+        shadowColor: '#10B981',
     },
-    handoffText: {
-        color: '#4f46e5',
-        fontSize: 16,
-        fontWeight: '700',
-        marginRight: 10,
+    gradient: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    label: {
+        marginTop: 8,
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#6B7280',
     },
 });
 

@@ -127,7 +127,7 @@ export default function DailyTimeline({ refreshTrigger }: DailyTimelineProps) {
   if (events.length === 0) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>📋 סדר היום</Text>
+        <Text style={styles.title}>סדר היום</Text>
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>עוד אין תיעודים להיום 📝</Text>
           <Text style={styles.emptySubtext}>התחל לתעד עם הכפתורים למעלה</Text>
@@ -140,7 +140,7 @@ export default function DailyTimeline({ refreshTrigger }: DailyTimelineProps) {
     <View style={styles.container}>
       {/* Header with title */}
       <View style={styles.headerRow}>
-        <Text style={styles.title}>📋 סדר היום</Text>
+        <Text style={styles.title}>סדר היום</Text>
         <View style={styles.todayBadge}>
           <Text style={styles.todayText}>היום</Text>
         </View>
@@ -151,9 +151,12 @@ export default function DailyTimeline({ refreshTrigger }: DailyTimelineProps) {
         {Object.entries(stats).map(([type, count]) => {
           if (count === 0) return null;
           const config = TYPE_CONFIG[type as keyof typeof TYPE_CONFIG];
+          const Icon = config.icon;
           return (
             <View key={type} style={[styles.summaryChip, { backgroundColor: config.bg }]}>
-              <Text style={styles.summaryEmoji}>{config.emoji}</Text>
+              <LinearGradient colors={config.colors} style={styles.summaryIcon}>
+                <Icon size={14} color="#fff" />
+              </LinearGradient>
               <Text style={[styles.summaryCount, { color: config.colors[1] }]}>×{count}</Text>
             </View>
           );
@@ -248,10 +251,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    gap: 4,
+    gap: 6,
   },
-  summaryEmoji: {
-    fontSize: 16,
+  summaryIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   summaryCount: {
     fontSize: 14,

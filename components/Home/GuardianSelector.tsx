@@ -1,6 +1,7 @@
-import React, { memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { User, CheckCircle, Trophy } from 'lucide-react-native';
+import React, { memo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Platform } from 'react-native';
+import { User, ChevronDown, Check, X, Users } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { GuardianRole } from '../../types/home';
 
 interface GuardianSelectorProps {
@@ -13,7 +14,7 @@ interface GuardianSelectorProps {
 }
 
 /**
- * Guardian selector with chips and premium upsell
+ * Compact guardian selector - single line with modal
  */
 const GuardianSelector = memo<GuardianSelectorProps>(({
     currentGuardian,
@@ -23,101 +24,213 @@ const GuardianSelector = memo<GuardianSelectorProps>(({
     onUpgradePress,
     dynamicStyles,
 }) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const handleSelect = (role: GuardianRole) => {
+        if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        onSelect(role);
+        setIsModalOpen(false);
+    };
+
+    const openModal = () => {
+        if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        setIsModalOpen(true);
+    };
+
     return (
-        <View style={styles.guardianSection}>
-            <Text style={[styles.sectionTitleSmall, { color: dynamicStyles.text }]}>
-                מי אחראי כרגע?
-            </Text>
+        <>
+            {/* Compact Single Line */}
+            <TouchableOpacity
+                style={styles.container}
+                onPress={openModal}
+                activeOpacity={0.8}
+            >
+                <View style={styles.leftSide}>
+                    <View style={styles.iconCircle}>
+                        <User size={16} color="#6366F1" />
+                    </View>
+                    <Text style={styles.label}>
+                        <Text style={styles.guardianName}>{currentGuardian}</Text>
+                        <Text style={styles.suffix}> מטפל/ת עכשיו</Text>
+                    </Text>
+                </View>
+                <View style={styles.changeBtn}>
+                    <Text style={styles.changeBtnText}>החלף</Text>
+                    <ChevronDown size={14} color="#6366F1" />
+                </View>
+            </TouchableOpacity>
 
-            <View style={styles.guardianRow}>
-                {availableRoles.map((role) => {
-                    const isActive = currentGuardian === role;
-                    return (
-                        <TouchableOpacity
-                            key={role}
-                            style={[styles.guardianChip, isActive && styles.guardianActive]}
-                            onPress={() => onSelect(role)}
-                            accessibilityLabel={`${role}${isActive ? ', נבחר' : ''}`}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: isActive }}
-                        >
-                            <User size={16} color={isActive ? '#fff' : '#6B7280'} />
-                            <Text style={[styles.guardianText, isActive && styles.guardianTextActive]}>
-                                {role}
-                            </Text>
-                            {isActive && <CheckCircle size={14} color="#fff" style={{ marginLeft: 4 }} />}
-                        </TouchableOpacity>
-                    );
-                })}
+            {/* Selection Modal */}
+            <Modal
+                visible={isModalOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setIsModalOpen(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setIsModalOpen(false)}
+                >
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <TouchableOpacity onPress={() => setIsModalOpen(false)}>
+                                <X size={20} color="#9CA3AF" />
+                            </TouchableOpacity>
+                            <Text style={styles.modalTitle}>מי מטפל/ת עכשיו?</Text>
+                            <Users size={20} color="#6366F1" />
+                        </View>
 
-                {!isPremium && (
-                    <TouchableOpacity
-                        style={[styles.guardianChip, styles.premiumPlaceholder]}
-                        onPress={onUpgradePress}
-                        accessibilityLabel="הוסף אחראי נוסף עם פרימיום"
-                        accessibilityRole="button"
-                    >
-                        <Trophy size={14} color="#4f46e5" />
-                        <Text style={styles.premiumPlaceholderText}>הוסף</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
-        </View>
+                        {availableRoles.map((role) => {
+                            const isActive = currentGuardian === role;
+                            return (
+                                <TouchableOpacity
+                                    key={role}
+                                    style={[styles.roleOption, isActive && styles.roleOptionActive]}
+                                    onPress={() => handleSelect(role)}
+                                >
+                                    <Text style={[styles.roleText, isActive && styles.roleTextActive]}>
+                                        {role}
+                                    </Text>
+                                    {isActive && <Check size={18} color="#6366F1" />}
+                                </TouchableOpacity>
+                            );
+                        })}
+
+                        {!isPremium && (
+                            <TouchableOpacity
+                                style={styles.premiumOption}
+                                onPress={() => {
+                                    setIsModalOpen(false);
+                                    onUpgradePress();
+                                }}
+                            >
+                                <Text style={styles.premiumText}>➕ הוסף עוד (פרימיום)</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+        </>
     );
 });
 
 GuardianSelector.displayName = 'GuardianSelector';
 
 const styles = StyleSheet.create({
-    guardianSection: {
-        marginBottom: 24,
-    },
-    sectionTitleSmall: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 10,
-        textAlign: 'right',
-    },
-    guardianRow: {
-        flexDirection: 'row-reverse',
-        flexWrap: 'wrap',
-        gap: 10,
-    },
-    guardianChip: {
+    container: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
+        justifyContent: 'space-between',
         backgroundColor: '#fff',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 25,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        gap: 6,
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 2,
     },
-    guardianActive: {
-        backgroundColor: '#4f46e5',
-        borderColor: '#4f46e5',
+    leftSide: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 10,
     },
-    guardianText: {
+    iconCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#E0E7FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    label: {
         fontSize: 14,
-        color: '#374151',
-        fontWeight: '500',
     },
-    guardianTextActive: {
-        color: '#fff',
-        fontWeight: 'bold',
-    },
-    premiumPlaceholder: {
-        backgroundColor: '#F3E8FF',
-        borderColor: '#C4B5FD',
-        paddingHorizontal: 12,
-    },
-    premiumPlaceholderText: {
-        color: '#5B21B6',
+    guardianName: {
         fontWeight: '700',
-        fontSize: 12,
-        marginRight: 2,
+        color: '#1F2937',
+    },
+    suffix: {
+        color: '#6B7280',
+    },
+    changeBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: '#F5F3FF',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    changeBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#6366F1',
+    },
+
+    // Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        padding: 20,
+        width: '80%',
+        maxWidth: 300,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+    modalTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#1F2937',
+    },
+    roleOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 14,
+        borderRadius: 12,
+        backgroundColor: '#F9FAFB',
+        marginBottom: 8,
+    },
+    roleOptionActive: {
+        backgroundColor: '#E0E7FF',
+    },
+    roleText: {
+        fontSize: 15,
+        fontWeight: '500',
+        color: '#374151',
+    },
+    roleTextActive: {
+        color: '#6366F1',
+        fontWeight: '700',
+    },
+    premiumOption: {
+        padding: 14,
+        borderRadius: 12,
+        backgroundColor: '#FEF3C7',
+        marginTop: 4,
+    },
+    premiumText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#B45309',
+        textAlign: 'center',
     },
 });
 
