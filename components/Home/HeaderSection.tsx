@@ -34,7 +34,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
                     {greeting},
                 </Text>
                 <Text style={[styles.parentName, { color: dynamicStyles.textSub }]}>
-                    {profile.name} {profile.ageMonths > 0 ? `בן/בת ${profile.ageMonths} חודשים` : 'הבייבי החדש'}
+                    {profile.name} 👶
                 </Text>
             </View>
 

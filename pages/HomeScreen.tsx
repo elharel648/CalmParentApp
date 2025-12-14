@@ -5,7 +5,6 @@ import { useFocusEffect } from '@react-navigation/native';
 
 // Hooks
 import { useChildProfile } from '../hooks/useChildProfile';
-import { useWeather } from '../hooks/useWeather';
 import { useHomeData } from '../hooks/useHomeData';
 import { useMedications } from '../hooks/useMedications';
 import { useGuardian } from '../hooks/useGuardian';
@@ -13,13 +12,12 @@ import { useGuardian } from '../hooks/useGuardian';
 // Components
 import {
     HeaderSection,
-    StatusBadge,
-    WeatherCard,
     GuardianSelector,
     QuickActions,
     MedicationsTracker,
     ShareStatusButton,
     HealthCard,
+    SmartStatusCard,
 } from '../components/Home';
 
 import DailyTimeline from '../components/DailyTimeline';
@@ -41,12 +39,9 @@ import { TrackingType, DynamicStyles } from '../types/home';
 export default function HomeScreen({ navigation }: any) {
     // --- Custom Hooks ---
     const { profile, greeting, loading: profileLoading } = useChildProfile();
-    const { weather, refresh: refreshWeather } = useWeather();
     const {
         lastFeedTime,
         lastSleepTime,
-        babyStatus,
-        toggleBabyStatus,
         refresh: refreshHomeData,
     } = useHomeData(profile.id, profile.name, profile.ageMonths);
     const { meds, toggleMed, syncStatus, refresh: refreshMeds } = useMedications(profile.id);
@@ -78,10 +73,9 @@ export default function HomeScreen({ navigation }: any) {
         await Promise.all([
             refreshHomeData(),
             refreshMeds(),
-            refreshWeather(),
         ]);
         setRefreshing(false);
-    }, [refreshHomeData, refreshMeds, refreshWeather]);
+    }, [refreshHomeData, refreshMeds]);
 
     // --- Focus Effect ---
     useFocusEffect(
@@ -116,22 +110,17 @@ export default function HomeScreen({ navigation }: any) {
             console.log('✅ Saved successfully!');
             Alert.alert('מעולה!', 'התיעוד נשמר בהצלחה ✅');
 
-            if (data.type === 'sleep' && data.subType === 'woke_up') {
-                toggleBabyStatus();
-            }
-
             refreshHomeData();
             setTimelineRefresh(prev => prev + 1); // Trigger timeline refresh
         } catch {
             Alert.alert('שגיאה בשמירה');
         }
-    }, [user, profile.id, toggleBabyStatus, refreshHomeData]);
+    }, [user, profile.id, refreshHomeData]);
 
     const shareStatus = useCallback(async () => {
-        const statusText = babyStatus === 'sleeping' ? 'ישנה 😴' : 'ערה 😃';
-        const message = `עדכון מ-CalmParent:\n👶 ${profile.name} כרגע ${statusText}\n🌡️ בחוץ: ${weather.temp}°\n🍼 אכלה לאחרונה: ${lastFeedTime}`;
+        const message = `עדכון מ-CalmParent:\n👶 ${profile.name}\n🍼 אכל/ה לאחרונה: ${lastFeedTime}\n😴 ישן/ה לאחרונה: ${lastSleepTime}`;
         await Share.share({ message });
-    }, [babyStatus, profile.name, weather.temp, lastFeedTime]);
+    }, [profile.name, lastFeedTime, lastSleepTime]);
 
     // --- Loading State ---
     if (profileLoading) {
@@ -162,13 +151,12 @@ export default function HomeScreen({ navigation }: any) {
                     dynamicStyles={dynamicStyles}
                 />
 
-                <StatusBadge
+                <SmartStatusCard
                     babyName={profile.name}
-                    status={babyStatus}
-                    onToggle={toggleBabyStatus}
+                    birthDate={profile.birthDate}
+                    lastFeedTime={lastFeedTime}
+                    lastSleepTime={lastSleepTime}
                 />
-
-                {!isNightMode && <WeatherCard weather={weather} />}
 
                 <GuardianSelector
                     currentGuardian={currentGuardian}

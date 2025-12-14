@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Animated } from 'react-native';
-import { Moon, Utensils, Layers, Clock, AlertCircle, RefreshCw } from 'lucide-react-native';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Animated, TouchableOpacity, Platform } from 'react-native';
+import { Moon, Utensils, Layers, Clock, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
 import { auth } from '../services/firebaseConfig';
 import { getRecentHistory, getChildProfile } from '../services/firebaseService';
 
@@ -16,63 +17,45 @@ interface TimelineEvent {
 }
 
 interface DailyTimelineProps {
-  refreshTrigger?: number; // Will change when new data is saved
+  refreshTrigger?: number;
 }
 
-const getIcon = (type: string) => {
-  switch (type) {
-    case 'food': return <Utensils size={18} color="#fff" />;
-    case 'sleep': return <Moon size={18} color="#fff" />;
-    case 'diaper': return <Layers size={18} color="#fff" />;
-    default: return <Clock size={18} color="#fff" />;
-  }
-};
-
-const getGradient = (type: string): [string, string] => {
-  switch (type) {
-    case 'food': return ['#F59E0B', '#D97706'];
-    case 'sleep': return ['#818CF8', '#6366F1'];
-    case 'diaper': return ['#34D399', '#10B981'];
-    default: return ['#9CA3AF', '#6B7280'];
-  }
-};
+// Type configurations
+const TYPE_CONFIG = {
+  food: { icon: Utensils, colors: ['#F59E0B', '#D97706'], bg: '#FEF3C7', emoji: '🍼' },
+  sleep: { icon: Moon, colors: ['#818CF8', '#6366F1'], bg: '#E0E7FF', emoji: '😴' },
+  diaper: { icon: Layers, colors: ['#34D399', '#10B981'], bg: '#D1FAE5', emoji: '🧷' },
+} as const;
 
 const getLabel = (event: TimelineEvent): string => {
   switch (event.type) {
     case 'food':
-      if (event.subType === 'bottle') return `בקבוק ${event.amount || ''}`;
+      if (event.subType === 'bottle') return `בקבוק ${event.amount || ''}`.trim();
       if (event.subType === 'breast') return 'הנקה';
-      return 'אכילה';
-    case 'sleep': return 'שינה';
+      if (event.subType === 'pumping') return 'שאיבה';
+      if (event.subType === 'solids') return 'מזון מוצק';
+      return 'אוכל';
+    case 'sleep':
+      return event.note ? `שינה` : 'שינה';
     case 'diaper':
-      if (event.subType === 'pee') return 'חיתול - פיפי';
-      if (event.subType === 'poop') return 'חיתול - קקי';
-      if (event.subType === 'both') return 'חיתול - גם וגם';
-      return 'החלפת חיתול';
+      if (event.subType === 'pee') return 'פיפי 💧';
+      if (event.subType === 'poop') return 'קקי 💩';
+      if (event.subType === 'both') return 'גם וגם';
+      return 'חיתול';
     default: return 'אירוע';
   }
 };
 
 const formatTime = (date: Date): string => {
-  return date.toLocaleTimeString('he-IL', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
+  return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
 const formatRelativeTime = (date: Date): string => {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
+  const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
   if (diffMins < 1) return 'עכשיו';
-  if (diffMins < 60) return `לפני ${diffMins} דקות`;
-
+  if (diffMins < 60) return `לפני ${diffMins} דק׳`;
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `לפני ${diffHours} שעות`;
-
-  return formatTime(date);
+  return `לפני ${diffHours} שעות`;
 };
 
 export default function DailyTimeline({ refreshTrigger }: DailyTimelineProps) {
@@ -80,104 +63,74 @@ export default function DailyTimeline({ refreshTrigger }: DailyTimelineProps) {
   const [loading, setLoading] = useState(true);
   const [childName, setChildName] = useState('הבייבי');
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const user = auth.currentUser;
 
   const fetchEvents = useCallback(async () => {
-    console.log('📅 DailyTimeline: fetchEvents called');
-    console.log('📅 DailyTimeline: user =', user?.uid);
-
-    if (!user) {
-      console.log('📅 DailyTimeline: No user, stopping');
-      setLoading(false);
-      return;
-    }
+    if (!user) { setLoading(false); return; }
 
     try {
       const profile = await getChildProfile(user.uid);
-      console.log('📅 DailyTimeline: profile =', profile);
-
       if (profile) {
-        setChildName(profile.name);
-        console.log('📅 DailyTimeline: Fetching events for childId =', profile.childId);
-
-        const history = await getRecentHistory(profile.childId);
-        console.log('📅 DailyTimeline: Got history, count =', history.length);
-        console.log('📅 DailyTimeline: history =', JSON.stringify(history.slice(0, 3)));
-
-        // Filter today's events only
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        console.log('📅 DailyTimeline: Filtering for today =', today.toISOString());
-
-        const todayEvents = history
-          .filter((e: any) => {
-            const eventDate = new Date(e.timestamp);
-            const isToday = eventDate >= today;
-            console.log('📅 Event:', e.type, eventDate.toISOString(), 'isToday:', isToday);
-            return isToday;
-          })
-          .slice(0, 10); // Max 10 events
-
-        console.log('📅 DailyTimeline: todayEvents count =', todayEvents.length);
-        setEvents(todayEvents as TimelineEvent[]);
-
-        // Animate in
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }).start();
-      } else {
-        console.log('📅 DailyTimeline: No profile found!');
+        setChildName(profile.name || 'הבייבי');
+        const childId = profile.childId || profile.id;
+        if (childId) {
+          const history = await getRecentHistory(childId);
+          // Filter today's events
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const todayEvents = (history || [])
+            .filter((e: any) => new Date(e.timestamp).getTime() >= today.getTime())
+            .slice(0, 20);
+          setEvents(todayEvents);
+        }
       }
-    } catch (e) {
-      console.error('Timeline fetch error:', e);
+    } catch (error) {
+      console.error('DailyTimeline error:', error);
     } finally {
       setLoading(false);
+      Animated.spring(fadeAnim, { toValue: 1, useNativeDriver: true }).start();
     }
   }, [user, fadeAnim]);
 
-  // Refresh when screen is focused (includes pull-to-refresh from parent)
-  useFocusEffect(
-    useCallback(() => {
-      fetchEvents();
-    }, [fetchEvents])
-  );
+  useFocusEffect(useCallback(() => { fetchEvents(); }, [fetchEvents]));
+  useEffect(() => { if (refreshTrigger) fetchEvents(); }, [refreshTrigger, fetchEvents]);
 
-  // Also refresh when refreshTrigger changes (after saving new event)
-  useEffect(() => {
-    if (refreshTrigger !== undefined && refreshTrigger > 0) {
-      fetchEvents();
-    }
-  }, [refreshTrigger, fetchEvents]);
+  // Calculate summary stats
+  const stats = useMemo(() => {
+    const counts = { food: 0, sleep: 0, diaper: 0 };
+    events.forEach(e => { if (counts[e.type] !== undefined) counts[e.type]++; });
+    return counts;
+  }, [events]);
 
-  // Loading state
+  const toggleExpand = () => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsExpanded(!isExpanded);
+  };
+
+  // Show only 3 events when collapsed
+  const visibleEvents = isExpanded ? events : events.slice(0, 3);
+  const hasMore = events.length > 3;
+
   if (loading) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>סדר היום של {childName}</Text>
+        <Text style={styles.title}>📋 סדר היום</Text>
         <View style={styles.loadingContainer}>
           <ActivityIndicator color="#6366F1" size="small" />
-          <Text style={styles.loadingText}>טוען אירועים...</Text>
         </View>
       </View>
     );
   }
 
-  // Empty state
   if (events.length === 0) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>סדר היום של {childName}</Text>
+        <Text style={styles.title}>📋 סדר היום</Text>
         <View style={styles.emptyState}>
-          <View style={styles.emptyIconContainer}>
-            <AlertCircle size={32} color="#9CA3AF" />
-          </View>
-          <Text style={styles.emptyTitle}>עוד לא תיעדת היום 📝</Text>
-          <Text style={styles.emptySubtitle}>
-            השתמש בכפתורי התיעוד המהיר למעלה{'\n'}כדי להתחיל לעקוב אחרי {childName}
-          </Text>
+          <Text style={styles.emptyText}>עוד אין תיעודים להיום 📝</Text>
+          <Text style={styles.emptySubtext}>התחל לתעד עם הכפתורים למעלה</Text>
         </View>
       </View>
     );
@@ -185,57 +138,71 @@ export default function DailyTimeline({ refreshTrigger }: DailyTimelineProps) {
 
   return (
     <View style={styles.container}>
+      {/* Header with title */}
       <View style={styles.headerRow}>
-        <Text style={styles.title}>סדר היום של {childName}</Text>
+        <Text style={styles.title}>📋 סדר היום</Text>
         <View style={styles.todayBadge}>
           <Text style={styles.todayText}>היום</Text>
         </View>
       </View>
 
-      <Animated.View style={[styles.timelineContainer, { opacity: fadeAnim }]}>
-        {/* Vertical line */}
-        <View style={styles.verticalLine} />
-
-        {events.map((event, index) => (
-          <View
-            key={event.id}
-            style={[
-              styles.eventRow,
-              index === 0 && styles.firstEventRow,
-            ]}
-          >
-            {/* Time */}
-            <View style={styles.timeContainer}>
-              <Text style={styles.timeText}>{formatTime(event.timestamp)}</Text>
-              {index === 0 && (
-                <Text style={styles.relativeTime}>
-                  {formatRelativeTime(event.timestamp)}
-                </Text>
-              )}
+      {/* Summary Stats Row */}
+      <View style={styles.summaryRow}>
+        {Object.entries(stats).map(([type, count]) => {
+          if (count === 0) return null;
+          const config = TYPE_CONFIG[type as keyof typeof TYPE_CONFIG];
+          return (
+            <View key={type} style={[styles.summaryChip, { backgroundColor: config.bg }]}>
+              <Text style={styles.summaryEmoji}>{config.emoji}</Text>
+              <Text style={[styles.summaryCount, { color: config.colors[1] }]}>×{count}</Text>
             </View>
+          );
+        })}
+      </View>
 
-            {/* Icon bubble with gradient */}
-            <LinearGradient
-              colors={getGradient(event.type)}
-              style={styles.iconBubble}
-            >
-              {getIcon(event.type)}
-            </LinearGradient>
+      {/* Events List */}
+      <Animated.View style={{ opacity: fadeAnim }}>
+        {visibleEvents.map((event, index) => {
+          const config = TYPE_CONFIG[event.type];
+          const Icon = config.icon;
 
-            {/* Event card */}
-            <View style={[
-              styles.card,
-              index === 0 && styles.firstCard,
-            ]}>
-              <Text style={styles.cardTitle}>{getLabel(event)}</Text>
-              {event.note && (
-                <Text style={styles.cardDetail} numberOfLines={1}>
-                  {event.note}
-                </Text>
-              )}
+          return (
+            <View key={event.id} style={[styles.eventCard, index === 0 && styles.firstCard]}>
+              <LinearGradient colors={config.colors} style={styles.iconCircle}>
+                <Icon size={16} color="#fff" />
+              </LinearGradient>
+
+              <View style={styles.eventContent}>
+                <Text style={styles.eventLabel}>{getLabel(event)}</Text>
+                {event.note && <Text style={styles.eventNote} numberOfLines={1}>{event.note}</Text>}
+              </View>
+
+              <View style={styles.timeContainer}>
+                <Text style={styles.timeText}>{formatTime(event.timestamp)}</Text>
+                {index === 0 && (
+                  <Text style={styles.relativeTime}>{formatRelativeTime(event.timestamp)}</Text>
+                )}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
+
+        {/* Show More/Less Button */}
+        {hasMore && (
+          <TouchableOpacity style={styles.expandBtn} onPress={toggleExpand} activeOpacity={0.7}>
+            {isExpanded ? (
+              <>
+                <ChevronUp size={18} color="#6366F1" />
+                <Text style={styles.expandText}>הסתר</Text>
+              </>
+            ) : (
+              <>
+                <ChevronDown size={18} color="#6366F1" />
+                <Text style={styles.expandText}>הצג עוד {events.length - 3} אירועים</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </Animated.View>
     </View>
   );
@@ -250,13 +217,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   title: {
     fontSize: 18,
     fontWeight: '800',
     color: '#111827',
-    textAlign: 'right',
   },
   todayBadge: {
     backgroundColor: '#EEF2FF',
@@ -270,129 +236,119 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Loading
-  loadingContainer: {
+  // Summary stats
+  summaryRow: {
     flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 30,
-    gap: 10,
-  },
-  loadingText: {
-    color: '#9CA3AF',
-    fontSize: 14,
-  },
-
-  // Empty state
-  emptyState: {
-    alignItems: 'center',
-    padding: 30,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#F3F4F6',
-    borderStyle: 'dashed',
-  },
-  emptyIconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#374151',
-    marginBottom: 6,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-
-  // Timeline
-  timelineContainer: {
-    position: 'relative',
-    paddingRight: 20,
-  },
-  verticalLine: {
-    position: 'absolute',
-    right: 66,
-    top: 20,
-    bottom: 20,
-    width: 2,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 1,
-  },
-  eventRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
+    gap: 8,
     marginBottom: 16,
   },
-  firstEventRow: {
-    marginBottom: 20,
+  summaryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 4,
   },
-  timeContainer: {
-    width: 55,
-    alignItems: 'flex-start',
-    marginLeft: 12,
+  summaryEmoji: {
+    fontSize: 16,
   },
-  timeText: {
-    color: '#374151',
-    fontSize: 13,
+  summaryCount: {
+    fontSize: 14,
     fontWeight: '700',
   },
-  relativeTime: {
-    color: '#10B981',
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  iconBubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
+
+  // Event cards
+  eventCard: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  card: {
-    flex: 1,
-    marginRight: 12,
     backgroundColor: '#fff',
+    borderRadius: 16,
     padding: 14,
-    borderRadius: 14,
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 2,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
   },
   firstCard: {
+    borderWidth: 2,
     borderColor: '#E0E7FF',
-    backgroundColor: '#FAFBFF',
   },
-  cardTitle: {
-    fontWeight: '700',
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventContent: {
+    flex: 1,
+    marginRight: 12,
+    alignItems: 'flex-end',
+  },
+  eventLabel: {
+    fontSize: 15,
+    fontWeight: '600',
     color: '#1F2937',
-    fontSize: 14,
-    textAlign: 'right',
   },
-  cardDetail: {
-    color: '#6B7280',
+  eventNote: {
     fontSize: 12,
-    textAlign: 'right',
-    marginTop: 3,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  timeContainer: {
+    alignItems: 'flex-start',
+  },
+  timeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  relativeTime: {
+    fontSize: 11,
+    color: '#6366F1',
+    marginTop: 2,
+  },
+
+  // Expand button
+  expandBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    backgroundColor: '#F5F3FF',
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  expandText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6366F1',
+  },
+
+  // Empty & Loading
+  loadingContainer: {
+    padding: 30,
+    alignItems: 'center',
+  },
+  emptyState: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginTop: 4,
+    textAlign: 'center',
   },
 });

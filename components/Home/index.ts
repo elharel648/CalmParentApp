@@ -10,3 +10,4 @@ export { default as QuickActions } from './QuickActions';
 export { default as MedicationsTracker } from './MedicationsTracker';
 export { default as ShareStatusButton } from './ShareStatusButton';
 export { default as HealthCard } from './HealthCard';
+export { default as SmartStatusCard } from './SmartStatusCard';
