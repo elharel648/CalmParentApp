@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { auth } from '../services/firebaseConfig';
 import { getChildProfile } from '../services/firebaseService';
 import { ChildProfile, DEFAULT_CHILD_PROFILE } from '../types/home';
@@ -13,6 +14,7 @@ interface UseChildProfileReturn {
 
 /**
  * Custom hook for managing child profile data
+ * Uses useFocusEffect to refresh data when screen comes into focus
  */
 export const useChildProfile = (): UseChildProfileReturn => {
     const [profile, setProfile] = useState<ChildProfile>(DEFAULT_CHILD_PROFILE);
@@ -24,9 +26,9 @@ export const useChildProfile = (): UseChildProfileReturn => {
 
     const calculateGreeting = useCallback(() => {
         const hour = new Date().getHours();
-        if (hour >= 5 && hour < 12) return 'בוקר טוב ☀️';
-        if (hour >= 12 && hour < 18) return 'צהריים טובים 🌤️';
-        return 'ערב טוב 🌙';
+        if (hour >= 5 && hour < 12) return 'בוקר טוב';
+        if (hour >= 12 && hour < 18) return 'צהריים טובים';
+        return 'ערב טוב';
     }, []);
 
     const fetchProfile = useCallback(async () => {
@@ -65,9 +67,13 @@ export const useChildProfile = (): UseChildProfileReturn => {
         }
     }, [user, calculateGreeting]);
 
-    useEffect(() => {
-        fetchProfile();
-    }, [fetchProfile]);
+    // Refresh profile data every time the screen comes into focus
+    // This ensures instant updates when returning from ProfileScreen
+    useFocusEffect(
+        useCallback(() => {
+            fetchProfile();
+        }, [fetchProfile])
+    );
 
     return {
         profile,

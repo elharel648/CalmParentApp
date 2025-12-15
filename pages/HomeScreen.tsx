@@ -156,6 +156,7 @@ export default function HomeScreen({ navigation }: any) {
                     lastFeedTime={lastFeedTime}
                     lastSleepTime={lastSleepTime}
                     meds={meds}
+                    navigation={navigation}
                 />
 
                 <GuardianSelector

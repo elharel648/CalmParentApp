@@ -1,8 +1,8 @@
 import React, { memo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { Utensils, Moon, Baby, ChevronDown, ChevronUp, Milk, Cookie } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert } from 'react-native';
+import { Utensils, Moon, Baby, ChevronDown, ChevronUp, X } from 'lucide-react-native';
 import { useChildProfile } from '../hooks/useChildProfile';
-import { getRecentHistory } from '../services/firebaseService';
+import { getRecentHistory, deleteEvent } from '../services/firebaseService';
 
 interface TimelineEvent {
   id: string;
@@ -75,6 +75,29 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
     }
   };
 
+  const handleDelete = async (eventId: string) => {
+    Alert.alert(
+      'מחיקת תיעוד',
+      'האם אתה בטוח שברצונך למחוק תיעוד זה?',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteEvent(eventId);
+              // Remove from local state
+              setEvents(prevEvents => prevEvents.filter(e => e.id !== eventId));
+            } catch (error) {
+              Alert.alert('שגיאה', 'לא ניתן למחוק את התיעוד');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const getTimeAgo = (date: Date) => {
     const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
     if (seconds < 60) return 'עכשיו';
@@ -100,8 +123,8 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
     } else if (event.type === 'sleep') {
       return event.note || 'שינה';
     } else if (event.type === 'diaper') {
-      if (event.subType === 'pee') return 'פיפי';
-      if (event.subType === 'poop') return 'קקי';
+      if (event.subType === 'pee') return 'שתן';
+      if (event.subType === 'poop') return 'יציאה';
       if (event.subType === 'both') return 'שניהם';
       return 'החלפת חיתול';
     }
@@ -206,6 +229,15 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
 
               {/* Right side: Content */}
               <View style={styles.eventCard}>
+                {/* Delete button */}
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => handleDelete(event.id)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <X size={14} color="#9CA3AF" strokeWidth={2} />
+                </TouchableOpacity>
+
                 <View style={styles.cardContent}>
                   <View style={styles.eventHeader}>
                     <Text style={styles.eventTitle}>{details}</Text>
@@ -362,6 +394,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F3F4F6',
     overflow: 'hidden',
+    position: 'relative',
+  },
+  deleteBtn: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 10,
+    padding: 4,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 6,
   },
   cardContent: {
     padding: 12,

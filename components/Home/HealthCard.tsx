@@ -7,7 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import Slider from '@react-native-community/slider';
 import { auth, db } from '../../services/firebaseConfig';
-import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { VACCINE_SCHEDULE, CustomVaccine } from '../../types/profile';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -90,10 +90,14 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
         if (!user) return;
 
         try {
-            const babyDoc = await getDoc(doc(db, 'babies', user.uid));
-            if (babyDoc.exists()) {
+            // Query for baby by parentId (not direct doc ID)
+            const q = query(collection(db, 'babies'), where('parentId', '==', user.uid), limit(1));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                const babyDoc = querySnapshot.docs[0];
                 const data = babyDoc.data();
-                setBabyId(user.uid);
+                setBabyId(babyDoc.id); // Use actual baby doc ID
                 setVaccines(data.vaccines || {});
                 setCustomVaccines(data.customVaccines || []);
             }
@@ -256,23 +260,41 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
     };
 
     const saveEntry = async (type: string, data: any) => {
-        const user = auth.currentUser;
-        if (!user) return;
-
-        try {
-            const entry = { ...data, timestamp: new Date().toISOString(), type };
-            await updateDoc(doc(db, 'babies', user.uid), { healthLog: arrayUnion(entry) });
-
-            if (Platform.OS !== 'web') {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (!babyId) {
+            // Fetch babyId if not already loaded
+            const user = auth.currentUser;
+            if (!user) return;
+            try {
+                const q = query(collection(db, 'babies'), where('parentId', '==', user.uid), limit(1));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                    const docId = querySnapshot.docs[0].id;
+                    setBabyId(docId);
+                    const entry = { ...data, timestamp: new Date().toISOString(), type };
+                    await updateDoc(doc(db, 'babies', docId), { healthLog: arrayUnion(entry) });
+                }
+            } catch (error) {
+                console.error('Error saving entry:', error);
+                Alert.alert('שגיאה', 'לא ניתן לשמור');
+                return;
             }
-
-            Alert.alert('נשמר! ✅', 'הנתונים נשמרו בהצלחה');
-            goBack();
-        } catch (error) {
-            console.error('Error saving entry:', error);
-            Alert.alert('שגיאה', 'לא ניתן לשמור');
+        } else {
+            try {
+                const entry = { ...data, timestamp: new Date().toISOString(), type };
+                await updateDoc(doc(db, 'babies', babyId), { healthLog: arrayUnion(entry) });
+            } catch (error) {
+                console.error('Error saving entry:', error);
+                Alert.alert('שגיאה', 'לא ניתן לשמור');
+                return;
+            }
         }
+
+        if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+
+        Alert.alert('נשמר! ✅', 'הנתונים נשמרו בהצלחה');
+        goBack();
     };
 
     // Get temperature color based on value
@@ -393,12 +415,12 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
                                 onPress={() => toggleVaccine(vaccine.key)}
                                 activeOpacity={0.7}
                             >
-                                <Text style={[styles.vaccineName, isChecked && styles.vaccineNameDone]}>
-                                    {vaccine.name}
-                                </Text>
                                 <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
                                     {isChecked && <Check size={14} color="#fff" />}
                                 </View>
+                                <Text style={[styles.vaccineName, isChecked && styles.vaccineNameDone]}>
+                                    {vaccine.name}
+                                </Text>
                             </TouchableOpacity>
                         );
                     })}
@@ -659,12 +681,12 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
 
     const getScreenTitle = () => {
         switch (currentScreen) {
-            case 'vaccines': return '💉 פנקס חיסונים';
-            case 'doctor': return '🩺 ביקור רופא';
-            case 'illness': return '❤️ מחלות';
-            case 'temperature': return '🌡️ טמפרטורה';
-            case 'medications': return '💊 תרופות';
-            default: return '🏥 בריאות';
+            case 'vaccines': return 'פנקס חיסונים';
+            case 'doctor': return 'ביקור רופא';
+            case 'illness': return 'מחלות';
+            case 'temperature': return 'טמפרטורה';
+            case 'medications': return 'תרופות';
+            default: return 'בריאות';
         }
     };
 

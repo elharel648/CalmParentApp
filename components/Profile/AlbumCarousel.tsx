@@ -9,88 +9,75 @@ interface AlbumCarouselProps {
 
 const AlbumCarousel = memo(({ album, onMonthPress }: AlbumCarouselProps) => {
     return (
-        <View style={styles.container}>
-            <Text style={styles.sectionHeader}>רגעים קסומים 📸</Text>
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-            >
-                {Array.from({ length: 12 }).map((_, i) => {
-                    const month = i + 1;
-                    const img = album?.[month];
+        <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+        >
+            {Array.from({ length: 12 }).map((_, i) => {
+                const month = i + 1;
+                const img = album?.[month];
+                const hasImage = !!img;
 
-                    return (
-                        <View key={month} style={styles.monthContainer}>
-                            <TouchableOpacity
-                                style={styles.storyCircle}
-                                onPress={() => onMonthPress(month)}
-                                accessibilityLabel={`חודש ${month}`}
-                            >
-                                {img ? (
-                                    <Image source={{ uri: img }} style={styles.storyImage} />
-                                ) : (
-                                    <View style={styles.emptyStory}>
-                                        <Plus size={20} color="#cbd5e1" />
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-                            <Text style={styles.storyLabel}>חודש {month}</Text>
-                        </View>
-                    );
-                })}
-            </ScrollView>
-        </View>
+                return (
+                    <TouchableOpacity
+                        key={month}
+                        style={styles.monthItem}
+                        onPress={() => onMonthPress(month)}
+                        activeOpacity={0.8}
+                    >
+                        {hasImage ? (
+                            <Image source={{ uri: img }} style={styles.monthImage} />
+                        ) : (
+                            <View style={styles.emptyMonth}>
+                                <Plus size={18} color="#D1D5DB" strokeWidth={2} />
+                            </View>
+                        )}
+                        <Text style={[styles.monthLabel, hasImage && styles.monthLabelActive]}>
+                            {month}
+                        </Text>
+                    </TouchableOpacity>
+                );
+            })}
+        </ScrollView>
     );
 });
 
 AlbumCarousel.displayName = 'AlbumCarousel';
 
 const styles = StyleSheet.create({
-    container: {
-        marginBottom: 25,
-        paddingHorizontal: 20,
-    },
-    sectionHeader: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1e293b',
-        marginBottom: 12,
-        textAlign: 'right',
-    },
     scrollContent: {
-        gap: 15,
-        paddingRight: 20,
+        gap: 12,
+        paddingVertical: 4,
     },
-    monthContainer: {
+    monthItem: {
         alignItems: 'center',
         gap: 6,
     },
-    storyCircle: {
-        width: 70,
-        height: 70,
-        borderRadius: 35,
-        borderWidth: 2,
-        borderColor: '#6366f1',
-        padding: 3,
+    monthImage: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#F3F4F6',
     },
-    storyImage: {
-        width: '100%',
-        height: '100%',
-        borderRadius: 35,
-    },
-    emptyStory: {
-        width: '100%',
-        height: '100%',
-        borderRadius: 35,
-        backgroundColor: '#f1f5f9',
+    emptyMonth: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1.5,
+        borderColor: '#E5E7EB',
+        borderStyle: 'dashed',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    storyLabel: {
+    monthLabel: {
         fontSize: 11,
-        color: '#64748b',
-        fontWeight: '500',
+        fontWeight: '600',
+        color: '#9CA3AF',
+    },
+    monthLabelActive: {
+        color: '#6366F1',
     },
 });
 

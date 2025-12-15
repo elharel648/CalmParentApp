@@ -17,6 +17,7 @@ interface UseBabyProfileReturn {
     updatePhoto: (type: 'profile' | 'album', monthIndex?: number) => Promise<void>;
     updateBirthDate: (date: Date) => Promise<void>;
     updateStats: (type: 'weight' | 'height' | 'head', value: string) => Promise<void>;
+    updateBasicInfo: (data: { name: string; gender: 'boy' | 'girl' | 'other'; birthDate: Date }) => Promise<void>;
 }
 
 export const useBabyProfile = (): UseBabyProfileReturn => {
@@ -79,6 +80,24 @@ export const useBabyProfile = (): UseBabyProfileReturn => {
         setBaby(prev => prev ? { ...prev, stats: updates.stats } : null);
     }, [baby?.id, baby?.stats]);
 
+    const updateBasicInfo = useCallback(async (data: { name: string; gender: 'boy' | 'girl' | 'other'; birthDate: Date }) => {
+        if (!baby?.id) return;
+
+        if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+
+        const timestamp = Timestamp.fromDate(data.birthDate);
+        const updates = {
+            name: data.name,
+            gender: data.gender,
+            birthDate: timestamp,
+        };
+
+        await updateBabyData(baby.id, updates);
+        setBaby(prev => prev ? { ...prev, ...updates } : null);
+    }, [baby?.id]);
+
     const updatePhoto = useCallback(async (type: 'profile' | 'album', monthIndex?: number) => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -131,6 +150,7 @@ export const useBabyProfile = (): UseBabyProfileReturn => {
         updatePhoto,
         updateBirthDate,
         updateStats,
+        updateBasicInfo,
     };
 };
 

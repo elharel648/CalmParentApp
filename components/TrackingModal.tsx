@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, TouchableWithoutFeedback, KeyboardAvoidingView, Platform, Animated } from 'react-native';
-import { X, Check, Droplets, Play, Pause, Baby, Moon, Utensils, Layers } from 'lucide-react-native';
+import { X, Check, Droplets, Play, Pause, Baby, Moon, Utensils, Apple, Milk } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useSleepTimer } from '../context/SleepTimerContext';
@@ -45,11 +45,19 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
   const [activeSide, setActiveSide] = useState<'left' | 'right' | null>(null);
   const breastTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // --- Sleep Timer (GLOBAL) ---
+  // Pumping Timer
+  const [pumpingTimer, setPumpingTimer] = useState(0);
+  const [isPumpingActive, setIsPumpingActive] = useState(false);
+  const pumpingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // --- Sleep States (Manual entry) ---
+  const [sleepHours, setSleepHours] = useState(0);
+  const [sleepMinutes, setSleepMinutes] = useState(30);
   const sleepContext = useSleepTimer();
 
   // --- Diaper States ---
   const [subType, setSubType] = useState<string | null>(null);
+  const [diaperNote, setDiaperNote] = useState('');
 
   // Animations
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -64,6 +72,11 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
       setLeftTimer(0);
       setRightTimer(0);
       setActiveSide(null);
+      setPumpingTimer(0);
+      setIsPumpingActive(false);
+      setSleepHours(0);
+      setSleepMinutes(30);
+      setDiaperNote('');
       clearIntervals();
 
       // Animate in
@@ -86,6 +99,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
 
   const clearIntervals = () => {
     if (breastTimerRef.current) clearInterval(breastTimerRef.current);
+    if (pumpingTimerRef.current) clearInterval(pumpingTimerRef.current);
   };
 
   // Breast timer
@@ -103,12 +117,33 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
     };
   }, [activeSide]);
 
+  // Pumping timer
+  useEffect(() => {
+    if (isPumpingActive) {
+      pumpingTimerRef.current = setInterval(() => {
+        setPumpingTimer(t => t + 1);
+      }, 1000);
+    } else {
+      if (pumpingTimerRef.current) clearInterval(pumpingTimerRef.current);
+    }
+    return () => {
+      if (pumpingTimerRef.current) clearInterval(pumpingTimerRef.current);
+    };
+  }, [isPumpingActive]);
+
   const toggleBreastTimer = (side: 'left' | 'right') => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     if (activeSide === side) setActiveSide(null);
     else setActiveSide(side);
+  };
+
+  const togglePumpingTimer = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setIsPumpingActive(!isPumpingActive);
   };
 
   const formatTime = (seconds: number) => {
@@ -136,22 +171,28 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
         data.subType = 'breast';
       } else if (foodType === 'pumping') {
         data.amount = amount ? `${amount} מ"ל` : 'לא צוין';
+        data.note = pumpingTimer > 0 ? `זמן שאיבה: ${formatTime(pumpingTimer)}` : undefined;
         data.subType = 'pumping';
       } else if (foodType === 'solids') {
         data.note = solidsFoodName || 'מזון מוצקים';
         data.subType = 'solids';
       }
     } else if (type === 'sleep') {
-      // Use global timer data
-      data.note = sleepContext.elapsedSeconds > 0
-        ? `משך שינה: ${sleepContext.formatTime(sleepContext.elapsedSeconds)}`
-        : 'שינה חדשה';
-      // Stop the timer when saving
-      if (sleepContext.isRunning) {
-        sleepContext.stop();
+      // Use manual hours/minutes OR timer
+      const totalMinutes = (sleepHours * 60) + sleepMinutes;
+      if (sleepContext.elapsedSeconds > 0) {
+        data.note = `משך שינה: ${sleepContext.formatTime(sleepContext.elapsedSeconds)}`;
+        if (sleepContext.isRunning) sleepContext.stop();
+      } else if (totalMinutes > 0) {
+        const h = Math.floor(totalMinutes / 60);
+        const m = totalMinutes % 60;
+        data.note = `משך שינה: ${h}:${String(m).padStart(2, '0')}`;
+      } else {
+        data.note = 'שינה חדשה';
       }
     } else {
       data.subType = subType || 'default';
+      if (diaperNote) data.note = diaperNote;
     }
 
     console.log('🎯 TrackingModal: calling onSave with data =', JSON.stringify(data));
@@ -171,7 +212,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           onPress={() => { setFoodType('breast'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <View style={styles.foodTabIconContainer}>
-            <Baby size={24} color={foodType === 'breast' ? '#6366F1' : '#9CA3AF'} strokeWidth={2} />
+            <Baby size={24} color={foodType === 'breast' ? '#fff' : '#9CA3AF'} strokeWidth={2} />
           </View>
           <Text style={[styles.foodTabText, foodType === 'breast' && styles.activeFoodTabText]}>הנקה</Text>
         </TouchableOpacity>
@@ -180,7 +221,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           onPress={() => { setFoodType('bottle'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <View style={styles.foodTabIconContainer}>
-            <Utensils size={24} color={foodType === 'bottle' ? '#6366F1' : '#9CA3AF'} strokeWidth={2} />
+            <Milk size={24} color={foodType === 'bottle' ? '#fff' : '#9CA3AF'} strokeWidth={2} />
           </View>
           <Text style={[styles.foodTabText, foodType === 'bottle' && styles.activeFoodTabText]}>בקבוק</Text>
         </TouchableOpacity>
@@ -189,7 +230,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           onPress={() => { setFoodType('solids'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <View style={styles.foodTabIconContainer}>
-            <Utensils size={24} color={foodType === 'solids' ? '#6366F1' : '#9CA3AF'} strokeWidth={2} />
+            <Apple size={24} color={foodType === 'solids' ? '#fff' : '#9CA3AF'} strokeWidth={2} />
           </View>
           <Text style={[styles.foodTabText, foodType === 'solids' && styles.activeFoodTabText]}>מזון{"\n"}לתינוקות</Text>
         </TouchableOpacity>
@@ -198,7 +239,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           onPress={() => { setFoodType('pumping'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <View style={styles.foodTabIconContainer}>
-            <Droplets size={24} color={foodType === 'pumping' ? '#6366F1' : '#9CA3AF'} strokeWidth={2} />
+            <Droplets size={24} color={foodType === 'pumping' ? '#fff' : '#9CA3AF'} strokeWidth={2} />
           </View>
           <Text style={[styles.foodTabText, foodType === 'pumping' && styles.activeFoodTabText]}>שאיבה</Text>
         </TouchableOpacity>
@@ -220,7 +261,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
             <Text style={styles.unitText}>מ"ל</Text>
           </View>
           <View style={styles.presets}>
-            {[60, 90, 120, 150, 180].map(val => (
+            {[90, 120, 150, 180, 210].map(val => (
               <TouchableOpacity
                 key={val}
                 style={[styles.presetBtn, amount === val.toString() && styles.presetBtnActive]}
@@ -261,6 +302,17 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
       {/* Pumping Content */}
       {foodType === 'pumping' && (
         <View style={styles.bottleContainer}>
+          {/* Pumping Timer */}
+          <TouchableOpacity
+            style={[styles.pumpingTimerBtn, isPumpingActive && styles.pumpingTimerBtnActive]}
+            onPress={togglePumpingTimer}
+          >
+            {isPumpingActive ? <Pause size={20} color="#fff" /> : <Play size={20} color="#6366F1" />}
+            <Text style={[styles.pumpingTimerText, isPumpingActive && { color: '#fff' }]}>
+              {formatTime(pumpingTimer)}
+            </Text>
+          </TouchableOpacity>
+
           <Text style={styles.label}>כמה נשאב?</Text>
           <View style={styles.inputWrapper}>
             <TextInput
@@ -320,43 +372,131 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
     </View>
   );
 
-  // --- Sleep Content (uses global context) ---
+  // --- Sleep Content (Combined: Timer + Manual) ---
   const renderSleepContent = () => (
-    <View style={{ width: '100%', alignItems: 'center' }}>
-      <Text style={styles.subtitle}>
-        {sleepContext.isRunning ? 'התינוק ישנה...' : 'מפעילים טיימר או שומרים ידנית?'}
-      </Text>
+    <View style={{ width: '100%' }}>
+      {/* Timer Section - Compact */}
       <TouchableOpacity
-        style={[styles.timerCircle, sleepContext.isRunning && styles.timerCircleActive]}
+        style={[styles.sleepTimerCompact, sleepContext.isRunning && styles.sleepTimerCompactActive]}
         onPress={() => {
           if (sleepContext.isRunning) {
             sleepContext.stop();
+            // Auto-fill the manual entry from timer
+            const totalMins = Math.floor(sleepContext.elapsedSeconds / 60);
+            setSleepHours(Math.floor(totalMins / 60));
+            setSleepMinutes(totalMins % 60);
           } else {
             sleepContext.start();
           }
+          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }}
         activeOpacity={0.8}
       >
-        <LinearGradient
-          colors={sleepContext.isRunning ? ['#6366F1', '#4F46E5'] : ['#F3F4F6', '#E5E7EB']}
-          style={styles.timerGradient}
-        >
-          <Text style={[styles.timerBigText, sleepContext.isRunning && { color: '#fff' }]}>
-            {sleepContext.formatTime(sleepContext.elapsedSeconds)}
-          </Text>
-          <View style={{ marginTop: 8 }}>
-            {sleepContext.isRunning ? <Pause size={32} color="#fff" /> : <Play size={32} color="#6366F1" />}
-          </View>
-        </LinearGradient>
-      </TouchableOpacity>
-      <Text style={styles.timerHint}>
-        {sleepContext.isRunning ? 'הטיימר רץ ברקע! לחץ לעצירה ☸️' : 'לחץ על העיגול להתחלת מדידה ▶️'}
-      </Text>
-      {sleepContext.isRunning && (
-        <Text style={styles.persistHint}>
-          ✅ הטיימר ימשיך לרוץ גם אחרי סגירת המודל
+        {sleepContext.isRunning ? <Pause size={20} color="#fff" /> : <Play size={20} color="#6366F1" />}
+        <Text style={[styles.sleepTimerCompactText, sleepContext.isRunning && { color: '#fff' }]}>
+          {sleepContext.isRunning ? sleepContext.formatTime(sleepContext.elapsedSeconds) : 'הפעל טיימר'}
         </Text>
+        {sleepContext.isRunning && (
+          <View style={styles.sleepTimerPulse} />
+        )}
+      </TouchableOpacity>
+
+      {sleepContext.isRunning && (
+        <Text style={styles.sleepTimerHint}>⏱️ הטיימר רץ! לחץ לעצירה ומילוי אוטומטי</Text>
       )}
+
+      {/* Divider */}
+      <View style={styles.sleepDivider}>
+        <View style={styles.sleepDividerLine} />
+        <Text style={styles.sleepDividerText}>או הזן ידנית</Text>
+        <View style={styles.sleepDividerLine} />
+      </View>
+
+      {/* Manual Entry */}
+      <View style={styles.sleepInputRow}>
+        {/* Hours */}
+        <View style={styles.sleepInputGroup}>
+          <TouchableOpacity
+            style={styles.sleepBtn}
+            onPress={() => {
+              setSleepHours(Math.max(0, sleepHours - 1));
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Text style={styles.sleepBtnText}>−</Text>
+          </TouchableOpacity>
+          <View style={styles.sleepValueBox}>
+            <Text style={styles.sleepValue}>{sleepHours}</Text>
+            <Text style={styles.sleepUnit}>שעות</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.sleepBtn}
+            onPress={() => {
+              setSleepHours(Math.min(12, sleepHours + 1));
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Text style={styles.sleepBtnText}>+</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.sleepSeparator}>:</Text>
+
+        {/* Minutes */}
+        <View style={styles.sleepInputGroup}>
+          <TouchableOpacity
+            style={styles.sleepBtn}
+            onPress={() => {
+              setSleepMinutes(Math.max(0, sleepMinutes - 15));
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Text style={styles.sleepBtnText}>−</Text>
+          </TouchableOpacity>
+          <View style={styles.sleepValueBox}>
+            <Text style={styles.sleepValue}>{sleepMinutes}</Text>
+            <Text style={styles.sleepUnit}>דקות</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.sleepBtn}
+            onPress={() => {
+              setSleepMinutes(Math.min(55, sleepMinutes + 15));
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Text style={styles.sleepBtnText}>+</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Quick Presets */}
+      <View style={styles.sleepPresets}>
+        {[
+          { h: 0, m: 30, label: '30ד' },
+          { h: 1, m: 0, label: '1ש' },
+          { h: 1, m: 30, label: '1.5ש' },
+          { h: 2, m: 0, label: '2ש' },
+          { h: 3, m: 0, label: '3ש' },
+        ].map((preset, i) => (
+          <TouchableOpacity
+            key={i}
+            style={[
+              styles.presetBtn,
+              sleepHours === preset.h && sleepMinutes === preset.m && styles.presetBtnActive
+            ]}
+            onPress={() => {
+              setSleepHours(preset.h);
+              setSleepMinutes(preset.m);
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Text style={[
+              styles.presetText,
+              sleepHours === preset.h && sleepMinutes === preset.m && styles.presetTextActive
+            ]}>{preset.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 
@@ -366,8 +506,8 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
       <Text style={[styles.subtitle, { textAlign: 'center' }]}>מה היה?</Text>
       <View style={styles.diaperOptions}>
         {[
-          { key: 'pee', label: 'פיפי', color: '#3B82F6' },
-          { key: 'poop', label: 'קקי', color: '#8B5CF6' },
+          { key: 'pee', label: 'שתן', color: '#3B82F6' },
+          { key: 'poop', label: 'יציאה', color: '#8B5CF6' },
           { key: 'both', label: 'שניהם', color: '#10B981' },
         ].map(opt => (
           <TouchableOpacity
@@ -382,6 +522,13 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           </TouchableOpacity>
         ))}
       </View>
+      <TextInput
+        style={styles.diaperNoteInput}
+        placeholder="הערות (אופציונלי)..."
+        placeholderTextColor="#9CA3AF"
+        onChangeText={(text) => setDiaperNote(text)}
+        textAlign="right"
+      />
     </View>
   );
 
@@ -493,12 +640,38 @@ const styles = StyleSheet.create({
   timerText: { fontSize: 24, fontWeight: 'bold', color: '#1F2937' },
   timerTextActive: { color: '#fff' },
 
+  // Pumping Timer
+  pumpingTimerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#F3F4F6', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 16, marginBottom: 24 },
+  pumpingTimerBtnActive: { backgroundColor: '#6366F1' },
+  pumpingTimerText: { fontSize: 20, fontWeight: '700', color: '#1F2937' },
+
   // Solids
   solidsContainer: { alignItems: 'center', width: '100%' },
   solidsInput: { width: '100%', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 16, fontSize: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 16 },
   solidsSuggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
 
-  // Sleep
+  // Sleep (Manual Entry)
+  sleepTimerCompact: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#F3F4F6', paddingVertical: 16, paddingHorizontal: 28, borderRadius: 20, marginBottom: 12, alignSelf: 'center' },
+  sleepTimerCompactActive: { backgroundColor: '#6366F1' },
+  sleepTimerCompactText: { fontSize: 18, fontWeight: '700', color: '#1F2937' },
+  sleepTimerPulse: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff', opacity: 0.8 },
+  sleepTimerHint: { fontSize: 12, color: '#6366F1', textAlign: 'center', marginBottom: 8, fontWeight: '500' },
+  sleepDivider: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 12 },
+  sleepDividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  sleepDividerText: { fontSize: 12, color: '#9CA3AF', fontWeight: '500' },
+  sleepInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 24 },
+  sleepInputGroup: { alignItems: 'center', gap: 8 },
+  sleepBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  sleepBtnText: { fontSize: 22, fontWeight: '600', color: '#6366F1' },
+  sleepValueBox: { alignItems: 'center', minWidth: 60 },
+  sleepValue: { fontSize: 36, fontWeight: '800', color: '#1F2937' },
+  sleepUnit: { fontSize: 12, color: '#9CA3AF', fontWeight: '600' },
+  sleepSeparator: { fontSize: 32, fontWeight: '700', color: '#D1D5DB' },
+  sleepPresets: { flexDirection: 'row', justifyContent: 'center', gap: 10 },
+  sleepTimerNote: { backgroundColor: '#EEF2FF', padding: 12, borderRadius: 12, marginTop: 20 },
+  sleepTimerNoteText: { fontSize: 14, color: '#6366F1', fontWeight: '600', textAlign: 'center' },
+
+  // Legacy Sleep Timer (keep for compatibility)
   timerCircle: { marginVertical: 20 },
   timerCircleActive: {},
   timerGradient: { width: 160, height: 160, borderRadius: 80, alignItems: 'center', justifyContent: 'center' },
@@ -510,6 +683,7 @@ const styles = StyleSheet.create({
   diaperOptions: { flexDirection: 'row', gap: 12, justifyContent: 'center', marginTop: 16 },
   diaperBtn: { paddingHorizontal: 24, paddingVertical: 16, backgroundColor: '#F3F4F6', borderRadius: 16 },
   diaperBtnText: { fontSize: 16, fontWeight: '600', color: '#374151' },
+  diaperNoteInput: { width: '100%', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, fontSize: 14, textAlign: 'right', marginTop: 20, borderWidth: 1, borderColor: '#E5E7EB' },
 
   // Save
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, borderRadius: 16, marginTop: 8 },

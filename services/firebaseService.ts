@@ -9,7 +9,8 @@ import {
   getDocs,
   Timestamp,
   doc,
-  getDoc
+  getDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
@@ -24,6 +25,7 @@ interface ChildProfile {
   birthDate: Date;
   parentId: string;
   childId: string;
+  photoUrl?: string;
 }
 
 // ----------------------------------------------------
@@ -43,7 +45,8 @@ export const getChildProfile = async (userId: string): Promise<ChildProfile | nu
         name: data.name || 'עלמא',
         birthDate: data.birthDate instanceof Timestamp ? data.birthDate.toDate() : new Date(data.birthDate),
         parentId: userId,
-        childId: doc.id
+        childId: doc.id,
+        photoUrl: data.photoUrl || undefined,
       };
     }
     return null;
@@ -136,6 +139,19 @@ export const getRecentHistory = async (childId: string) => {
   } catch (error) {
     console.error('🔎 getRecentHistory ERROR:', error);
     return [];
+  }
+};
+
+// Delete event by ID
+export const deleteEvent = async (eventId: string) => {
+  try {
+    const eventRef = doc(db, EVENTS_COLLECTION, eventId);
+    await deleteDoc(eventRef);
+    console.log('🗑️ deleteEvent: Successfully deleted event', eventId);
+    return true;
+  } catch (error) {
+    console.error('🗑️ deleteEvent ERROR:', error);
+    throw error;
   }
 };
 

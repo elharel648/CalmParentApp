@@ -8,15 +8,47 @@ export interface GrowthStats {
     headCircumference?: string;
 }
 
+// New: Growth measurement with full history
+export interface GrowthMeasurement {
+    id: string;
+    date: any; // Firebase Timestamp
+    weight?: number; // kg
+    height?: number; // cm
+    headCircumference?: number; // cm
+    note?: string;
+}
+
 export interface Milestone {
     title: string;
     date: any; // Firebase Timestamp
 }
 
+// New: Categorized milestones for developmental tracking
+export type MilestoneCategory = 'motor' | 'communication' | 'cognitive' | 'social' | 'other';
+
+export interface CategorizedMilestone {
+    id: string;
+    category: MilestoneCategory;
+    title: string;
+    achievedDate?: any; // Firebase Timestamp
+    expectedAgeMonths?: number;
+    isAchieved: boolean;
+    note?: string;
+}
+
 export interface CustomVaccine {
     id: string;
     name: string;
-    isDone: boolean;
+    isDone?: boolean;
+    date?: string;
+}
+
+// New: Photo gallery entry
+export interface PhotoEntry {
+    id: string;
+    url: string; // base64 or storage URL
+    date: any; // Firebase Timestamp
+    caption?: string;
 }
 
 export interface BabyProfileData {
@@ -27,8 +59,11 @@ export interface BabyProfileData {
     parentId: string;
     photoUrl?: string;
     stats?: GrowthStats;
+    growthHistory?: GrowthMeasurement[]; // New
     album?: { [month: number]: string };
+    photoGallery?: PhotoEntry[]; // New
     milestones?: Milestone[];
+    categorizedMilestones?: CategorizedMilestone[]; // New
     vaccines?: { [key: string]: boolean };
     customVaccines?: CustomVaccine[];
 }

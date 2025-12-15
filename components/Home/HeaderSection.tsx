@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, Animated, Easing } from 'react-native';
 import { Camera, Utensils, Moon, Baby, Pill, Sun } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,6 +23,7 @@ interface HeaderSectionProps {
     lastFeedTime?: string;
     lastSleepTime?: string;
     meds?: MedicationsState;
+    navigation?: any;
 }
 
 interface BannerData {
@@ -43,10 +44,12 @@ const HeaderSection = memo<HeaderSectionProps>(({
     lastFeedTime,
     lastSleepTime,
     meds,
+    navigation,
 }) => {
     const [uploading, setUploading] = useState(false);
     const [currentBanner, setCurrentBanner] = useState(0);
     const fadeAnim = useRef(new Animated.Value(1)).current;
+    const slideAnim = useRef(new Animated.Value(0)).current; // For vertical slide
 
     // Generate banners
     const banners: BannerData[] = [
@@ -96,18 +99,45 @@ const HeaderSection = memo<HeaderSectionProps>(({
         });
     }
 
-    // Auto-rotate banners
+    // Auto-rotate banners with smooth slide animation
     useEffect(() => {
         const interval = setInterval(() => {
-            Animated.sequence([
-                Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
-                Animated.timing(fadeAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
-            ]).start();
-
-            setTimeout(() => {
+            // Slide out down + fade out
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 0,
+                    duration: 400,
+                    useNativeDriver: true,
+                    easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+                }),
+                Animated.timing(slideAnim, {
+                    toValue: 30, // Slide down 30px
+                    duration: 400,
+                    useNativeDriver: true,
+                    easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+                }),
+            ]).start(() => {
+                // Change banner and reset slide position
                 setCurrentBanner(prev => (prev + 1) % banners.length);
-            }, 150);
-        }, 4000);
+                slideAnim.setValue(-30); // Reset to slide from top
+
+                // Slide in from top + fade in
+                Animated.parallel([
+                    Animated.timing(fadeAnim, {
+                        toValue: 1,
+                        duration: 500,
+                        useNativeDriver: true,
+                        easing: Easing.bezier(0.0, 0.0, 0.2, 1),
+                    }),
+                    Animated.timing(slideAnim, {
+                        toValue: 0, // Slide to original position
+                        duration: 500,
+                        useNativeDriver: true,
+                        easing: Easing.bezier(0.0, 0.0, 0.2, 1),
+                    }),
+                ]).start();
+            });
+        }, 5500); // 5.5 seconds interval
 
         return () => clearInterval(interval);
     }, [banners.length]);
@@ -182,12 +212,24 @@ const HeaderSection = memo<HeaderSectionProps>(({
 
     return (
         <View style={styles.container}>
-            {/* Top Section: Profile on Right, Greeting on Left */}
+            {/* Top Section: Profile on Right, Greeting + Weather on Left */}
             <View style={styles.profileRow}>
-                {/* Left: Greeting */}
-                <Text style={[styles.greeting, { color: dynamicStyles.text }]}>
-                    {greeting}
-                </Text>
+                {/* Left: Greeting + Weather */}
+                <View style={styles.greetingSection}>
+                    <View style={styles.greetingRow}>
+                        {(() => {
+                            const hour = new Date().getHours();
+                            if (hour >= 5 && hour < 12) return <Sun size={18} color="#F59E0B" strokeWidth={2.5} />;
+                            if (hour >= 12 && hour < 18) return <Sun size={18} color="#F97316" strokeWidth={2.5} />;
+                            return <Moon size={18} color="#8B5CF6" strokeWidth={2.5} />;
+                        })()}
+                        <Text style={[styles.greeting, { color: dynamicStyles.text }]}>
+                            {greeting}
+                        </Text>
+                    </View>
+                    {/* Weather placeholder */}
+                    <Text style={styles.weatherText}>☁️ טוען מזג אוויר...</Text>
+                </View>
 
                 {/* Right: Avatar + Name + Age */}
                 <View style={styles.profileInfo}>
@@ -199,10 +241,9 @@ const HeaderSection = memo<HeaderSectionProps>(({
                     </View>
 
                     <TouchableOpacity
-                        onPress={handlePhotoPress}
+                        onPress={() => navigation?.navigate('פרופיל')}
                         style={styles.avatarWrapper}
                         activeOpacity={0.8}
-                        disabled={uploading}
                     >
                         <LinearGradient
                             colors={['#6366F1', '#8B5CF6']}
@@ -221,8 +262,14 @@ const HeaderSection = memo<HeaderSectionProps>(({
                 </View>
             </View>
 
-            {/* Summary Banner - RTL Layout */}
-            <Animated.View style={[styles.bannerWrapper, { opacity: fadeAnim }]}>
+            {/* Summary Banner - RTL Layout with Slide Animation */}
+            <Animated.View style={[
+                styles.bannerWrapper,
+                {
+                    opacity: fadeAnim,
+                    transform: [{ translateY: slideAnim }]
+                }
+            ]}>
                 <LinearGradient
                     colors={banner.bgGradient}
                     style={styles.banner}
@@ -290,9 +337,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 16,
     },
+    greetingSection: {
+        gap: 4,
+    },
+    greetingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     greeting: {
-        fontSize: 24,
-        fontWeight: '800',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    weatherText: {
+        fontSize: 11,
+        color: '#9CA3AF',
+        fontWeight: '500',
     },
     profileInfo: {
         flexDirection: 'row',
@@ -379,14 +439,16 @@ const styles = StyleSheet.create({
         alignItems: 'flex-end',
     },
     bannerTitle: {
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: '700',
+        letterSpacing: 0.2,
     },
     bannerSummary: {
-        fontSize: 18,
-        fontWeight: '800',
+        fontSize: 17,
+        fontWeight: '600',
         color: '#1F2937',
         marginTop: 2,
+        letterSpacing: -0.2,
     },
     bannerLastAction: {
         paddingHorizontal: 12,
@@ -394,8 +456,8 @@ const styles = StyleSheet.create({
         borderRadius: 10,
     },
     lastActionText: {
-        fontSize: 12,
-        fontWeight: '700',
+        fontSize: 11,
+        fontWeight: '600',
     },
     pagination: {
         flexDirection: 'row',
