@@ -8,6 +8,7 @@ export interface ChildProfile {
     birthDate: Date | any;
     ageMonths: number;
     photoUrl?: string;
+    parentId?: string;
 }
 
 export interface WeatherData {

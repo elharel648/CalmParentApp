@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ===================
+    // USERS COLLECTION
+    // ===================
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // ===================
+    // FAMILIES COLLECTION
+    // ===================
+    match /families/{familyId} {
+      allow read: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated();
+      
+      // Presence subcollection
+      match /presence/{memberId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // ===================
+    // BABIES COLLECTION
+    // ===================
+    match /babies/{babyId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
+
+    // ===================
+    // EVENTS COLLECTION
+    // ===================
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
+    }
+
+    // ===================
+    // INVITES COLLECTION
+    // ===================
+    match /invites/{inviteCode} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    // ===================
+    // PRESENCE COLLECTION (top-level fallback)
+    // ===================
+    match /presence/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

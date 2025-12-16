@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from '
 import { Utensils, Moon, Layers, Music, Anchor, Pill, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useSleepTimer } from '../../context/SleepTimerContext';
+import { useFoodTimer } from '../../context/FoodTimerContext';
 import { MedicationsState } from '../../types/home';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -34,7 +35,8 @@ const QuickActions = memo<QuickActionsProps>(({
     meds,
     dynamicStyles,
 }) => {
-    const { isRunning, elapsedSeconds, formatTime } = useSleepTimer();
+    const { isRunning: sleepIsRunning, elapsedSeconds: sleepElapsed, formatTime: sleepFormatTime } = useSleepTimer();
+    const { isRunning: foodIsRunning, elapsedSeconds: foodElapsed, formatTime: foodFormatTime } = useFoodTimer();
 
     const handlePress = useCallback((callback: () => void) => {
         if (Platform.OS !== 'web') {
@@ -60,40 +62,50 @@ const QuickActions = memo<QuickActionsProps>(({
             >
                 {/* Food */}
                 <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: '#FEF3C7' }]}
+                    style={[
+                        styles.actionBtn,
+                        { backgroundColor: foodIsRunning ? '#F59E0B' : '#FEF3C7' }
+                    ]}
                     onPress={() => handlePress(onFoodPress)}
                     accessibilityRole="button"
                 >
-                    <View style={[styles.actionIcon, { backgroundColor: '#F59E0B' }]}>
-                        <Utensils size={24} color="#fff" />
+                    <View style={[styles.actionIcon, { backgroundColor: foodIsRunning ? '#fff' : '#F59E0B' }]}>
+                        <Utensils size={24} color={foodIsRunning ? '#F59E0B' : '#fff'} />
                     </View>
-                    <Text style={styles.actionText}>אוכל</Text>
-                    <Text style={styles.lastTimeText}>{lastFeedTime}</Text>
+                    <Text style={[styles.actionText, foodIsRunning && { color: '#fff' }]}>
+                        {foodIsRunning ? 'שאיבה' : 'אוכל'}
+                    </Text>
+                    <Text style={[
+                        foodIsRunning ? styles.timerText : styles.lastTimeText,
+                        foodIsRunning && { color: '#FEF3C7' }
+                    ]}>
+                        {foodIsRunning ? foodFormatTime(foodElapsed) : lastFeedTime}
+                    </Text>
                 </TouchableOpacity>
 
                 {/* Sleep */}
                 <TouchableOpacity
                     style={[
                         styles.actionBtn,
-                        { backgroundColor: isRunning ? '#6366F1' : '#E0E7FF' }
+                        { backgroundColor: sleepIsRunning ? '#6366F1' : '#E0E7FF' }
                     ]}
                     onPress={() => handlePress(onSleepPress)}
                     accessibilityRole="button"
                 >
                     <View style={[
                         styles.actionIcon,
-                        { backgroundColor: isRunning ? '#fff' : '#6366F1' }
+                        { backgroundColor: sleepIsRunning ? '#fff' : '#6366F1' }
                     ]}>
-                        <Moon size={24} color={isRunning ? '#6366F1' : '#fff'} />
+                        <Moon size={24} color={sleepIsRunning ? '#6366F1' : '#fff'} />
                     </View>
-                    <Text style={[styles.actionText, isRunning && { color: '#fff' }]}>
-                        {isRunning ? 'ישנה' : 'שינה'}
+                    <Text style={[styles.actionText, sleepIsRunning && { color: '#fff' }]}>
+                        {sleepIsRunning ? 'ישנה' : 'שינה'}
                     </Text>
                     <Text style={[
-                        isRunning ? styles.timerText : styles.lastTimeText,
-                        isRunning && { color: '#E0E7FF' }
+                        sleepIsRunning ? styles.timerText : styles.lastTimeText,
+                        sleepIsRunning && { color: '#E0E7FF' }
                     ]}>
-                        {isRunning ? formatTime(elapsedSeconds) : lastSleepTime}
+                        {sleepIsRunning ? sleepFormatTime(sleepElapsed) : lastSleepTime}
                     </Text>
                 </TouchableOpacity>
 

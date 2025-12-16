@@ -1,8 +1,8 @@
 import React, { memo, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert } from 'react-native';
-import { Utensils, Moon, Baby, ChevronDown, ChevronUp, X } from 'lucide-react-native';
-import { useChildProfile } from '../hooks/useChildProfile';
+import { Utensils, Moon, Layers, ChevronDown, ChevronUp, X } from 'lucide-react-native';
 import { getRecentHistory, deleteEvent } from '../services/firebaseService';
+import { useTheme } from '../context/ThemeContext';
 
 interface TimelineEvent {
   id: string;
@@ -16,6 +16,7 @@ interface TimelineEvent {
 
 interface DailyTimelineProps {
   refreshTrigger?: number;
+  childId?: string; // Accept childId as prop
 }
 
 const TYPE_CONFIG = {
@@ -30,7 +31,7 @@ const TYPE_CONFIG = {
     label: 'שינה',
   },
   diaper: {
-    icon: Baby,
+    icon: Layers,
     color: '#10B981',
     label: 'חיתול',
   },
@@ -38,18 +39,21 @@ const TYPE_CONFIG = {
 
 const INITIAL_VISIBLE_COUNT = 4;
 
-const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
-  const { profile } = useChildProfile();
+const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = '' }) => {
+  const { theme, isDarkMode } = useTheme();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (profile.id) {
+    if (childId) {
       loadTimeline();
+    } else {
+      setEvents([]);
+      setLoading(false);
     }
-  }, [profile.id, refreshTrigger]);
+  }, [childId, refreshTrigger]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -60,8 +64,9 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
   }, [events]);
 
   const loadTimeline = async () => {
+    if (!childId) return;
     try {
-      const history = await getRecentHistory(profile.id);
+      const history = await getRecentHistory(childId);
       // Map Firebase data directly
       const mapped: TimelineEvent[] = history.map((item: any) => ({
         ...item,
@@ -115,13 +120,27 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
       } else if (event.subType === 'breast') {
         return 'הנקה';
       } else if (event.subType === 'pumping') {
-        return `שאיבה ${event.amount || ''}`;
+        return event.amount ? `שאיבה ${event.amount}` : 'שאיבה';
       } else if (event.subType === 'solids') {
         return event.note || 'מזון מוצק';
       }
       return event.amount || event.note || 'אוכל';
     } else if (event.type === 'sleep') {
-      return event.note || 'שינה';
+      // Extract duration from note or duration field
+      if (event.duration) {
+        const h = Math.floor(event.duration / 3600);
+        const m = Math.floor((event.duration % 3600) / 60);
+        if (h > 0) {
+          return `${h} שע' ${m > 0 ? `${m} דק'` : ''}`;
+        }
+        return `${m} דקות`;
+      }
+      // Try to extract from note
+      if (event.note && event.note.includes('משך שינה:')) {
+        const match = event.note.match(/משך שינה: (\d+:\d+)/);
+        if (match) return match[1];
+      }
+      return 'שינה';
     } else if (event.type === 'diaper') {
       if (event.subType === 'pee') return 'שתן';
       if (event.subType === 'poop') return 'יציאה';
@@ -136,9 +155,14 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
       if (event.subType === 'bottle') return 'בקבוק';
       if (event.subType === 'breast') return event.note ? event.note.substring(0, 30) : '';
       if (event.subType === 'solids') return 'מזון מוצקים';
-      if (event.subType === 'pumping') return 'שאיבה';
+      if (event.subType === 'pumping') return event.note || 'שאיבה';
     } else if (event.type === 'sleep') {
-      return event.note ? event.note.substring(0, 35) : '';
+      // Extract user note after pipe separator
+      if (event.note && event.note.includes(' | ')) {
+        const parts = event.note.split(' | ');
+        return parts[1] ? parts[1].substring(0, 35) : 'שינה';
+      }
+      return 'שינה';
     }
     return '';
   };
@@ -159,16 +183,16 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
         <View style={styles.header}>
           <View style={styles.titleSection}>
             <View style={styles.accentLine} />
-            <Text style={styles.title}>סדר היום</Text>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>סדר היום</Text>
           </View>
         </View>
 
-        <View style={styles.emptyCard}>
+        <View style={[styles.emptyCard, { backgroundColor: theme.card }]}>
           <View style={styles.emptyIcon}>
             <Text style={styles.emptyEmoji}>📝</Text>
           </View>
-          <Text style={styles.emptyText}>אין תיעודים להיום</Text>
-          <Text style={styles.emptyHint}>השתמש בכפתורים למעלה כדי להתחיל</Text>
+          <Text style={[styles.emptyText, { color: theme.textPrimary }]}>אין תיעודים להיום</Text>
+          <Text style={[styles.emptyHint, { color: theme.textSecondary }]}>השתמש בכפתורים למעלה כדי להתחיל</Text>
         </View>
       </View>
     );
@@ -180,7 +204,7 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
       <View style={styles.header}>
         <View style={styles.titleSection}>
           <View style={styles.accentLine} />
-          <Text style={styles.title}>סדר היום</Text>
+          <Text style={[styles.title, { color: theme.textPrimary }]}>סדר היום</Text>
         </View>
 
         {/* Stats Pills */}
@@ -189,8 +213,8 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
             const config = TYPE_CONFIG[type as keyof typeof TYPE_CONFIG];
             const Icon = config.icon;
             return (
-              <View key={type} style={styles.statPill}>
-                <Text style={styles.statCount}>{count}</Text>
+              <View key={type} style={[styles.statPill, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
+                <Text style={[styles.statCount, { color: theme.textPrimary }]}>{count}</Text>
                 <Icon size={11} color="#6B7280" strokeWidth={2.5} />
               </View>
             );
@@ -221,32 +245,29 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0 }) => {
                 <Text style={styles.timeAgo}>{getTimeAgo(event.timestamp)}</Text>
               </View>
 
-              {/* Timeline dot + line */}
+              {/* Timeline icon + line */}
               <View style={styles.timelineTrack}>
-                <View style={[styles.dot, { backgroundColor: config.color }]} />
+                <View style={[styles.timelineIcon, { backgroundColor: config.color + '20' }]}>
+                  <Icon size={14} color={config.color} strokeWidth={2} />
+                </View>
                 {!isLast && <View style={styles.connector} />}
               </View>
 
               {/* Right side: Content */}
-              <View style={styles.eventCard}>
-                {/* Delete button */}
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => handleDelete(event.id)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <X size={14} color="#9CA3AF" strokeWidth={2} />
-                </TouchableOpacity>
-
+              <View style={[styles.eventCard, { backgroundColor: theme.card }]}>
                 <View style={styles.cardContent}>
                   <View style={styles.eventHeader}>
-                    <Text style={styles.eventTitle}>{details}</Text>
-                    <View style={[styles.iconBadge, { backgroundColor: config.color + '10' }]}>
-                      <Icon size={14} color={config.color} strokeWidth={2.5} />
-                    </View>
+                    <Text style={[styles.eventTitle, { color: theme.textPrimary }]}>{details}</Text>
+                    <TouchableOpacity
+                      style={styles.deleteBtn}
+                      onPress={() => handleDelete(event.id)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <X size={14} color="#9CA3AF" strokeWidth={2} />
+                    </TouchableOpacity>
                   </View>
                   {subtext && (
-                    <Text style={styles.eventSubtext}>{subtext}</Text>
+                    <Text style={[styles.eventSubtext, { color: theme.textSecondary }]}>{subtext}</Text>
                   )}
                 </View>
               </View>
@@ -366,9 +387,18 @@ const styles = StyleSheet.create({
 
   // Center: Timeline
   timelineTrack: {
-    width: 32,
+    width: 36,
     alignItems: 'center',
     position: 'relative',
+  },
+  timelineIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    marginTop: 2,
   },
   dot: {
     width: 8,
@@ -379,7 +409,7 @@ const styles = StyleSheet.create({
   },
   connector: {
     position: 'absolute',
-    top: 14,
+    top: 30,
     width: 1.5,
     height: '100%',
     backgroundColor: '#E5E7EB',
@@ -397,10 +427,6 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   deleteBtn: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    zIndex: 10,
     padding: 4,
     backgroundColor: '#F9FAFB',
     borderRadius: 6,

@@ -3,12 +3,14 @@ import { View, StyleSheet, ScrollView, ActivityIndicator, Text, TouchableOpacity
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Edit2, TrendingUp, Award, Sparkles, ChevronRight, Camera } from 'lucide-react-native';
+import { Edit2, TrendingUp, Award, Sparkles, ChevronRight, Camera, UserPlus } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 // Custom Hooks
 import { useBabyProfile } from '../hooks/useBabyProfile';
 import { useMilestones } from '../hooks/useMilestones';
+import { useTheme } from '../context/ThemeContext';
+import { useFamily } from '../hooks/useFamily';
 
 // Components
 import {
@@ -19,12 +21,14 @@ import {
   MilestoneModal,
   EditBasicInfoModal,
 } from '../components/Profile';
+import GuestInviteModal from '../components/Family/GuestInviteModal';
 
 // Types
 import { EditMetricState, Milestone } from '../types/profile';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
+  const { theme, isDarkMode } = useTheme();
 
   const {
     baby,
@@ -42,6 +46,9 @@ export default function ProfileScreen() {
   const [editMetric, setEditMetric] = useState<EditMetricState | null>(null);
   const [isMilestoneOpen, setIsMilestoneOpen] = useState(false);
   const [isEditBasicInfoOpen, setIsEditBasicInfoOpen] = useState(false);
+  const [isGuestInviteOpen, setIsGuestInviteOpen] = useState(false);
+
+  const { family } = useFamily();
 
   const handleSaveMetric = useCallback(async (value: string) => {
     if (!editMetric) return;
@@ -99,8 +106,8 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar style={isDarkMode ? 'light' : 'light'} />
 
       {/* Header */}
       <LinearGradient
@@ -119,7 +126,7 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Profile Card */}
-        <View style={styles.profileCard}>
+        <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
           <TouchableOpacity onPress={handleEditPhoto} style={styles.avatarContainer}>
             {baby?.photoUrl ? (
               <Image source={{ uri: baby.photoUrl }} style={styles.avatar} />
@@ -134,9 +141,9 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{baby?.name || 'הילד שלי'}</Text>
-            <Text style={styles.profileAge}>{getAgeDisplay()}</Text>
-            <Text style={styles.profileDate}>{birthDateObj.toLocaleDateString('he-IL')}</Text>
+            <Text style={[styles.profileName, { color: theme.textPrimary }]}>{baby?.name || 'הילד שלי'}</Text>
+            <Text style={[styles.profileAge, { color: theme.primary }]}>{getAgeDisplay()}</Text>
+            <Text style={[styles.profileDate, { color: theme.textSecondary }]}>{birthDateObj.toLocaleDateString('he-IL')}</Text>
           </View>
 
           <TouchableOpacity
@@ -151,6 +158,27 @@ export default function ProfileScreen() {
             <Edit2 size={14} color="#6366F1" />
           </TouchableOpacity>
         </View>
+
+        {/* Invite Guest Button */}
+        {family && (
+          <TouchableOpacity
+            style={[styles.inviteGuestBtn, { backgroundColor: theme.card }]}
+            onPress={() => {
+              if (Platform.OS !== 'web') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              setIsGuestInviteOpen(true);
+            }}
+          >
+            <LinearGradient
+              colors={['#10B981', '#059669']}
+              style={styles.inviteGuestGradient}
+            >
+              <UserPlus size={18} color="#fff" />
+              <Text style={styles.inviteGuestText}>הזמן אורח / בייביסיטר</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
 
         {/* Growth Section */}
         <View style={styles.section}>
@@ -231,6 +259,17 @@ export default function ProfileScreen() {
         onAdd={handleAddMilestone}
         onClose={() => setIsMilestoneOpen(false)}
       />
+
+      {/* Guest Invite Modal */}
+      {baby?.id && family && (
+        <GuestInviteModal
+          visible={isGuestInviteOpen}
+          onClose={() => setIsGuestInviteOpen(false)}
+          childId={baby.id}
+          childName={baby.name || 'הילד'}
+          familyId={family.id}
+        />
+      )}
     </View>
   );
 }
@@ -364,5 +403,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#6366F1',
+  },
+  // Guest Invite Button
+  inviteGuestBtn: {
+    borderRadius: 16,
+    overflow: 'hidden' as const,
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+  inviteGuestGradient: {
+    flexDirection: 'row-reverse' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  inviteGuestText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600' as const,
   },
 });

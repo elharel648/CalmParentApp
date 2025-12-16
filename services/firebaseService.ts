@@ -33,24 +33,92 @@ interface ChildProfile {
 // ----------------------------------------------------
 
 export const getChildProfile = async (userId: string): Promise<ChildProfile | null> => {
+  console.log('🔍 getChildProfile START for userId:', userId);
+
   try {
-    const q = query(collection(db, PROFILES_COLLECTION), where('parentId', '==', userId), limit(1));
-    const querySnapshot = await getDocs(q);
+    // First try to find baby by user's UID
+    let q = query(collection(db, PROFILES_COLLECTION), where('parentId', '==', userId), limit(1));
+    let querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
-      const doc = querySnapshot.docs[0];
-      const data = doc.data();
+      console.log('🔍 Found baby by parentId (own baby)');
+      const docSnap = querySnapshot.docs[0];
+      const data = docSnap.data();
 
       return {
-        name: data.name || 'עלמא',
+        name: data.name || 'תינוק',
         birthDate: data.birthDate instanceof Timestamp ? data.birthDate.toDate() : new Date(data.birthDate),
         parentId: userId,
-        childId: doc.id,
+        childId: docSnap.id,
         photoUrl: data.photoUrl || undefined,
       };
     }
+
+    console.log('🔍 No own baby found, checking family...');
+
+    // If not found, check if user belongs to a family
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    const familyId = userDoc.data()?.familyId;
+    console.log('🔍 User familyId:', familyId);
+
+    if (familyId) {
+      const familyDoc = await getDoc(doc(db, 'families', familyId));
+      if (familyDoc.exists()) {
+        const familyData = familyDoc.data();
+        const babyId = familyData?.babyId;
+        const creatorId = familyData?.createdBy;
+        console.log('🔍 Family found! babyId:', babyId, 'creatorId:', creatorId);
+
+        // Try to get baby directly by ID
+        if (babyId) {
+          console.log('🔍 Trying to get baby by babyId:', babyId);
+          const babyDoc = await getDoc(doc(db, PROFILES_COLLECTION, babyId));
+          if (babyDoc.exists()) {
+            console.log('🔍 SUCCESS! Found baby by babyId');
+            const data = babyDoc.data();
+            return {
+              name: data.name || 'תינוק',
+              birthDate: data.birthDate instanceof Timestamp ? data.birthDate.toDate() : new Date(data.birthDate),
+              parentId: creatorId,
+              childId: babyDoc.id,
+              photoUrl: data.photoUrl || undefined,
+            };
+          } else {
+            console.log('🔍 Baby doc not found by babyId');
+          }
+        }
+
+        // Fallback: find baby by family creator
+        if (creatorId && creatorId !== userId) {
+          console.log('🔍 Fallback: searching by creatorId:', creatorId);
+          q = query(collection(db, PROFILES_COLLECTION), where('parentId', '==', creatorId), limit(1));
+          querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            console.log('🔍 SUCCESS! Found baby by creator parentId');
+            const docSnap = querySnapshot.docs[0];
+            const data = docSnap.data();
+            return {
+              name: data.name || 'תינוק',
+              birthDate: data.birthDate instanceof Timestamp ? data.birthDate.toDate() : new Date(data.birthDate),
+              parentId: creatorId,
+              childId: docSnap.id,
+              photoUrl: data.photoUrl || undefined,
+            };
+          } else {
+            console.log('🔍 No baby found by creator parentId');
+          }
+        }
+      } else {
+        console.log('🔍 Family doc not found');
+      }
+    } else {
+      console.log('🔍 No familyId on user');
+    }
+
+    console.log('🔍 getChildProfile returning NULL');
     return null;
   } catch (e) {
+    console.log('🔍 ERROR in getChildProfile:', e);
     return null;
   }
 };
@@ -82,47 +150,89 @@ export const saveEventToFirebase = async (userId: string, childId: string, data:
   }
 };
 
-// 💡 שונה userId ל-childId
-export const getLastEvent = async (childId: string, eventType: 'food' | 'sleep' | 'diaper') => {
+// 💡 שונה userId ל-childId + תמיכה ב-creatorId
+export const getLastEvent = async (childId: string, eventType: 'food' | 'sleep' | 'diaper', creatorId?: string) => {
   try {
     const eventsRef = collection(db, EVENTS_COLLECTION);
-    const q = query(
+
+    // 1. Query by childId
+    const q1 = query(
       eventsRef,
       where('childId', '==', childId), // חיפוש לפי הילד
       where('type', '==', eventType),
       orderBy('timestamp', 'desc'),
       limit(1)
     );
-    // ... לוגיקת שליפה ...
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-      const doc = querySnapshot.docs[0];
-      return { id: doc.id, ...doc.data() };
+    const snap1 = await getDocs(q1);
+    let doc1 = !snap1.empty ? snap1.docs[0] : null;
+
+    // 2. Query by creatorId (fallback for old data)
+    let doc2 = null;
+    if (creatorId) {
+      const q2 = query(
+        eventsRef,
+        where('userId', '==', creatorId),
+        where('type', '==', eventType),
+        orderBy('timestamp', 'desc'),
+        limit(1)
+      );
+      const snap2 = await getDocs(q2);
+      doc2 = !snap2.empty ? snap2.docs[0] : null;
     }
+
+    // Compare and return the latest
+    if (doc1 && doc2) {
+      const t1 = doc1.data().timestamp instanceof Timestamp ? doc1.data().timestamp.toMillis() : new Date(doc1.data().timestamp).getTime();
+      const t2 = doc2.data().timestamp instanceof Timestamp ? doc2.data().timestamp.toMillis() : new Date(doc2.data().timestamp).getTime();
+      return t1 > t2 ? { id: doc1.id, ...doc1.data() } : { id: doc2.id, ...doc2.data() };
+    } else if (doc1) {
+      return { id: doc1.id, ...doc1.data() };
+    } else if (doc2) {
+      return { id: doc2.id, ...doc2.data() };
+    }
+
     return null;
   } catch (error) {
+    console.error("Error getting last event: ", error);
     return null;
   }
 };
 
-// 💡 שונה userId ל-childId
-export const getRecentHistory = async (childId: string) => {
-  console.log('🔎 getRecentHistory: Querying for childId =', childId);
+// 💡 שונה userId ל-childId + תמיכה ב-creatorId
+export const getRecentHistory = async (childId: string, creatorId?: string) => {
+  console.log('🔎 getRecentHistory: Querying for childId =', childId, 'creatorId =', creatorId);
 
   try {
     const eventsRef = collection(db, EVENTS_COLLECTION);
-    // NOTE: Removed orderBy to avoid needing composite index
-    // Sorting is done client-side instead
-    const q = query(
+
+    // 1. Query by childId
+    const q1 = query(
       eventsRef,
       where('childId', '==', childId),
-      limit(50) // Get more, we'll filter and sort client-side
+      limit(50)
     );
+    const snap1 = await getDocs(q1);
 
-    const querySnapshot = await getDocs(q);
-    console.log('🔎 getRecentHistory: Got', querySnapshot.docs.length, 'docs');
+    // 2. Query by creatorId (if provided)
+    let docs = [...snap1.docs];
 
-    const events = querySnapshot.docs.map(doc => {
+    if (creatorId) {
+      const q2 = query(
+        eventsRef,
+        where('userId', '==', creatorId),
+        limit(50)
+      );
+      const snap2 = await getDocs(q2);
+      // Merge without duplicates
+      const existingIds = new Set(docs.map(d => d.id));
+      snap2.docs.forEach(d => {
+        if (!existingIds.has(d.id)) {
+          docs.push(d);
+        }
+      });
+    }
+
+    const events = docs.map(doc => {
       const data = doc.data();
       return {
         id: doc.id,

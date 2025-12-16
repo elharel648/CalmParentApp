@@ -1,27 +1,32 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Share, Alert, ActivityIndicator, StatusBar, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
 // Hooks
-import { useChildProfile } from '../hooks/useChildProfile';
 import { useHomeData } from '../hooks/useHomeData';
 import { useMedications } from '../hooks/useMedications';
 import { useGuardian } from '../hooks/useGuardian';
+import { useTheme } from '../context/ThemeContext';
+import { useNotifications } from '../hooks/useNotifications';
+import { useActiveChild } from '../context/ActiveChildContext';
 
 // Components
 import HeaderSection from '../components/Home/HeaderSection';
-import GuardianSelector from '../components/Home/GuardianSelector';
 import QuickActions from '../components/Home/QuickActions';
-import MedicationsTracker from '../components/Home/MedicationsTracker'; // Keep this if it's still used
+import MedicationsTracker from '../components/Home/MedicationsTracker';
 import ShareStatusButton from '../components/Home/ShareStatusButton';
 import HealthCard from '../components/Home/HealthCard';
+import FamilyStatusIndicator from '../components/Home/FamilyStatusIndicator';
+import ChildPicker from '../components/Home/ChildPicker';
+import AddBabyPlaceholder from '../components/Home/AddBabyPlaceholder';
 
 import DailyTimeline from '../components/DailyTimeline';
 import CalmModeModal from '../components/CalmModeModal';
 import TrackingModal from '../components/TrackingModal';
 import WhiteNoiseModal from '../components/WhiteNoiseModal';
-import SupplementsModal from '../components/Home/SupplementsModal'; // Added this import
+import SupplementsModal from '../components/Home/SupplementsModal';
+import { JoinFamilyModal } from '../components/Family/JoinFamilyModal';
 
 // Services
 import { auth } from '../services/firebaseConfig';
@@ -35,37 +40,77 @@ import { TrackingType, DynamicStyles } from '../types/home';
  * Reduced from 535 lines to ~180 lines
  */
 export default function HomeScreen({ navigation }: any) {
-    // --- Custom Hooks ---
-    const { profile, greeting, loading: profileLoading } = useChildProfile();
+    // --- Theme ---
+    const { theme, isDarkMode } = useTheme();
+
+    // --- Active Child from Context ---
+    const { activeChild, allChildren } = useActiveChild();
+
+    // Derive profile from active child
+    const profile = useMemo(() => {
+        if (!activeChild) {
+            return { id: '', name: 'הבייבי שלי', birthDate: new Date(), ageMonths: 0, photoUrl: undefined, parentId: '' };
+        }
+        return {
+            id: activeChild.childId,
+            name: activeChild.childName,
+            birthDate: new Date(), // Will be fetched separately if needed
+            ageMonths: 0,
+            photoUrl: activeChild.photoUrl,
+            parentId: auth.currentUser?.uid || '',
+        };
+    }, [activeChild]);
+
+    // Calculate greeting
+    const greeting = useMemo(() => {
+        const hour = new Date().getHours();
+        if (hour >= 5 && hour < 12) return 'בוקר טוב';
+        if (hour >= 12 && hour < 18) return 'צהריים טובים';
+        return 'ערב טוב';
+    }, []);
+
+    // --- Custom Hooks (using active child ID) ---
     const {
         lastFeedTime,
         lastSleepTime,
         dailyStats,
         refresh: refreshHomeData,
-    } = useHomeData(profile.id, profile.name, profile.ageMonths);
+    } = useHomeData(profile.id, profile.name, profile.ageMonths, profile.parentId);
     const { meds, toggleMed, syncStatus, refresh: refreshMeds } = useMedications(profile.id);
     const { currentGuardian, setCurrentGuardian, availableRoles, isPremium } = useGuardian();
+    const { scheduleFeedingReminder } = useNotifications();
 
     // --- Local State ---
-    const [isNightMode, setIsNightMode] = useState(false);
     const [isCalmModeOpen, setIsCalmModeOpen] = useState(false);
     const [isWhiteNoiseOpen, setIsWhiteNoiseOpen] = useState(false);
     const [isSupplementsOpen, setIsSupplementsOpen] = useState(false);
     const [trackingModalType, setTrackingModalType] = useState<TrackingType>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [timelineRefresh, setTimelineRefresh] = useState(0);
+    const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
 
     const user = auth.currentUser;
 
-    // --- Dynamic Styles ---
+    // Refresh data when active child changes
+    useEffect(() => {
+        if (activeChild?.childId) {
+            refreshHomeData();
+            refreshMeds();
+            setTimelineRefresh(prev => prev + 1);
+        }
+    }, [activeChild?.childId]);
+
+    // --- Dynamic Styles (now from global theme) ---
     const dynamicStyles: DynamicStyles = useMemo(() => ({
-        bg: isNightMode ? '#000000' : '#f9fafb',
-        text: isNightMode ? '#EF4444' : '#111827',
-        textSub: isNightMode ? '#7F1D1D' : '#6b7280',
-        aiBg: isNightMode ? '#1A0000' : '#f5f3ff',
-        aiBorder: isNightMode ? '#550000' : '#ddd6fe',
-        aiTextNight: isNightMode ? '#FCA5A5' : '#5b21b6',
-    }), [isNightMode]);
+        bg: theme.background,
+        text: theme.textPrimary,
+        textSub: theme.textSecondary,
+        aiBg: isDarkMode ? '#1A0000' : '#f5f3ff',
+        aiBorder: isDarkMode ? '#550000' : '#ddd6fe',
+        aiTextNight: isDarkMode ? '#FCA5A5' : '#5b21b6',
+    }), [theme, isDarkMode]);
+
+
 
     // --- Pull to Refresh ---
     const onRefresh = useCallback(async () => {
@@ -110,12 +155,17 @@ export default function HomeScreen({ navigation }: any) {
             console.log('✅ Saved successfully!');
             Alert.alert('מעולה!', 'התיעוד נשמר בהצלחה ✅');
 
+            // Schedule feeding reminder if this was a food event
+            if (data.type === 'food') {
+                scheduleFeedingReminder(new Date());
+            }
+
             refreshHomeData();
-            setTimelineRefresh(prev => prev + 1); // Trigger timeline refresh
+            setTimelineRefresh(prev => prev + 1);
         } catch {
             Alert.alert('שגיאה בשמירה');
         }
-    }, [user, profile.id, refreshHomeData]);
+    }, [user, profile.id, refreshHomeData, scheduleFeedingReminder]);
 
     const shareMessage = useMemo(() =>
         `עדכון מ-CalmParent:\n👶 ${profile.name}\n🍼 אכל/ה לאחרונה: ${lastFeedTime}\n😴 ישן/ה לאחרונה: ${lastSleepTime}`,
@@ -127,7 +177,8 @@ export default function HomeScreen({ navigation }: any) {
     }, [shareMessage]);
 
     // --- Loading State ---
-    if (profileLoading) {
+    const { isLoading: contextLoading } = useActiveChild();
+    if (contextLoading && !profile.id) {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
                 <ActivityIndicator size="large" color="#4f46e5" />
@@ -138,7 +189,7 @@ export default function HomeScreen({ navigation }: any) {
     // --- Render ---
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: dynamicStyles.bg }]}>
-            <StatusBar barStyle={isNightMode ? 'light-content' : 'dark-content'} />
+            <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
@@ -147,47 +198,58 @@ export default function HomeScreen({ navigation }: any) {
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }
             >
-                <HeaderSection
-                    greeting={greeting}
-                    profile={profile}
-                    onProfileUpdate={onRefresh}
-                    dynamicStyles={dynamicStyles}
-                    dailyStats={dailyStats}
-                    lastFeedTime={lastFeedTime}
-                    lastSleepTime={lastSleepTime}
-                    meds={meds}
-                    navigation={navigation}
-                />
+                {/* When NO baby profile - show only Add Baby Placeholder */}
+                {!profile.id && (
+                    <AddBabyPlaceholder
+                        onCreateBaby={() => navigation.navigate('CreateBaby')}
+                        onJoinWithCode={() => setIsJoinModalOpen(true)}
+                    />
+                )}
 
-                <GuardianSelector
-                    currentGuardian={currentGuardian}
-                    availableRoles={availableRoles}
-                    isPremium={isPremium}
-                    onSelect={setCurrentGuardian}
-                    onUpgradePress={() => navigation.navigate('Subscription')}
-                    dynamicStyles={dynamicStyles}
-                />
+                {/* When HAVE baby profile - show full home screen */}
+                {profile.id && (
+                    <>
+                        <HeaderSection
+                            greeting={greeting}
+                            profile={profile}
+                            onProfileUpdate={onRefresh}
+                            dynamicStyles={dynamicStyles}
+                            dailyStats={dailyStats}
+                            lastFeedTime={lastFeedTime}
+                            lastSleepTime={lastSleepTime}
+                            meds={meds}
+                            navigation={navigation}
+                        />
 
-                <QuickActions
-                    lastFeedTime={lastFeedTime}
-                    lastSleepTime={lastSleepTime}
-                    onFoodPress={() => setTrackingModalType('food')}
-                    onSleepPress={() => setTrackingModalType('sleep')}
-                    onDiaperPress={() => setTrackingModalType('diaper')}
-                    onWhiteNoisePress={() => setIsWhiteNoiseOpen(true)}
-                    onSOSPress={() => setIsCalmModeOpen(true)}
-                    onSupplementsPress={() => setIsSupplementsOpen(true)}
-                    meds={meds}
-                    dynamicStyles={dynamicStyles}
-                />
+                        {/* Child Picker - switch between children */}
+                        <ChildPicker
+                            onChildSelect={() => refreshHomeData()}
+                            onAddChild={() => navigation.navigate('CreateBaby')}
+                        />
 
+                        {/* Family Status - who's online */}
+                        <FamilyStatusIndicator onPress={() => navigation.navigate('הגדרות')} />
 
+                        <QuickActions
+                            lastFeedTime={lastFeedTime}
+                            lastSleepTime={lastSleepTime}
+                            onFoodPress={() => setTrackingModalType('food')}
+                            onSleepPress={() => setTrackingModalType('sleep')}
+                            onDiaperPress={() => setTrackingModalType('diaper')}
+                            onWhiteNoisePress={() => setIsWhiteNoiseOpen(true)}
+                            onSOSPress={() => setIsCalmModeOpen(true)}
+                            onSupplementsPress={() => setIsSupplementsOpen(true)}
+                            meds={meds}
+                            dynamicStyles={dynamicStyles}
+                        />
 
-                <HealthCard dynamicStyles={dynamicStyles} />
+                        <HealthCard dynamicStyles={dynamicStyles} />
 
-                {!isNightMode && <DailyTimeline refreshTrigger={timelineRefresh} />}
+                        <DailyTimeline refreshTrigger={timelineRefresh} childId={profile.id} />
 
-                <ShareStatusButton onShare={shareStatus} message={shareMessage} />
+                        <ShareStatusButton onShare={shareStatus} message={shareMessage} />
+                    </>
+                )}
             </ScrollView>
 
             {/* Modals */}
@@ -204,6 +266,14 @@ export default function HomeScreen({ navigation }: any) {
                 type={trackingModalType}
                 onClose={() => setTrackingModalType(null)}
                 onSave={handleSaveTracking}
+            />
+            <JoinFamilyModal
+                visible={isJoinModalOpen}
+                onClose={() => setIsJoinModalOpen(false)}
+                onSuccess={() => {
+                    setIsJoinModalOpen(false);
+                    onRefresh();
+                }}
             />
         </SafeAreaView>
     );

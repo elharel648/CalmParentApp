@@ -1,7 +1,7 @@
 import React, { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Platform, Alert, TextInput, Animated, Dimensions, Image, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Heart, Syringe, Thermometer, Pill, Stethoscope, X, ChevronLeft, ChevronRight, Plus, Check, Trash2, Camera, FileText, Image as ImageIcon, Minus } from 'lucide-react-native';
+import { Heart, Syringe, Thermometer, Pill, Stethoscope, X, ChevronLeft, ChevronRight, Plus, Check, Trash2, Camera, FileText, Image as ImageIcon, Minus, ClipboardList } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -16,7 +16,7 @@ interface HealthCardProps {
     dynamicStyles: { text: string };
 }
 
-type HealthScreen = 'menu' | 'vaccines' | 'doctor' | 'illness' | 'temperature' | 'medications';
+type HealthScreen = 'menu' | 'vaccines' | 'doctor' | 'illness' | 'temperature' | 'medications' | 'history';
 
 interface HealthOption {
     key: HealthScreen;
@@ -45,6 +45,7 @@ const HEALTH_OPTIONS: HealthOption[] = [
     { key: 'illness', label: 'מחלות', description: 'היסטוריית מחלות', icon: Heart, gradientColors: ['#EF4444', '#DC2626'], bgColor: '#FEF2F2' },
     { key: 'temperature', label: 'טמפרטורה', description: 'מעקב חום', icon: Thermometer, gradientColors: ['#F59E0B', '#D97706'], bgColor: '#FFFBEB' },
     { key: 'medications', label: 'תרופות', description: 'ניהול תרופות', icon: Pill, gradientColors: ['#8B5CF6', '#7C3AED'], bgColor: '#F5F3FF' },
+    { key: 'history', label: 'היסטוריה', description: 'צפה בכל השמירות', icon: ClipboardList, gradientColors: ['#0EA5E9', '#0284C7'], bgColor: '#E0F2FE' },
 ];
 
 const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
@@ -79,9 +80,17 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [uploadingDoc, setUploadingDoc] = useState(false);
 
+    // History state
+    const [healthLog, setHealthLog] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [historyFilter, setHistoryFilter] = useState<'all' | 'temperature' | 'doctor' | 'illness' | 'medication'>('all');
+
     useEffect(() => {
         if (isModalOpen && currentScreen === 'vaccines') {
             loadVaccines();
+        }
+        if (isModalOpen && currentScreen === 'history') {
+            loadHealthLog();
         }
     }, [isModalOpen, currentScreen]);
 
@@ -104,6 +113,32 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
         } catch (error) {
             console.error('Error loading vaccines:', error);
         }
+    };
+
+    const loadHealthLog = async () => {
+        setLoadingHistory(true);
+        const user = auth.currentUser;
+        if (!user) {
+            setLoadingHistory(false);
+            return;
+        }
+
+        try {
+            const q = query(collection(db, 'babies'), where('parentId', '==', user.uid), limit(1));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                const babyDoc = querySnapshot.docs[0];
+                const data = babyDoc.data();
+                const log = data.healthLog || [];
+                // Sort by timestamp descending
+                log.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                setHealthLog(log);
+            }
+        } catch (error) {
+            console.error('Error loading health log:', error);
+        }
+        setLoadingHistory(false);
     };
 
     const toggleVaccine = async (key: string) => {
@@ -307,23 +342,6 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
     // Menu
     const renderMenu = () => (
         <ScrollView contentContainerStyle={styles.menuContainer} showsVerticalScrollIndicator={false}>
-            <View style={styles.statsRow}>
-                <View style={styles.statCard}>
-                    <Text style={styles.statNumber}>0</Text>
-                    <Text style={styles.statLabel}>מחלות השנה</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statCard}>
-                    <Text style={styles.statNumber}>0</Text>
-                    <Text style={styles.statLabel}>ביקורי רופא</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statCard}>
-                    <Text style={[styles.statNumber, { color: '#10B981' }]}>✓</Text>
-                    <Text style={styles.statLabel}>חיסונים עדכניים</Text>
-                </View>
-            </View>
-
             <View style={styles.optionsGrid}>
                 {HEALTH_OPTIONS.map((option, index) => {
                     const Icon = option.icon;
@@ -679,6 +697,158 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
         </ScrollView>
     );
 
+    // History - beautiful tabbed view with premium cards
+    const renderHistory = () => {
+        const formatDate = (timestamp: string) => {
+            const d = new Date(timestamp);
+            const today = new Date();
+            const isToday = d.toDateString() === today.toDateString();
+            if (isToday) {
+                return `היום, ${d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`;
+            }
+            return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        };
+
+        const getTypeConfig = (type: string) => {
+            switch (type) {
+                case 'temperature': return { label: 'חום', icon: Thermometer, color: '#F59E0B', bg: '#FEF3C7' };
+                case 'doctor': return { label: 'רופא', icon: Stethoscope, color: '#10B981', bg: '#D1FAE5' };
+                case 'illness': return { label: 'מחלה', icon: Heart, color: '#EF4444', bg: '#FEE2E2' };
+                case 'medication': return { label: 'תרופה', icon: Pill, color: '#8B5CF6', bg: '#EDE9FE' };
+                default: return { label: 'שונות', icon: ClipboardList, color: '#0EA5E9', bg: '#E0F2FE' };
+            }
+        };
+
+        const filterTabs = [
+            { key: 'all', label: 'הכל' },
+            { key: 'temperature', label: 'חום' },
+            { key: 'doctor', label: 'רופא' },
+            { key: 'illness', label: 'מחלות' },
+            { key: 'medication', label: 'תרופות' },
+        ];
+
+        const filteredLogs = historyFilter === 'all'
+            ? healthLog
+            : healthLog.filter(item => item.type === historyFilter);
+
+        return (
+            <View style={{ flex: 1, paddingTop: 8 }}>
+                {/* Filter Tabs */}
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginBottom: 16, flexGrow: 0 }}
+                    contentContainerStyle={{ paddingHorizontal: 8, gap: 10, justifyContent: 'center', flexGrow: 1 }}
+                >
+                    {filterTabs.map((tab) => (
+                        <TouchableOpacity
+                            key={tab.key}
+                            onPress={() => {
+                                setHistoryFilter(tab.key as any);
+                                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            }}
+                            style={{
+                                paddingHorizontal: 16,
+                                paddingVertical: 8,
+                                borderRadius: 20,
+                                backgroundColor: historyFilter === tab.key ? '#0EA5E9' : '#F3F4F6',
+                            }}
+                        >
+                            <Text style={{
+                                fontSize: 14,
+                                fontWeight: '600',
+                                color: historyFilter === tab.key ? '#fff' : '#6B7280',
+                            }}>
+                                {tab.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+
+                {/* Content */}
+                <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                    {loadingHistory ? (
+                        <View style={{ alignItems: 'center', marginTop: 40 }}>
+                            <ActivityIndicator size="large" color="#0EA5E9" />
+                            <Text style={{ color: '#6B7280', marginTop: 12 }}>טוען...</Text>
+                        </View>
+                    ) : filteredLogs.length === 0 ? (
+                        <View style={{ alignItems: 'center', marginTop: 40 }}>
+                            <View style={{
+                                width: 80, height: 80, borderRadius: 40,
+                                backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                <ClipboardList size={36} color="#9CA3AF" />
+                            </View>
+                            <Text style={{ fontSize: 16, color: '#1F2937', fontWeight: '600', marginTop: 16 }}>
+                                {historyFilter === 'all' ? 'אין שמירות עדיין' : 'אין שמירות בקטגוריה זו'}
+                            </Text>
+                        </View>
+                    ) : (
+                        filteredLogs.map((item: any, index: number) => {
+                            const config = getTypeConfig(item.type);
+                            const Icon = config.icon;
+                            return (
+                                <View key={index} style={{
+                                    backgroundColor: '#fff',
+                                    borderRadius: 16,
+                                    padding: 16,
+                                    marginBottom: 12,
+                                    flexDirection: 'row-reverse',
+                                    alignItems: 'flex-start',
+                                    shadowColor: '#000',
+                                    shadowOffset: { width: 0, height: 1 },
+                                    shadowOpacity: 0.05,
+                                    shadowRadius: 4,
+                                    elevation: 2,
+                                }}>
+                                    {/* Icon Badge - on right in RTL */}
+                                    <View style={{
+                                        width: 48, height: 48, borderRadius: 14,
+                                        backgroundColor: config.bg,
+                                        alignItems: 'center', justifyContent: 'center',
+                                        marginLeft: 16,
+                                    }}>
+                                        <Icon size={24} color={config.color} />
+                                    </View>
+
+                                    {/* Content - on left in RTL */}
+                                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                            <Text style={{ fontSize: 12, color: config.color, fontWeight: '700' }}>
+                                                {config.label}
+                                            </Text>
+                                            <Text style={{ fontSize: 11, color: '#9CA3AF' }}>
+                                                {formatDate(item.timestamp)}
+                                            </Text>
+                                        </View>
+
+                                        {item.value && (
+                                            <Text style={{ fontSize: 28, fontWeight: '800', color: '#1F2937', marginTop: 2, textAlign: 'right' }}>
+                                                {item.value}°
+                                            </Text>
+                                        )}
+                                        {item.name && (
+                                            <Text style={{ fontSize: 16, fontWeight: '600', color: '#1F2937', marginTop: 2, textAlign: 'right' }}>
+                                                {item.name}
+                                            </Text>
+                                        )}
+                                        {item.reason && (
+                                            <Text style={{ fontSize: 14, color: '#374151', marginTop: 2, textAlign: 'right' }}>{item.reason}</Text>
+                                        )}
+                                        {item.note && (
+                                            <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4, textAlign: 'right' }}>{item.note}</Text>
+                                        )}
+                                    </View>
+                                </View>
+                            );
+                        })
+                    )}
+                </ScrollView>
+            </View>
+        );
+    };
+
     const getScreenTitle = () => {
         switch (currentScreen) {
             case 'vaccines': return 'פנקס חיסונים';
@@ -686,6 +856,7 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
             case 'illness': return 'מחלות';
             case 'temperature': return 'טמפרטורה';
             case 'medications': return 'תרופות';
+            case 'history': return 'היסטוריה';
             default: return 'בריאות';
         }
     };
@@ -697,6 +868,7 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
             case 'illness': return ['#EF4444', '#DC2626'];
             case 'temperature': return ['#F59E0B', '#D97706'];
             case 'medications': return ['#8B5CF6', '#7C3AED'];
+            case 'history': return ['#0EA5E9', '#0284C7'];
             default: return ['#10B981', '#059669'];
         }
     };
@@ -744,6 +916,7 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
                             {currentScreen === 'illness' && renderIllness()}
                             {currentScreen === 'temperature' && renderTemperature()}
                             {currentScreen === 'medications' && renderMedications()}
+                            {currentScreen === 'history' && renderHistory()}
                         </View>
                     </View>
                 </View>
@@ -776,12 +949,12 @@ const styles = StyleSheet.create({
     statDivider: { width: 1, backgroundColor: '#E5E7EB' },
     statNumber: { fontSize: 24, fontWeight: '800', color: '#1F2937' },
     statLabel: { fontSize: 11, color: '#6B7280', marginTop: 4 },
-    optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    optionCardWrapper: { width: '48%', marginBottom: 16 },
-    optionCard: { borderRadius: 24, padding: 20, alignItems: 'center', minHeight: 140, justifyContent: 'center' },
-    optionIconGradient: { width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-    optionLabel: { fontSize: 16, fontWeight: '700', color: '#1F2937' },
-    optionDescription: { fontSize: 12, color: '#6B7280', marginTop: 4 },
+    optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 },
+    optionCardWrapper: { width: '47%', marginBottom: 8 },
+    optionCard: { borderRadius: 20, padding: 18, alignItems: 'center', minHeight: 150, justifyContent: 'center' },
+    optionIconGradient: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+    optionLabel: { fontSize: 15, fontWeight: '700', color: '#1F2937', marginTop: 2 },
+    optionDescription: { fontSize: 11, color: '#9CA3AF', marginTop: 6, textAlign: 'center' },
 
     screenContent: { padding: 20, paddingBottom: 40 },
     screenHeader: { alignItems: 'center', marginBottom: 24 },

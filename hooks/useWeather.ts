@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import * as Location from 'expo-location';
 import { WeatherData } from '../types/home';
 
-const WEATHER_API_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY || 'bd5e378503939ddaee76f12ad7a97608';
+const WEATHER_API_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY || '41f2779d99ca3ddd58629c9708ab787d';
 
 interface UseWeatherReturn {
     weather: WeatherData;
@@ -65,7 +65,7 @@ export const useWeather = (): UseWeatherReturn => {
                 loading: false,
             });
         } catch (e) {
-            console.error('Weather error:', e);
+            if (__DEV__) console.log('Weather fetch issue:', e);
             setWeather({
                 temp: 22,
                 city: 'ישראל',

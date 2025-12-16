@@ -4,6 +4,8 @@ import { X, Check, Droplets, Play, Pause, Baby, Moon, Utensils, Apple, Milk } fr
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useSleepTimer } from '../context/SleepTimerContext';
+import { useFoodTimer } from '../context/FoodTimerContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface TrackingModalProps {
   visible: boolean;
@@ -34,6 +36,9 @@ const TYPE_CONFIG = {
 };
 
 export default function TrackingModal({ visible, type, onClose, onSave }: TrackingModalProps) {
+  const { theme, isDarkMode } = useTheme();
+  const foodTimerContext = useFoodTimer();
+
   // --- Food States ---
   const [foodType, setFoodType] = useState<'bottle' | 'breast' | 'pumping' | 'solids'>('bottle');
   const [amount, setAmount] = useState('');
@@ -45,14 +50,10 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
   const [activeSide, setActiveSide] = useState<'left' | 'right' | null>(null);
   const breastTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Pumping Timer
-  const [pumpingTimer, setPumpingTimer] = useState(0);
-  const [isPumpingActive, setIsPumpingActive] = useState(false);
-  const pumpingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // --- Sleep States (Manual entry) ---
   const [sleepHours, setSleepHours] = useState(0);
   const [sleepMinutes, setSleepMinutes] = useState(30);
+  const [sleepNote, setSleepNote] = useState('');
   const sleepContext = useSleepTimer();
 
   // --- Diaper States ---
@@ -72,10 +73,10 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
       setLeftTimer(0);
       setRightTimer(0);
       setActiveSide(null);
-      setPumpingTimer(0);
-      setIsPumpingActive(false);
+      // Note: pumping timer uses global context, no reset here
       setSleepHours(0);
       setSleepMinutes(30);
+      setSleepNote('');
       setDiaperNote('');
       clearIntervals();
 
@@ -99,7 +100,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
 
   const clearIntervals = () => {
     if (breastTimerRef.current) clearInterval(breastTimerRef.current);
-    if (pumpingTimerRef.current) clearInterval(pumpingTimerRef.current);
+    // pumping timer uses global context, no interval to clear
   };
 
   // Breast timer
@@ -117,19 +118,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
     };
   }, [activeSide]);
 
-  // Pumping timer
-  useEffect(() => {
-    if (isPumpingActive) {
-      pumpingTimerRef.current = setInterval(() => {
-        setPumpingTimer(t => t + 1);
-      }, 1000);
-    } else {
-      if (pumpingTimerRef.current) clearInterval(pumpingTimerRef.current);
-    }
-    return () => {
-      if (pumpingTimerRef.current) clearInterval(pumpingTimerRef.current);
-    };
-  }, [isPumpingActive]);
+  // Pumping timer uses global context now - no local effect needed
 
   const toggleBreastTimer = (side: 'left' | 'right') => {
     if (Platform.OS !== 'web') {
@@ -143,8 +132,16 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    setIsPumpingActive(!isPumpingActive);
+    if (foodTimerContext.isRunning) {
+      foodTimerContext.stop();
+    } else {
+      foodTimerContext.start('pumping');
+    }
   };
+
+  // Alias for easier access
+  const isPumpingActive = foodTimerContext.isRunning && foodTimerContext.timerType === 'pumping';
+  const pumpingTimer = foodTimerContext.elapsedSeconds;
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -178,15 +175,71 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
         data.subType = 'solids';
       }
     } else if (type === 'sleep') {
-      // Use manual hours/minutes OR timer
-      const totalMinutes = (sleepHours * 60) + sleepMinutes;
-      if (sleepContext.elapsedSeconds > 0) {
-        data.note = `משך שינה: ${sleepContext.formatTime(sleepContext.elapsedSeconds)}`;
+      // Handle different sleep modes
+      let durationText = '';
+
+      if (sleepMode === 'timer' && sleepContext.elapsedSeconds > 0) {
+        // Timer mode - use elapsed seconds
+        durationText = `משך שינה: ${sleepContext.formatTime(sleepContext.elapsedSeconds)}`;
+        data.duration = sleepContext.elapsedSeconds;
         if (sleepContext.isRunning) sleepContext.stop();
-      } else if (totalMinutes > 0) {
-        const h = Math.floor(totalMinutes / 60);
-        const m = totalMinutes % 60;
-        data.note = `משך שינה: ${h}:${String(m).padStart(2, '0')}`;
+
+      } else if (sleepMode === 'duration') {
+        // Duration mode - use hours/minutes
+        const totalMinutes = (sleepHours * 60) + sleepMinutes;
+        if (totalMinutes > 0) {
+          const h = Math.floor(totalMinutes / 60);
+          const m = totalMinutes % 60;
+          durationText = `משך שינה: ${h}:${String(m).padStart(2, '0')}`;
+          data.duration = totalMinutes * 60;
+        }
+
+      } else if (sleepMode === 'timerange' && sleepStartTime && sleepEndTime) {
+        // Time range mode - calculate from start/end times
+        const parseTime = (t: string): { hours: number; minutes: number } | null => {
+          // Handle various formats: "8", "08", "8:00", "08:00", "19:30"
+          const clean = t.replace(/[^\d:]/g, '');
+          if (clean.includes(':')) {
+            const [h, m] = clean.split(':').map(Number);
+            return { hours: h || 0, minutes: m || 0 };
+          } else {
+            return { hours: Number(clean) || 0, minutes: 0 };
+          }
+        };
+
+        const start = parseTime(sleepStartTime);
+        const end = parseTime(sleepEndTime);
+
+        if (start && end) {
+          let startMinutes = start.hours * 60 + start.minutes;
+          let endMinutes = end.hours * 60 + end.minutes;
+
+          // If end is earlier than start, assume next day (e.g., 22:00 → 07:00)
+          if (endMinutes <= startMinutes) {
+            endMinutes += 24 * 60;
+          }
+
+          const totalMinutes = endMinutes - startMinutes;
+          const h = Math.floor(totalMinutes / 60);
+          const m = totalMinutes % 60;
+
+          const formattedStart = `${String(start.hours).padStart(2, '0')}:${String(start.minutes).padStart(2, '0')}`;
+          const formattedEnd = `${String(end.hours).padStart(2, '0')}:${String(end.minutes).padStart(2, '0')}`;
+
+          durationText = `${formattedStart} → ${formattedEnd} (${h} שע' ${m > 0 ? `${m} דק'` : ''})`;
+          data.duration = totalMinutes * 60;
+          data.startTime = formattedStart;
+          data.endTime = formattedEnd;
+        }
+      }
+
+      // Combine duration with user note
+      if (durationText && sleepNote) {
+        data.note = `${durationText} | ${sleepNote}`;
+      } else if (durationText) {
+        data.note = durationText;
+      } else if (sleepNote) {
+        data.note = sleepNote;
       } else {
         data.note = 'שינה חדשה';
       }
@@ -239,7 +292,13 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           onPress={() => { setFoodType('pumping'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <View style={styles.foodTabIconContainer}>
-            <Droplets size={24} color={foodType === 'pumping' ? '#fff' : '#9CA3AF'} strokeWidth={2} />
+            {isPumpingActive ? (
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{formatTime(pumpingTimer)}</Text>
+            ) : pumpingTimer > 0 ? (
+              <Text style={{ color: foodType === 'pumping' ? '#fff' : '#6366F1', fontSize: 12, fontWeight: '600' }}>{formatTime(pumpingTimer)}</Text>
+            ) : (
+              <Droplets size={24} color={foodType === 'pumping' ? '#fff' : '#9CA3AF'} strokeWidth={2} />
+            )}
           </View>
           <Text style={[styles.foodTabText, foodType === 'pumping' && styles.activeFoodTabText]}>שאיבה</Text>
         </TouchableOpacity>
@@ -372,130 +431,167 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
     </View>
   );
 
-  // --- Sleep Content (Combined: Timer + Manual) ---
+  // Sleep input mode: 'timer' | 'duration' | 'timerange'
+  const [sleepMode, setSleepMode] = React.useState<'timer' | 'duration' | 'timerange'>('duration');
+  const [sleepStartTime, setSleepStartTime] = React.useState('');
+  const [sleepEndTime, setSleepEndTime] = React.useState('');
+
   const renderSleepContent = () => (
     <View style={{ width: '100%' }}>
-      {/* Timer Section - Compact */}
-      <TouchableOpacity
-        style={[styles.sleepTimerCompact, sleepContext.isRunning && styles.sleepTimerCompactActive]}
-        onPress={() => {
-          if (sleepContext.isRunning) {
-            sleepContext.stop();
-            // Auto-fill the manual entry from timer
-            const totalMins = Math.floor(sleepContext.elapsedSeconds / 60);
-            setSleepHours(Math.floor(totalMins / 60));
-            setSleepMinutes(totalMins % 60);
-          } else {
-            sleepContext.start();
-          }
-          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }}
-        activeOpacity={0.8}
-      >
-        {sleepContext.isRunning ? <Pause size={20} color="#fff" /> : <Play size={20} color="#6366F1" />}
-        <Text style={[styles.sleepTimerCompactText, sleepContext.isRunning && { color: '#fff' }]}>
-          {sleepContext.isRunning ? sleepContext.formatTime(sleepContext.elapsedSeconds) : 'הפעל טיימר'}
-        </Text>
-        {sleepContext.isRunning && (
-          <View style={styles.sleepTimerPulse} />
-        )}
-      </TouchableOpacity>
+      {/* Mode Selector - Modern Pills */}
+      <View style={styles.sleepModeRow}>
+        <TouchableOpacity
+          style={[styles.sleepModeBtn, sleepMode === 'timerange' && styles.sleepModeBtnActive]}
+          onPress={() => { setSleepMode('timerange'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        >
+          <Text style={[styles.sleepModeText, sleepMode === 'timerange' && styles.sleepModeTextActive]}>שעות</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sleepModeBtn, sleepMode === 'duration' && styles.sleepModeBtnActive]}
+          onPress={() => { setSleepMode('duration'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        >
+          <Text style={[styles.sleepModeText, sleepMode === 'duration' && styles.sleepModeTextActive]}>משך</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sleepModeBtn, sleepMode === 'timer' && styles.sleepModeBtnActive]}
+          onPress={() => { setSleepMode('timer'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        >
+          <Text style={[styles.sleepModeText, sleepMode === 'timer' && styles.sleepModeTextActive]}>טיימר</Text>
+        </TouchableOpacity>
+      </View>
 
-      {sleepContext.isRunning && (
-        <Text style={styles.sleepTimerHint}>⏱️ הטיימר רץ! לחץ לעצירה ומילוי אוטומטי</Text>
+      {/* Timer Mode */}
+      {sleepMode === 'timer' && (
+        <View style={styles.sleepTimerSection}>
+          <TouchableOpacity
+            style={[styles.sleepTimerBig, sleepContext.isRunning && styles.sleepTimerBigActive]}
+            onPress={() => {
+              if (sleepContext.isRunning) {
+                sleepContext.stop();
+                const totalMins = Math.floor(sleepContext.elapsedSeconds / 60);
+                setSleepHours(Math.floor(totalMins / 60));
+                setSleepMinutes(totalMins % 60);
+                setSleepMode('duration');
+              } else {
+                sleepContext.start();
+              }
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }}
+          >
+            {sleepContext.isRunning ? <Pause size={28} color="#fff" /> : <Play size={28} color="#6366F1" />}
+            <Text style={[styles.sleepTimerBigText, sleepContext.isRunning && { color: '#fff' }]}>
+              {sleepContext.isRunning ? sleepContext.formatTime(sleepContext.elapsedSeconds) : 'התחל'}
+            </Text>
+          </TouchableOpacity>
+          {sleepContext.isRunning && (
+            <Text style={styles.sleepTimerHint}>⏱️ הטיימר רץ - לחץ לעצירה</Text>
+          )}
+        </View>
       )}
 
-      {/* Divider */}
-      <View style={styles.sleepDivider}>
-        <View style={styles.sleepDividerLine} />
-        <Text style={styles.sleepDividerText}>או הזן ידנית</Text>
-        <View style={styles.sleepDividerLine} />
-      </View>
+      {/* Duration Mode - Modern Sliders */}
+      {sleepMode === 'duration' && (
+        <View style={styles.sleepDurationSection}>
+          <View style={styles.sleepDurationRow}>
+            <View style={styles.sleepDurationItem}>
+              <Text style={styles.sleepDurationLabel}>שעות</Text>
+              <View style={styles.sleepSlider}>
+                <TouchableOpacity style={styles.sleepSliderBtn} onPress={() => { setSleepHours(Math.max(0, sleepHours - 1)); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                  <Text style={styles.sleepSliderBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.sleepSliderValue}>{sleepHours}</Text>
+                <TouchableOpacity style={styles.sleepSliderBtn} onPress={() => { setSleepHours(Math.min(12, sleepHours + 1)); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                  <Text style={styles.sleepSliderBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
-      {/* Manual Entry */}
-      <View style={styles.sleepInputRow}>
-        {/* Hours */}
-        <View style={styles.sleepInputGroup}>
-          <TouchableOpacity
-            style={styles.sleepBtn}
-            onPress={() => {
-              setSleepHours(Math.max(0, sleepHours - 1));
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-          >
-            <Text style={styles.sleepBtnText}>−</Text>
-          </TouchableOpacity>
-          <View style={styles.sleepValueBox}>
-            <Text style={styles.sleepValue}>{sleepHours}</Text>
-            <Text style={styles.sleepUnit}>שעות</Text>
+            <Text style={styles.sleepDurationSeparator}>:</Text>
+
+            <View style={styles.sleepDurationItem}>
+              <Text style={styles.sleepDurationLabel}>דקות</Text>
+              <View style={styles.sleepSlider}>
+                <TouchableOpacity style={styles.sleepSliderBtn} onPress={() => { setSleepMinutes(Math.max(0, sleepMinutes - 5)); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                  <Text style={styles.sleepSliderBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.sleepSliderValue}>{String(sleepMinutes).padStart(2, '0')}</Text>
+                <TouchableOpacity style={styles.sleepSliderBtn} onPress={() => { setSleepMinutes(Math.min(55, sleepMinutes + 5)); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                  <Text style={styles.sleepSliderBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-          <TouchableOpacity
-            style={styles.sleepBtn}
-            onPress={() => {
-              setSleepHours(Math.min(12, sleepHours + 1));
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-          >
-            <Text style={styles.sleepBtnText}>+</Text>
-          </TouchableOpacity>
         </View>
+      )}
 
-        <Text style={styles.sleepSeparator}>:</Text>
-
-        {/* Minutes */}
-        <View style={styles.sleepInputGroup}>
-          <TouchableOpacity
-            style={styles.sleepBtn}
-            onPress={() => {
-              setSleepMinutes(Math.max(0, sleepMinutes - 15));
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-          >
-            <Text style={styles.sleepBtnText}>−</Text>
-          </TouchableOpacity>
-          <View style={styles.sleepValueBox}>
-            <Text style={styles.sleepValue}>{sleepMinutes}</Text>
-            <Text style={styles.sleepUnit}>דקות</Text>
+      {/* Time Range Mode - Start & End */}
+      {sleepMode === 'timerange' && (
+        <View style={styles.sleepTimeRangeSection}>
+          <View style={styles.timeRangeRow}>
+            <View style={styles.timeRangeItem}>
+              <Text style={styles.timeRangeLabel}>🌙 הלך לישון</Text>
+              <TextInput
+                style={styles.timeRangeInput}
+                placeholder="19:00"
+                placeholderTextColor="#9CA3AF"
+                value={sleepStartTime}
+                onChangeText={setSleepStartTime}
+                onBlur={() => {
+                  // Auto-format on blur: 8 → 08:00, 19 → 19:00
+                  const clean = sleepStartTime.replace(/[^\d:]/g, '');
+                  if (clean && !clean.includes(':')) {
+                    const h = Number(clean) || 0;
+                    setSleepStartTime(`${String(h).padStart(2, '0')}:00`);
+                  } else if (clean.includes(':')) {
+                    const [h, m] = clean.split(':');
+                    setSleepStartTime(`${String(Number(h) || 0).padStart(2, '0')}:${String(Number(m) || 0).padStart(2, '0')}`);
+                  }
+                }}
+                keyboardType="numbers-and-punctuation"
+                textAlign="center"
+              />
+            </View>
+            <Text style={styles.timeRangeArrow}>→</Text>
+            <View style={styles.timeRangeItem}>
+              <Text style={styles.timeRangeLabel}>☀️ קם</Text>
+              <TextInput
+                style={styles.timeRangeInput}
+                placeholder="08:00"
+                placeholderTextColor="#9CA3AF"
+                value={sleepEndTime}
+                onChangeText={setSleepEndTime}
+                onBlur={() => {
+                  // Auto-format on blur: 8 → 08:00, 19 → 19:00
+                  const clean = sleepEndTime.replace(/[^\d:]/g, '');
+                  if (clean && !clean.includes(':')) {
+                    const h = Number(clean) || 0;
+                    setSleepEndTime(`${String(h).padStart(2, '0')}:00`);
+                  } else if (clean.includes(':')) {
+                    const [h, m] = clean.split(':');
+                    setSleepEndTime(`${String(Number(h) || 0).padStart(2, '0')}:${String(Number(m) || 0).padStart(2, '0')}`);
+                  }
+                }}
+                keyboardType="numbers-and-punctuation"
+                textAlign="center"
+              />
+            </View>
           </View>
-          <TouchableOpacity
-            style={styles.sleepBtn}
-            onPress={() => {
-              setSleepMinutes(Math.min(55, sleepMinutes + 15));
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-          >
-            <Text style={styles.sleepBtnText}>+</Text>
-          </TouchableOpacity>
+          <Text style={styles.timeRangeHint}>הזן שעה (למשל 8 או 22:30)</Text>
         </View>
-      </View>
+      )}
 
-      {/* Quick Presets */}
-      <View style={styles.sleepPresets}>
-        {[
-          { h: 0, m: 30, label: '30ד' },
-          { h: 1, m: 0, label: '1ש' },
-          { h: 1, m: 30, label: '1.5ש' },
-          { h: 2, m: 0, label: '2ש' },
-          { h: 3, m: 0, label: '3ש' },
-        ].map((preset, i) => (
-          <TouchableOpacity
-            key={i}
-            style={[
-              styles.presetBtn,
-              sleepHours === preset.h && sleepMinutes === preset.m && styles.presetBtnActive
-            ]}
-            onPress={() => {
-              setSleepHours(preset.h);
-              setSleepMinutes(preset.m);
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-          >
-            <Text style={[
-              styles.presetText,
-              sleepHours === preset.h && sleepMinutes === preset.m && styles.presetTextActive
-            ]}>{preset.label}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* Free Text Note */}
+      <View style={styles.sleepNoteContainer}>
+        <Text style={styles.sleepNoteLabel}>הערה (אופציונלי)</Text>
+        <TextInput
+          style={styles.sleepNoteInput}
+          placeholder="לדוגמה: ישן עמוק, התעורר פעם אחת..."
+          placeholderTextColor="#9CA3AF"
+          value={sleepNote}
+          onChangeText={setSleepNote}
+          multiline
+          numberOfLines={2}
+        />
       </View>
     </View>
   );
@@ -552,6 +648,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           style={[
             styles.modalCard,
             {
+              backgroundColor: theme.card,
               opacity: slideAnim,
               transform: [{ scale: scaleAnim }, { translateY: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [100, 0] }) }],
             },
@@ -559,15 +656,15 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
         >
           {/* Close Button */}
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-            <X size={24} color="#6B7280" />
+            <X size={24} color={theme.textSecondary} />
           </TouchableOpacity>
 
           {/* Header */}
-          <LinearGradient colors={config.gradient} style={styles.header}>
+          <LinearGradient colors={isDarkMode ? [theme.card, theme.cardSecondary] : config.gradient} style={styles.header}>
             <View style={styles.emojiCircle}>
               {React.createElement(config.icon, { size: 28, color: config.accent, strokeWidth: 2.5 })}
             </View>
-            <Text style={styles.title}>{config.title}</Text>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>{config.title}</Text>
           </LinearGradient>
 
           {/* Content */}
@@ -668,6 +765,41 @@ const styles = StyleSheet.create({
   sleepUnit: { fontSize: 12, color: '#9CA3AF', fontWeight: '600' },
   sleepSeparator: { fontSize: 32, fontWeight: '700', color: '#D1D5DB' },
   sleepPresets: { flexDirection: 'row', justifyContent: 'center', gap: 10 },
+  sleepNoteContainer: { marginTop: 16 },
+  sleepNoteLabel: { fontSize: 13, fontWeight: '600', color: '#6B7280', textAlign: 'right', marginBottom: 8 },
+  sleepNoteInput: { width: '100%', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, fontSize: 14, textAlign: 'right', borderWidth: 1, borderColor: '#E5E7EB', minHeight: 60 },
+
+  // New Modern Sleep UI
+  sleepModeRow: { flexDirection: 'row-reverse', justifyContent: 'center', gap: 8, marginBottom: 20, backgroundColor: '#F3F4F6', borderRadius: 12, padding: 4 },
+  sleepModeBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  sleepModeBtnActive: { backgroundColor: '#6366F1' },
+  sleepModeText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
+  sleepModeTextActive: { color: '#fff' },
+
+  sleepTimerSection: { alignItems: 'center', marginVertical: 20 },
+  sleepTimerBig: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#F3F4F6', paddingVertical: 24, paddingHorizontal: 48, borderRadius: 24 },
+  sleepTimerBigActive: { backgroundColor: '#6366F1' },
+  sleepTimerBigText: { fontSize: 28, fontWeight: '800', color: '#1F2937' },
+
+  sleepDurationSection: { marginVertical: 16 },
+  sleepDurationRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 16 },
+  sleepDurationItem: { alignItems: 'center' },
+  sleepDurationLabel: { fontSize: 12, fontWeight: '600', color: '#9CA3AF', marginBottom: 8 },
+  sleepDurationSeparator: { fontSize: 28, fontWeight: '700', color: '#D1D5DB', marginTop: 24 },
+
+  sleepSlider: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 4 },
+  sleepSliderBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  sleepSliderBtnText: { fontSize: 20, fontWeight: '600', color: '#6366F1' },
+  sleepSliderValue: { fontSize: 32, fontWeight: '800', color: '#1F2937', minWidth: 50, textAlign: 'center' },
+
+  sleepTimeRangeSection: { marginVertical: 16 },
+  timeRangeRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  timeRangeItem: { flex: 1, alignItems: 'center' },
+  timeRangeLabel: { fontSize: 14, fontWeight: '600', color: '#4B5563', marginBottom: 8 },
+  timeRangeInput: { width: '100%', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 16, fontSize: 24, fontWeight: '700', borderWidth: 1, borderColor: '#E5E7EB', color: '#1F2937' },
+  timeRangeArrow: { fontSize: 24, color: '#9CA3AF', marginTop: 24 },
+  timeRangeHint: { fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 12 },
+
   sleepTimerNote: { backgroundColor: '#EEF2FF', padding: 12, borderRadius: 12, marginTop: 20 },
   sleepTimerNoteText: { fontSize: 14, color: '#6366F1', fontWeight: '600', textAlign: 'center' },
 

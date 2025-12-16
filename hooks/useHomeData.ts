@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../services/firebaseConfig';
 import { getLastEvent, formatTimeFromTimestamp, getRecentHistory } from '../services/firebaseService';
@@ -23,7 +23,8 @@ interface UseHomeDataReturn extends HomeDataState {
 export const useHomeData = (
     childId: string | undefined,
     childName: string,
-    ageMonths: number
+    ageMonths: number,
+    creatorId?: string
 ): UseHomeDataReturn => {
     const [lastFeedTime, setLastFeedTime] = useState('--:--');
     const [lastSleepTime, setLastSleepTime] = useState('--:--');
@@ -106,9 +107,9 @@ export const useHomeData = (
         if (!childId) return;
 
         try {
-            // Fetch last events
-            const lastFeed = await getLastEvent(childId, 'food');
-            const lastSleep = await getLastEvent(childId, 'sleep');
+            // Fetch last events (passing creatorId for legacy support)
+            const lastFeed = await getLastEvent(childId, 'food', creatorId);
+            const lastSleep = await getLastEvent(childId, 'sleep', creatorId);
 
             setLastFeedTime(formatTimeFromTimestamp(lastFeed?.timestamp));
             setLastSleepTime(formatTimeFromTimestamp(lastSleep?.timestamp));
@@ -123,14 +124,26 @@ export const useHomeData = (
             }
 
             // Calculate daily stats from history
-            const history = await getRecentHistory(childId);
+            const history = await getRecentHistory(childId, creatorId);
             const stats = calculateDailyStats(history);
             setDailyStats(stats);
 
         } catch (e) {
             console.error('Home data refresh error:', e);
         }
-    }, [childId, calculateDailyStats]);
+    }, [childId, creatorId, calculateDailyStats]);
+
+    // Auto-refresh when childId changes - MUST be after refresh definition
+    useEffect(() => {
+        if (childId) {
+            refresh();
+        } else {
+            // Reset data when no child
+            setLastFeedTime('--:--');
+            setLastSleepTime('--:--');
+            setDailyStats({ feedCount: 0, sleepMinutes: 0, diaperCount: 0 });
+        }
+    }, [childId, refresh]);
 
     return {
         lastFeedTime,

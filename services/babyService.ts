@@ -1,15 +1,16 @@
 import { db, auth } from './firebaseConfig';
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  where, 
-  getDocs, 
-  Timestamp, 
-  updateDoc, 
-  doc, 
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+  updateDoc,
+  doc,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  getDoc
 } from 'firebase/firestore';
 
 export type BabyData = {
@@ -26,20 +27,63 @@ export type BabyData = {
   };
   album?: { [key: number]: string };
   milestones?: { title: string; date: any }[];
-  vaccines?: { [key: string]: boolean }; 
-  customVaccines?: { id: string; name: string; isDone: boolean }[]; 
+  vaccines?: { [key: string]: boolean };
+  customVaccines?: { id: string; name: string; isDone: boolean }[];
 };
 
 // --- קריאת נתונים ---
 export const getBabyData = async (): Promise<BabyData | null> => {
   const user = auth.currentUser;
   if (!user) return null;
-  const q = query(collection(db, 'babies'), where('parentId', '==', user.uid));
-  const snapshot = await getDocs(q);
+
+  // First try to find baby by current user's UID
+  let q = query(collection(db, 'babies'), where('parentId', '==', user.uid));
+  let snapshot = await getDocs(q);
+
   if (!snapshot.empty) {
     const docData = snapshot.docs[0].data();
     return { id: snapshot.docs[0].id, ...docData } as BabyData;
   }
+
+  // If not found, check if user belongs to a family
+  try {
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    const familyId = userDoc.data()?.familyId;
+
+    if (familyId) {
+      console.log('🔍 [babyService] User has familyId:', familyId);
+      // Get the family to find the baby ID
+      const familyDoc = await getDoc(doc(db, 'families', familyId));
+      if (familyDoc.exists()) {
+        const familyData = familyDoc.data();
+        const babyId = familyData?.babyId;
+        console.log('🔍 [babyService] Family babyId:', babyId);
+
+        if (babyId) {
+          // Fetch baby directly by ID
+          const babyDoc = await getDoc(doc(db, 'babies', babyId));
+          if (babyDoc.exists()) {
+            console.log('✅ [babyService] Found baby via family:', babyDoc.id);
+            return { id: babyDoc.id, ...babyDoc.data() } as BabyData;
+          }
+        }
+
+        // Fallback: find baby by family creator's UID
+        const creatorId = familyData?.createdBy;
+        if (creatorId && creatorId !== user.uid) {
+          q = query(collection(db, 'babies'), where('parentId', '==', creatorId));
+          snapshot = await getDocs(q);
+          if (!snapshot.empty) {
+            const docData = snapshot.docs[0].data();
+            return { id: snapshot.docs[0].id, ...docData } as BabyData;
+          }
+        }
+      }
+    }
+  } catch (error) {
+    if (__DEV__) console.log('Error checking family for baby:', error);
+  }
+
   return null;
 };
 
@@ -56,7 +100,7 @@ export const addDailyLogEntry = async (type: 'sleep' | 'food' | 'general', value
   await addDoc(collection(db, 'dailyLogs'), {
     parentId: user.uid,
     timestamp: Timestamp.now(),
-    type: type, 
+    type: type,
     value: value, // לדוגמה: 300 מ"ל, 1.5 שעות
   });
 };
@@ -72,19 +116,19 @@ export const getReportData = async (range: 'week' | 'month' | 'day', reportType:
   let timeFormat: 'day' | 'hour' | 'monthDay';
 
   if (range === 'day') {
-      // 24 שעות אחרונות
-      startDate = new Date(today.getTime() - (24 * 60 * 60 * 1000));
-      labelLength = 24;
-      timeFormat = 'hour';
+    // 24 שעות אחרונות
+    startDate = new Date(today.getTime() - (24 * 60 * 60 * 1000));
+    labelLength = 24;
+    timeFormat = 'hour';
   } else if (range === 'month') {
-      // 30 ימים אחרונים
-      startDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
-      labelLength = 30;
-      timeFormat = 'monthDay';
+    // 30 ימים אחרונים
+    startDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+    labelLength = 30;
+    timeFormat = 'monthDay';
   } else { // 'week' (7 ימים אחרונים)
-      startDate = new Date(today.getTime() - (7 * 24 * 60 * 60 * 1000));
-      labelLength = 7;
-      timeFormat = 'day';
+    startDate = new Date(today.getTime() - (7 * 24 * 60 * 60 * 1000));
+    labelLength = 7;
+    timeFormat = 'day';
   }
 
   const q = query(
@@ -95,7 +139,7 @@ export const getReportData = async (range: 'week' | 'month' | 'day', reportType:
   );
 
   const snapshot = await getDocs(q);
-  
+
   // מבנה נתונים לסכומים יומיים/שעתיים
   const aggregates: { [key: string]: { sum: number, count: number } } = {};
   const dayNames = ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"];
@@ -106,18 +150,18 @@ export const getReportData = async (range: 'week' | 'month' | 'day', reportType:
     const d = new Date(today.getTime() - ((labelLength - 1 - i) * 24 * 60 * 60 * 1000));
     let key = '';
     let label = '';
-    
+
     if (timeFormat === 'day') {
-        key = d.getDate().toString();
-        label = dayNames[d.getDay()];
+      key = d.getDate().toString();
+      label = dayNames[d.getDay()];
     } else if (timeFormat === 'monthDay') {
-        key = d.getDate().toString();
-        label = d.getDate().toString();
+      key = d.getDate().toString();
+      label = d.getDate().toString();
     } else { // hour
-        key = (i).toString();
-        label = `${i}:00`;
+      key = (i).toString();
+      label = `${i}:00`;
     }
-    
+
     aggregates[key] = { sum: 0, count: 0 };
     results.push({ key, sum: 0, count: 0 }); // כדי לשמור על סדר נכון
   }
@@ -127,44 +171,44 @@ export const getReportData = async (range: 'week' | 'month' | 'day', reportType:
     const entry = doc.data();
     const date = entry.timestamp.toDate();
     let key: string;
-    
+
     if (timeFormat === 'day') {
-        key = date.getDate().toString();
+      key = date.getDate().toString();
     } else if (timeFormat === 'monthDay') {
-        key = date.getDate().toString();
+      key = date.getDate().toString();
     } else { // hour
-        key = date.getHours().toString();
+      key = date.getHours().toString();
     }
 
     // מציאת הפריט המתאים במערך ה-results
     const resultItem = results.find(item => {
-        if (timeFormat === 'day' || timeFormat === 'monthDay') return item.key === key;
-        // ל-day format אנחנו צריכים לדעת איזה יום בשבוע זה, אבל ה-key הוא רק המספר.
-        // לשם הפשטות, נסתמך על זה שהיומן מסודר כרונולוגית
-        return false; // פשוט נסמוך על הצבירה ב-aggregates
+      if (timeFormat === 'day' || timeFormat === 'monthDay') return item.key === key;
+      // ל-day format אנחנו צריכים לדעת איזה יום בשבוע זה, אבל ה-key הוא רק המספר.
+      // לשם הפשטות, נסתמך על זה שהיומן מסודר כרונולוגית
+      return false; // פשוט נסמוך על הצבירה ב-aggregates
     });
-    
+
     // צבירה
     if (!aggregates[key]) {
-        aggregates[key] = { sum: 0, count: 0 };
+      aggregates[key] = { sum: 0, count: 0 };
     }
     aggregates[key].sum += entry.value;
     aggregates[key].count++;
   });
-  
+
   // יצירת מערך סופי לגרף (לפי ממוצע)
   const finalLabels = Object.keys(aggregates).map(k => {
-      if (timeFormat === 'day') {
-          // מציאת יום בשבוע לפי המיקום
-          const d = new Date(today.getTime() - ((labelLength - 1 - results.findIndex(r => r.key === k)) * 24 * 60 * 60 * 1000));
-          return dayNames[d.getDay()];
-      }
-      return k;
+    if (timeFormat === 'day') {
+      // מציאת יום בשבוע לפי המיקום
+      const d = new Date(today.getTime() - ((labelLength - 1 - results.findIndex(r => r.key === k)) * 24 * 60 * 60 * 1000));
+      return dayNames[d.getDay()];
+    }
+    return k;
   });
 
   const finalData = Object.values(aggregates).map(agg => agg.count > 0 ? parseFloat((agg.sum / agg.count).toFixed(1)) : 0);
   const totalSum = Object.values(aggregates).reduce((total, agg) => total + agg.sum, 0);
-  
+
   return { labels: finalLabels, data: finalData, totalSum, totalCount: snapshot.docs.length };
 };
 
@@ -223,20 +267,17 @@ export const removeCustomVaccine = async (babyId: string, vaccineObject: any) =>
 export const toggleCustomVaccine = async (babyId: string, allCustomVaccines: any[], vaccineId: string) => {
   if (!babyId) return;
   const babyRef = doc(db, 'babies', babyId);
-  
-  const updatedList = allCustomVaccines.map(v => 
+
+  const updatedList = allCustomVaccines.map(v =>
     v.id === vaccineId ? { ...v, isDone: !v.isDone } : v
   );
-  
+
   await updateDoc(babyRef, { customVaccines: updatedList });
 };
 
-export const checkIfBabyExists = async () => {
-  const user = auth.currentUser;
-  if (!user) return false;
-  const q = query(collection(db, 'babies'), where('parentId', '==', user.uid));
-  const snap = await getDocs(q);
-  return !snap.empty;
+export const checkIfBabyExists = async (): Promise<boolean> => {
+  const babyData = await getBabyData();
+  return babyData !== null;
 };
 
 export const saveBabyProfile = async (name: string, birthDate: Date, gender: string) => {

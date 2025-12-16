@@ -1,6 +1,6 @@
-// LoginScreen.tsx
+// LoginScreen.tsx - Enhanced Security & Premium Design
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -13,28 +13,53 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Animated,
+  Keyboard,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Baby, ArrowLeft, Mail, Lock } from 'lucide-react-native';
+import { Baby, Mail, Lock, Eye, EyeOff, AlertCircle, Check, Shield, Users, X } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as Haptics from 'expo-haptics';
 
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendEmailVerification,
+  sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithCredential,
 } from 'firebase/auth';
 
 import { auth } from '../services/firebaseConfig';
+import { joinFamily } from '../services/familyService';
 
-// משלים את תהליך החיבור בדפדפן אם נתקע
 WebBrowser.maybeCompleteAuthSession();
 
 type LoginScreenProps = {
   onLoginSuccess: () => void;
+};
+
+// --- Validation Helpers ---
+const validateEmail = (email: string): boolean => {
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return regex.test(email);
+};
+
+const validatePassword = (password: string): { valid: boolean; message: string } => {
+  if (password.length < 6) return { valid: false, message: 'לפחות 6 תווים' };
+  if (password.length < 8) return { valid: true, message: 'סיסמה בינונית' };
+  if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) return { valid: true, message: 'סיסמה טובה' };
+  return { valid: true, message: 'סיסמה חזקה 💪' };
+};
+
+const getPasswordStrengthColor = (password: string): string => {
+  if (password.length < 6) return '#EF4444';
+  if (password.length < 8) return '#F59E0B';
+  if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) return '#10B981';
+  return '#059669';
 };
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
@@ -42,41 +67,136 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [attempts, setAttempts] = useState(0);
+  const [lockoutTime, setLockoutTime] = useState<number | null>(null);
+  const [awaitingVerification, setAwaitingVerification] = useState(false);
 
-  // --- הגדרות גוגל עם המפתח שלך ---
+  // Join family with invite code
+  const [showJoinCodeModal, setShowJoinCodeModal] = useState(false);
+  const [pendingInviteCode, setPendingInviteCode] = useState('');
+  const [joiningFamily, setJoiningFamily] = useState(false);
+
+  // Animation refs
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const passwordRef = useRef<TextInput>(null);
+
+  // Google Auth
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     clientId: '16421819020-82oc8291kgi171lnqu2cthh1kb2htkr4.apps.googleusercontent.com',
     redirectUri: 'https://auth.expo.io/@elharel648/CalmParentApp'
   });
 
-  // האזנה לתשובה מגוגל
+  // Entry animation
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  // Lockout timer
+  useEffect(() => {
+    if (lockoutTime) {
+      const timer = setTimeout(() => {
+        setLockoutTime(null);
+        setAttempts(0);
+      }, lockoutTime - Date.now());
+      return () => clearTimeout(timer);
+    }
+  }, [lockoutTime]);
+
+  // Google response handler
   useEffect(() => {
     if (response?.type === 'success') {
       const { id_token } = response.params;
-      
-      // יצירת אישור כניסה לפיירבס באמצעות הטוקן של גוגל
       const credential = GoogleAuthProvider.credential(id_token);
-      
+
       setLoading(true);
       signInWithCredential(auth, credential)
         .then(() => {
-          Alert.alert('הצלחה', 'התחברת עם גוגל בהצלחה!');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           onLoginSuccess();
         })
         .catch((error) => {
-          console.error("Google Sign-In Error:", error);
-          Alert.alert('שגיאה בהתחברות', 'לא הצלחנו לחבר את המשתמש דרך גוגל.');
+          if (__DEV__) console.log("Google Sign-In Error:", error);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          Alert.alert('שגיאה', 'לא הצלחנו להתחבר עם גוגל');
         })
         .finally(() => setLoading(false));
-    } else if (response?.type === 'error') {
-      Alert.alert('שגיאה בגוגל', 'אירעה שגיאה בחיבור לגוגל.');
-      console.error(response.error);
     }
   }, [response]);
 
+  // --- Shake animation on error ---
+  const triggerShake = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
+  // --- Forgot password ---
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert('שגיאה', 'אנא הזן את כתובת האימייל שלך');
+      return;
+    }
+    if (!validateEmail(email)) {
+      Alert.alert('שגיאה', 'כתובת אימייל לא תקינה');
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('נשלח! ✉️', 'מייל לאיפוס סיסמה נשלח אליך. בדוק גם בספאם.');
+    } catch (error) {
+      if (__DEV__) console.log('Password reset error:', error);
+      Alert.alert('שגיאה', 'לא הצלחנו לשלוח מייל איפוס');
+    }
+  };
+
+  // --- Main auth handler ---
   const handleAuth = async () => {
-    if (!email || !password) {
-      Alert.alert('שגיאה', 'נא למלא אימייל וסיסמה');
+    Keyboard.dismiss();
+    setEmailError('');
+    setPasswordError('');
+
+    // Check lockout
+    if (lockoutTime && Date.now() < lockoutTime) {
+      const remaining = Math.ceil((lockoutTime - Date.now()) / 1000);
+      Alert.alert('נחסמת זמנית', `נסה שוב בעוד ${remaining} שניות`);
+      return;
+    }
+
+    // Validate email
+    if (!email) {
+      setEmailError('נא להזין אימייל');
+      triggerShake();
+      return;
+    }
+    if (!validateEmail(email)) {
+      setEmailError('כתובת אימייל לא תקינה');
+      triggerShake();
+      return;
+    }
+
+    // Validate password
+    if (!password) {
+      setPasswordError('נא להזין סיסמה');
+      triggerShake();
+      return;
+    }
+    if (!isLogin && password.length < 6) {
+      setPasswordError('הסיסמה חייבת להכיל לפחות 6 תווים');
+      triggerShake();
       return;
     }
 
@@ -84,41 +204,89 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
     try {
       if (isLogin) {
-        // התחברות רגילה
         await signInWithEmailAndPassword(auth, email, password);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setAttempts(0);
         onLoginSuccess();
       } else {
-        // הרשמה רגילה
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await sendEmailVerification(userCredential.user);
-        Alert.alert(
-          'ההרשמה הצליחה!',
-          'נשלח אליך מייל לאימות החשבון. נא לבדוק גם בתיקיית הספאם.',
-          [{ text: 'הבנתי', onPress: () => onLoginSuccess() }]
-        );
+
+        // If user has a pending invite code, join the family
+        if (pendingInviteCode.trim().length === 6) {
+          const result = await joinFamily(pendingInviteCode.trim());
+          if (result.success) {
+            console.log('✅ Joined family:', result.family?.babyName);
+          }
+        }
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setLoading(false);
+        setAwaitingVerification(true); // Show verification waiting screen
       }
     } catch (error: any) {
-      console.error('Auth Error:', error?.code);
-      let msg = 'שגיאה כללית';
+      if (__DEV__) console.log('Auth Error:', error?.code);
 
-      if (error.code === 'auth/invalid-credential') msg = 'הפרטים שגויים (אימייל או סיסמה).';
-      if (error.code === 'auth/email-already-in-use') msg = 'האימייל הזה כבר רשום במערכת.';
-      if (error.code === 'auth/invalid-email') msg = 'כתובת אימייל לא תקינה.';
-      if (error.code === 'auth/weak-password') msg = 'הסיסמה חלשה מדי.';
-      
+      // Increment attempts for rate limiting
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+
+      // Lock after 5 failed attempts
+      if (newAttempts >= 5) {
+        setLockoutTime(Date.now() + 30000); // 30 seconds
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert('יותר מדי ניסיונות', 'נחסמת ל-30 שניות מסיבות אבטחה');
+        setLoading(false);
+        return;
+      }
+
+      triggerShake();
+
+      // Error messages
+      let msg = 'שגיאה בהתחברות';
+      switch (error.code) {
+        case 'auth/invalid-credential':
+        case 'auth/wrong-password':
+        case 'auth/user-not-found':
+          msg = 'אימייל או סיסמה שגויים';
+          break;
+        case 'auth/email-already-in-use':
+          msg = 'כתובת האימייל כבר רשומה במערכת';
+          break;
+        case 'auth/invalid-email':
+          msg = 'כתובת אימייל לא תקינה';
+          break;
+        case 'auth/weak-password':
+          msg = 'הסיסמה חלשה מדי - נסה סיסמה חזקה יותר';
+          break;
+        case 'auth/too-many-requests':
+          msg = 'יותר מדי ניסיונות. נסה שוב בעוד כמה דקות';
+          break;
+        case 'auth/network-request-failed':
+          msg = 'בעיית חיבור לאינטרנט';
+          break;
+      }
+
       Alert.alert('שגיאה', msg);
     } finally {
       setLoading(false);
     }
   };
 
+  const isFormValid = email.length > 0 && password.length >= 6;
+  const passwordStrength = validatePassword(password);
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
+
+      {/* Header */}
       <View style={styles.header}>
         <LinearGradient colors={['#1e1b4b', '#4338ca']} style={StyleSheet.absoluteFill} />
         <View style={styles.headerContent}>
-          <View style={styles.iconCircle}><Baby size={40} color="#4f46e5" /></View>
+          <View style={styles.iconCircle}>
+            <Baby size={40} color="#4f46e5" />
+          </View>
           <Text style={styles.appTitle}>הורה רגוע</Text>
           <Text style={styles.appSubtitle}>ניהול חכם ושקט להורים טריים</Text>
         </View>
@@ -127,115 +295,665 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.formContainer}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.formTitle}>{isLogin ? 'ברוכים השבים' : 'יצירת חשבון'}</Text>
-          <Text style={styles.formSubtitle}>{isLogin ? 'הכנס פרטים כדי להמשיך' : 'הצטרפו לקהילת ההורים הרגועים'}</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>אימייל</Text>
-            <View style={styles.inputWrapper}>
-              <Mail size={20} color="#9ca3af" style={{ marginLeft: 10 }} />
-              <TextInput 
-                style={styles.input} 
-                placeholder="your@email.com" 
-                value={email} 
-                onChangeText={setEmail} 
-                keyboardType="email-address" 
-                autoCapitalize="none" 
-              />
+        <Animated.View style={[
+          styles.scrollContent,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }, { translateX: shakeAnim }]
+          }
+        ]}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+            {/* Security badge */}
+            <View style={styles.securityBadge}>
+              <Shield size={14} color="#10B981" />
+              <Text style={styles.securityText}>חיבור מאובטח</Text>
             </View>
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>סיסמה</Text>
-            <View style={styles.inputWrapper}>
-              <Lock size={20} color="#9ca3af" style={{ marginLeft: 10 }} />
-              <TextInput 
-                style={styles.input} 
-                placeholder="********" 
-                value={password} 
-                onChangeText={setPassword} 
-                secureTextEntry 
-              />
-            </View>
-          </View>
+            {/* Verification Waiting Screen */}
+            {awaitingVerification ? (
+              <View style={styles.verificationContainer}>
+                <Text style={styles.verificationEmoji}>📧</Text>
+                <Text style={styles.verificationTitle}>בדוק את המייל שלך</Text>
+                <Text style={styles.verificationSubtitle}>
+                  שלחנו לינק אימות ל-{email}{'\n'}
+                  <Text style={styles.spamNote}>(בדוק גם בתיקיית הספאם!)</Text>
+                </Text>
 
-          <TouchableOpacity style={styles.mainButton} onPress={handleAuth} disabled={loading}>
-            <LinearGradient colors={['#4f46e5', '#4338ca']} style={styles.gradientBtn}>
-              {loading ? <ActivityIndicator color="white" /> : 
-                <Text style={styles.mainButtonText}>{isLogin ? 'התחברות' : 'הרשמה'}</Text>
-              }
-            </LinearGradient>
-          </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.checkVerificationBtn}
+                  onPress={async () => {
+                    setLoading(true);
+                    try {
+                      await auth.currentUser?.reload();
+                      if (auth.currentUser?.emailVerified) {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        Alert.alert('מעולה! 🎉', 'האימייל אומת בהצלחה!', [
+                          { text: 'המשך', onPress: () => onLoginSuccess() }
+                        ]);
+                      } else {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                        Alert.alert('עוד לא אימתת', 'לחץ על הלינק במייל שנשלח אליך ונסה שוב');
+                      }
+                    } catch (e) {
+                      Alert.alert('שגיאה', 'נסה שוב');
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading}
+                >
+                  <LinearGradient
+                    colors={['#10B981', '#059669']}
+                    style={styles.gradientBtn}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <Text style={styles.mainButtonText}>אימתתי! בדוק עכשיו ✓</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
 
-          <View style={styles.divider}>
-            <View style={styles.line} />
-            <Text style={styles.orText}>או באמצעות</Text>
-            <View style={styles.line} />
-          </View>
+                <TouchableOpacity
+                  style={styles.resendBtn}
+                  onPress={async () => {
+                    try {
+                      if (auth.currentUser) {
+                        await sendEmailVerification(auth.currentUser);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        Alert.alert('נשלח!', 'מייל אימות חדש נשלח אליך');
+                      }
+                    } catch (e) {
+                      Alert.alert('שגיאה', 'נסה שוב בעוד דקה');
+                    }
+                  }}
+                >
+                  <Text style={styles.resendText}>שלח מייל אימות מחדש</Text>
+                </TouchableOpacity>
 
-          <View style={styles.socialRow}>
-            {/* כפתור גוגל */}
-            <TouchableOpacity 
-              style={[styles.socialBtn, !request && { opacity: 0.5 }]} 
-              onPress={() => {
-                if (request) {
-                  promptAsync();
-                } else {
-                  Alert.alert('טוען...', 'החיבור לגוגל עדיין נטען, נסה שוב בעוד רגע.');
-                }
-              }}
-              disabled={!request}
-            >
-              <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png' }} style={styles.socialIcon} />
-              <Text style={styles.socialText}>Google</Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    auth.signOut();
+                    setAwaitingVerification(false);
+                    setEmail('');
+                    setPassword('');
+                  }}
+                  style={{ marginTop: 20 }}
+                >
+                  <Text style={styles.backToLogin}>חזרה למסך התחברות</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.formTitle}>{isLogin ? 'ברוכים השבים' : 'יצירת חשבון'}</Text>
+                <Text style={styles.formSubtitle}>{isLogin ? 'הכנס פרטים כדי להמשיך' : 'הצטרפו לקהילת ההורים הרגועים'}</Text>
 
-            <TouchableOpacity style={styles.socialBtn} onPress={() => Alert.alert('בקרוב', 'אפל יתווסף בהמשך')}>
-              <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/0/747.png' }} style={styles.socialIcon} />
-              <Text style={styles.socialText}>Apple</Text>
-            </TouchableOpacity>
-          </View>
+                {/* Email Input */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>אימייל</Text>
+                  <View style={[styles.inputWrapper, emailError && styles.inputError]}>
+                    <Mail size={20} color={emailError ? '#EF4444' : '#9ca3af'} style={{ marginLeft: 10 }} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="your@email.com"
+                      placeholderTextColor="#9ca3af"
+                      value={email}
+                      onChangeText={(text) => { setEmail(text); setEmailError(''); }}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="next"
+                      onSubmitEditing={() => passwordRef.current?.focus()}
+                    />
+                    {email.length > 0 && validateEmail(email) && (
+                      <Check size={18} color="#10B981" style={{ marginRight: 12 }} />
+                    )}
+                  </View>
+                  {emailError ? (
+                    <View style={styles.errorRow}>
+                      <AlertCircle size={14} color="#EF4444" />
+                      <Text style={styles.errorText}>{emailError}</Text>
+                    </View>
+                  ) : null}
+                </View>
 
-          <TouchableOpacity onPress={() => setIsLogin(!isLogin)} style={styles.switchMode}>
-            <Text style={styles.switchText}>
-              {isLogin ? 'עדיין אין לך חשבון? ' : 'כבר יש לך חשבון? '}
-              <Text style={styles.linkText}>{isLogin ? 'הרשם עכשיו' : 'התחבר'}</Text>
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
+                {/* Password Input */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>סיסמה</Text>
+                  <View style={[styles.inputWrapper, passwordError && styles.inputError]}>
+                    <Lock size={20} color={passwordError ? '#EF4444' : '#9ca3af'} style={{ marginLeft: 10 }} />
+                    <TextInput
+                      ref={passwordRef}
+                      style={styles.input}
+                      placeholder="הזן סיסמה"
+                      placeholderTextColor="#9ca3af"
+                      value={password}
+                      onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
+                      secureTextEntry={!showPassword}
+                      returnKeyType="done"
+                      onSubmitEditing={handleAuth}
+                    />
+                    <TouchableOpacity
+                      onPress={() => {
+                        setShowPassword(!showPassword);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={styles.eyeBtn}
+                    >
+                      {showPassword ? <EyeOff size={20} color="#9ca3af" /> : <Eye size={20} color="#9ca3af" />}
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Password strength indicator */}
+                  {!isLogin && password.length > 0 && (
+                    <View style={styles.strengthRow}>
+                      <View style={[styles.strengthBar, { flex: password.length >= 6 ? 1 : 0.3, backgroundColor: getPasswordStrengthColor(password) }]} />
+                      <Text style={[styles.strengthText, { color: getPasswordStrengthColor(password) }]}>
+                        {passwordStrength.message}
+                      </Text>
+                    </View>
+                  )}
+
+                  {passwordError ? (
+                    <View style={styles.errorRow}>
+                      <AlertCircle size={14} color="#EF4444" />
+                      <Text style={styles.errorText}>{passwordError}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Forgot password link */}
+                {isLogin && (
+                  <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotBtn}>
+                    <Text style={styles.forgotText}>שכחת סיסמה?</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Submit button */}
+                <TouchableOpacity
+                  style={[styles.mainButton, !isFormValid && styles.mainButtonDisabled]}
+                  onPress={handleAuth}
+                  disabled={loading || !isFormValid}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={isFormValid ? ['#4f46e5', '#4338ca'] : ['#9ca3af', '#9ca3af']}
+                    style={styles.gradientBtn}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <Text style={styles.mainButtonText}>{isLogin ? 'התחברות' : 'הרשמה'}</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Divider */}
+                <View style={styles.divider}>
+                  <View style={styles.line} />
+                  <Text style={styles.orText}>או באמצעות</Text>
+                  <View style={styles.line} />
+                </View>
+
+                {/* Social buttons */}
+                <View style={styles.socialRow}>
+                  <TouchableOpacity
+                    style={[styles.socialBtn, !request && { opacity: 0.5 }]}
+                    onPress={() => {
+                      if (request) {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        promptAsync();
+                      }
+                    }}
+                    disabled={!request}
+                  >
+                    <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png' }} style={styles.socialIcon} />
+                    <Text style={styles.socialText}>Google</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.socialBtn}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      Alert.alert('בקרוב', 'התחברות עם Apple תתווסף בקרוב!');
+                    }}
+                  >
+                    <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/0/747.png' }} style={styles.socialIcon} />
+                    <Text style={styles.socialText}>Apple</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Switch mode */}
+                <TouchableOpacity onPress={() => {
+                  setIsLogin(!isLogin);
+                  setEmailError('');
+                  setPasswordError('');
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }} style={styles.switchMode}>
+                  <Text style={styles.switchText}>
+                    {isLogin ? 'עדיין אין לך חשבון? ' : 'כבר יש לך חשבון? '}
+                    <Text style={styles.linkText}>{isLogin ? 'הרשם עכשיו' : 'התחבר'}</Text>
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Join Family Code - for registration */}
+                {!isLogin && (
+                  <View style={styles.joinCodeSection}>
+                    <View style={styles.joinCodeDivider}>
+                      <View style={styles.joinCodeLine} />
+                      <Text style={styles.joinCodeOrText}>או</Text>
+                      <View style={styles.joinCodeLine} />
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.joinCodeBtn, pendingInviteCode.length === 6 && styles.joinCodeBtnActive]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        setShowJoinCodeModal(true);
+                      }}
+                    >
+                      <Users size={24} color={pendingInviteCode.length === 6 ? '#10B981' : '#6366F1'} />
+                      <View style={{ marginRight: 12 }}>
+                        <Text style={[styles.joinCodeTitle, pendingInviteCode.length === 6 && { color: '#10B981' }]}>
+                          {pendingInviteCode.length === 6 ? `קוד הזמנה: ${pendingInviteCode}` : 'קיבלתי קוד הזמנה'}
+                        </Text>
+                        <Text style={styles.joinCodeSubtitle}>
+                          {pendingInviteCode.length === 6 ? 'הקוד יופעל בסיום ההרשמה ✓' : 'בן/בת זוג שלחו לי קוד'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+
+          </ScrollView>
+        </Animated.View>
       </KeyboardAvoidingView>
+
+      {/* Join Code Modal */}
+      <Modal visible={showJoinCodeModal} transparent animationType="fade">
+        <View style={styles.joinModalOverlay}>
+          <View style={styles.joinModalContent}>
+            <TouchableOpacity
+              style={styles.joinModalClose}
+              onPress={() => setShowJoinCodeModal(false)}
+            >
+              <X size={24} color="#6B7280" />
+            </TouchableOpacity>
+
+            <Users size={48} color="#6366F1" />
+            <Text style={styles.joinModalTitle}>הזן קוד הזמנה</Text>
+            <Text style={styles.joinModalSubtitle}>
+              קיבלת קוד 6 ספרות מבן/בת הזוג?
+            </Text>
+
+            <TextInput
+              style={styles.joinModalInput}
+              placeholder="הזן קוד 6 ספרות"
+              placeholderTextColor="#9CA3AF"
+              value={pendingInviteCode}
+              onChangeText={(text) => setPendingInviteCode(text.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+              maxLength={6}
+              autoCapitalize="characters"
+              textAlign="center"
+            />
+
+            <TouchableOpacity
+              style={[styles.joinModalBtn, pendingInviteCode.length !== 6 && styles.joinModalBtnDisabled]}
+              disabled={pendingInviteCode.length !== 6}
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                setShowJoinCodeModal(false);
+                Alert.alert('מעולה! 🎉', 'הקוד נשמר! המשך להרשמה והקוד יופעל אוטומטית.');
+              }}
+            >
+              <Text style={styles.joinModalBtnText}>שמור קוד</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
-  header: { height: '35%', justifyContent: 'center', alignItems: 'center', position: 'relative', overflow: 'hidden', borderBottomLeftRadius: 40, borderBottomRightRadius: 40 },
+
+  // Header
+  header: {
+    height: '32%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40
+  },
   headerContent: { alignItems: 'center', zIndex: 10 },
-  iconCircle: { width: 80, height: 80, backgroundColor: 'white', borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 10 },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    backgroundColor: 'white',
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 10
+  },
   appTitle: { fontSize: 32, fontWeight: '900', color: 'white', marginBottom: 4 },
   appSubtitle: { fontSize: 14, color: '#e0e7ff', opacity: 0.9 },
   blob: { position: 'absolute', width: 150, height: 150, borderRadius: 75, opacity: 0.4 },
+
+  // Form
   formContainer: { flex: 1, marginTop: -30 },
-  scrollContent: { padding: 24, paddingBottom: 40, backgroundColor: 'white', marginHorizontal: 20, borderRadius: 24, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 20, elevation: 5 },
+  scrollContent: {
+    padding: 24,
+    paddingBottom: 40,
+    backgroundColor: 'white',
+    marginHorizontal: 20,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5
+  },
+
+  // Security badge
+  securityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 16,
+  },
+  securityText: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '600',
+  },
+
   formTitle: { fontSize: 24, fontWeight: '800', color: '#1f2937', textAlign: 'center', marginBottom: 8 },
-  formSubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 32 },
-  inputGroup: { marginBottom: 20 },
+  formSubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 28 },
+
+  // Inputs
+  inputGroup: { marginBottom: 18 },
   label: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 8, textAlign: 'right' },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', height: 50 },
-  input: { flex: 1, height: '100%', textAlign: 'right', paddingHorizontal: 12, fontSize: 15, color: '#111827' },
-  mainButton: { marginTop: 10, borderRadius: 14, overflow: 'hidden', shadowColor: '#4f46e5', shadowOpacity: 0.3, shadowRadius: 10, elevation: 5 },
-  gradientBtn: { paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
+    height: 54
+  },
+  inputError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
+  },
+  input: {
+    flex: 1,
+    height: '100%',
+    textAlign: 'right',
+    paddingHorizontal: 12,
+    fontSize: 15,
+    color: '#111827'
+  },
+  eyeBtn: {
+    padding: 12,
+  },
+
+  // Error display
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginTop: 6,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '500',
+  },
+
+  // Password strength
+  strengthRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  strengthBar: {
+    height: 4,
+    borderRadius: 2,
+    maxWidth: 100,
+  },
+  strengthText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Forgot password
+  forgotBtn: {
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  forgotText: {
+    fontSize: 13,
+    color: '#6366F1',
+    fontWeight: '600',
+  },
+
+  // Main button
+  mainButton: {
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#4f46e5',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5
+  },
+  mainButtonDisabled: {
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  gradientBtn: {
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10
+  },
   mainButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+
+  // Divider
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
   line: { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
   orText: { marginHorizontal: 12, color: '#9ca3af', fontSize: 12, fontWeight: '600' },
+
+  // Social buttons
   socialRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  socialBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', gap: 8 },
+  socialBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
+    gap: 8,
+    backgroundColor: '#fff',
+  },
   socialIcon: { width: 20, height: 20 },
   socialText: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  switchMode: { alignItems: 'center' },
+
+  // Switch mode
+  switchMode: { alignItems: 'center', marginTop: 8 },
   switchText: { fontSize: 14, color: '#6b7280' },
   linkText: { color: '#4f46e5', fontWeight: 'bold' },
+
+  // Join Code Section
+  joinCodeSection: {
+    marginTop: 24,
+    paddingTop: 8,
+  },
+  joinCodeDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  joinCodeLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  joinCodeOrText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  joinCodeBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F5F3FF',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    borderStyle: 'dashed',
+  },
+  joinCodeIcon: {
+    fontSize: 28,
+  },
+  joinCodeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#4F46E5',
+    textAlign: 'right',
+  },
+  joinCodeSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  joinCodeBtnActive: {
+    borderColor: '#10B981',
+    backgroundColor: '#ECFDF5',
+    borderStyle: 'solid',
+  },
+
+  // Join Modal styles
+  joinModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  joinModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 28,
+    width: '100%',
+    alignItems: 'center',
+  },
+  joinModalClose: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+  },
+  joinModalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  joinModalSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  joinModalInput: {
+    width: '100%',
+    height: 56,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
+    letterSpacing: 8,
+  },
+  joinModalBtn: {
+    width: '100%',
+    backgroundColor: '#6366F1',
+    paddingVertical: 16,
+    borderRadius: 14,
+    marginTop: 20,
+  },
+  joinModalBtnDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
+  joinModalBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+
+  // Verification Waiting Screen Styles
+  verificationContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  verificationEmoji: {
+    fontSize: 64,
+    marginBottom: 20,
+  },
+  verificationTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  verificationSubtitle: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  spamNote: {
+    color: '#EF4444',
+    fontWeight: '600',
+  },
+  checkVerificationBtn: {
+    width: '100%',
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  resendBtn: {
+    paddingVertical: 12,
+  },
+  resendText: {
+    fontSize: 14,
+    color: '#4F46E5',
+    fontWeight: '600',
+  },
+  backToLogin: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
 });

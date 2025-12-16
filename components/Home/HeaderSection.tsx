@@ -1,12 +1,13 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, Animated, Easing } from 'react-native';
-import { Camera, Utensils, Moon, Baby, Pill, Sun } from 'lucide-react-native';
+import { Camera, Utensils, Moon, Baby, Pill, Sun, Layers } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { auth, db } from '../../services/firebaseConfig';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ChildProfile, MedicationsState } from '../../types/home';
+import { useWeather } from '../../hooks/useWeather';
 
 interface DailyStats {
     feedCount: number;
@@ -49,7 +50,17 @@ const HeaderSection = memo<HeaderSectionProps>(({
     const [uploading, setUploading] = useState(false);
     const [currentBanner, setCurrentBanner] = useState(0);
     const fadeAnim = useRef(new Animated.Value(1)).current;
-    const slideAnim = useRef(new Animated.Value(0)).current; // For vertical slide
+    const slideAnim = useRef(new Animated.Value(0)).current;
+
+    // Reset banner index when profile changes
+    useEffect(() => {
+        setCurrentBanner(0);
+        fadeAnim.setValue(1);
+        slideAnim.setValue(0);
+    }, [profile.id]);
+
+    // Weather
+    const { weather } = useWeather();
 
     // Generate banners
     const banners: BannerData[] = [
@@ -75,9 +86,9 @@ const HeaderSection = memo<HeaderSectionProps>(({
             title: 'החתלות',
             summary: dailyStats?.diaperCount ? `${dailyStats.diaperCount} החלפות היום` : 'אין נתונים',
             lastAction: '',
-            icon: Baby,
-            color: '#6366F1',
-            bgGradient: ['#EEF2FF', '#E0E7FF'],
+            icon: Layers,
+            color: '#10B981',
+            bgGradient: ['#ECFDF5', '#D1FAE5'],
         },
     ];
 
@@ -227,8 +238,13 @@ const HeaderSection = memo<HeaderSectionProps>(({
                             {greeting}
                         </Text>
                     </View>
-                    {/* Weather placeholder */}
-                    <Text style={styles.weatherText}>☁️ טוען מזג אוויר...</Text>
+                    {/* Weather */}
+                    <Text style={styles.weatherText}>
+                        {weather.loading
+                            ? '☁️ טוען מזג אוויר...'
+                            : `${weather.recommendation} | ${weather.temp}°`
+                        }
+                    </Text>
                 </View>
 
                 {/* Right: Avatar + Name + Age */}

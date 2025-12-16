@@ -4,7 +4,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-// ✅ הוספנו את Baby לאייקונים
 import { Home, BarChart2, User, Settings, Lock, Baby } from 'lucide-react-native';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -19,13 +18,16 @@ import SettingsScreen from './pages/SettingsScreen';
 import LoginScreen from './pages/LoginScreen';
 import BabyProfileScreen from './pages/BabyProfileScreen';
 
-// ✅ ייבוא מסכי הבייביסיטר החדשים (חובה!)
+// מסכי הבייביסיטר
 import BabySitterScreen from './pages/BabySitterScreen';
 import SitterProfileScreen from './pages/SitterProfileScreen';
 import ChatScreen from './pages/ChatScreen';
 
 import { checkIfBabyExists } from './services/babyService';
 import { SleepTimerProvider } from './context/SleepTimerContext';
+import { FoodTimerProvider } from './context/FoodTimerContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { ActiveChildProvider, useActiveChild } from './context/ActiveChildContext';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
@@ -74,13 +76,97 @@ const CustomTabIcon = ({ focused, color, icon: Icon, label }: any) => {
   );
 };
 
+// --- Main App Navigator (uses theme and role-based permissions) ---
+function MainAppNavigator() {
+  const { theme, isDarkMode } = useTheme();
+  const { canAccessProfile, canAccessReports, canAccessBabysitter } = useActiveChild();
+
+  return (
+    <Tab.Navigator
+      initialRouteName="בית"
+      screenOptions={{
+        headerShown: false,
+        tabBarShowLabel: false,
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.textSecondary,
+        tabBarStyle: {
+          position: 'absolute',
+          bottom: 25,
+          left: 20,
+          right: 20,
+          elevation: 0,
+          backgroundColor: theme.tabBar,
+          borderRadius: 25,
+          height: 80,
+          shadowColor: theme.shadow,
+          shadowOffset: { width: 0, height: 5 },
+          shadowOpacity: isDarkMode ? 0.3 : 0.1,
+          shadowRadius: 10,
+          borderTopWidth: 0,
+          borderWidth: isDarkMode ? 1 : 0,
+          borderColor: theme.tabBarBorder,
+        }
+      }}
+    >
+      {/* Settings - always visible */}
+      <Tab.Screen name="הגדרות" component={SettingsScreen} options={{
+        tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Settings} label="הגדרות" />
+      }} />
+
+      {/* Profile - only for parents */}
+      {canAccessProfile && (
+        <Tab.Screen name="פרופיל" component={ProfileScreen} options={{
+          tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={User} label="פרופיל" />
+        }} />
+      )}
+
+      {/* Reports - only for parents */}
+      {canAccessReports && (
+        <Tab.Screen name="דוחות" component={ReportsScreen} options={{
+          tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={BarChart2} label="דוחות" />
+        }} />
+      )}
+
+      {/* Babysitter - only for parents */}
+      {canAccessBabysitter && (
+        <Tab.Screen name="בייביסיטר" component={BabysitterStackScreen} options={{
+          tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Baby} label="בייביסיטר" />
+        }} />
+      )}
+
+      {/* Home - always visible */}
+      <Tab.Screen name="בית" component={HomeStackScreen} options={{
+        tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Home} label="בית" />
+      }} />
+
+    </Tab.Navigator>
+  );
+}
+
 // --- הגדרת ה-Stacks ---
 
 function HomeStackScreen() {
   return (
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="Home" component={HomeScreen} />
+      <HomeStack.Screen name="CreateBaby" component={CreateBabyScreen} />
     </HomeStack.Navigator>
+  );
+}
+
+// Wrapper screen for creating baby from home
+function CreateBabyScreen({ navigation }: any) {
+  const { refreshChildren } = useActiveChild();
+
+  const handleProfileSaved = async () => {
+    await refreshChildren(); // Refresh to show all tabs
+    navigation.navigate('Home');
+  };
+
+  return (
+    <BabyProfileScreen
+      onProfileSaved={handleProfileSaved}
+    />
   );
 }
 
@@ -172,54 +258,27 @@ export default function App() {
   if (user && !hasBabyProfile) {
     return (
       <SafeAreaProvider>
-        <BabyProfileScreen onProfileSaved={() => setHasBabyProfile(true)} />
+        <BabyProfileScreen
+          onProfileSaved={() => setHasBabyProfile(true)}
+          onSkip={() => setHasBabyProfile(true)}
+        />
       </SafeAreaProvider>
     );
   }
 
   return (
     <SleepTimerProvider>
-      <SafeAreaProvider>
-        <NavigationContainer>
-          <Tab.Navigator
-            initialRouteName="בית"
-            screenOptions={{
-              headerShown: false,
-              tabBarShowLabel: false,
-              tabBarActiveTintColor: '#4f46e5',
-              tabBarInactiveTintColor: '#9ca3af',
-              tabBarStyle: {
-                position: 'absolute', bottom: 25, left: 20, right: 20, elevation: 0,
-                backgroundColor: '#ffffff', borderRadius: 25, height: 80,
-                shadowColor: '#000', shadowOffset: { width: 0, height: 5 },
-                shadowOpacity: 0.1, shadowRadius: 10, borderTopWidth: 0,
-              }
-            }}
-          >
-            <Tab.Screen name="הגדרות" component={SettingsScreen} options={{
-              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Settings} label="הגדרות" />
-            }} />
-
-            <Tab.Screen name="פרופיל" component={ProfileScreen} options={{
-              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={User} label="פרופיל" />
-            }} />
-
-            <Tab.Screen name="דוחות" component={ReportsScreen} options={{
-              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={BarChart2} label="דוחות" />
-            }} />
-
-            {/* ✅ הטאב של הבייביסיטר - מחובר ל-Stack */}
-            <Tab.Screen name="בייביסיטר" component={BabysitterStackScreen} options={{
-              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Baby} label="בייביסיטר" />
-            }} />
-
-            <Tab.Screen name="בית" component={HomeStackScreen} options={{
-              tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Home} label="בית" />
-            }} />
-
-          </Tab.Navigator>
-        </NavigationContainer>
-      </SafeAreaProvider>
+      <FoodTimerProvider>
+        <ThemeProvider>
+          <ActiveChildProvider>
+            <SafeAreaProvider>
+              <NavigationContainer>
+                <MainAppNavigator />
+              </NavigationContainer>
+            </SafeAreaProvider>
+          </ActiveChildProvider>
+        </ThemeProvider>
+      </FoodTimerProvider>
     </SleepTimerProvider>
   );
 }
