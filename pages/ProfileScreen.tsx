@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, ActivityIndicator, Text, TouchableOpacity
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Edit2, TrendingUp, Award, Sparkles, ChevronRight, Camera, UserPlus } from 'lucide-react-native';
+import { Edit2, TrendingUp, Award, Sparkles, ChevronRight, Camera, UserPlus, Users } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 // Custom Hooks
@@ -11,6 +11,7 @@ import { useBabyProfile } from '../hooks/useBabyProfile';
 import { useMilestones } from '../hooks/useMilestones';
 import { useTheme } from '../context/ThemeContext';
 import { useFamily } from '../hooks/useFamily';
+import { useActiveChild } from '../context/ActiveChildContext';
 
 // Components
 import {
@@ -22,6 +23,9 @@ import {
   EditBasicInfoModal,
 } from '../components/Profile';
 import GuestInviteModal from '../components/Family/GuestInviteModal';
+import { FamilyMembersCard } from '../components/Family/FamilyMembersCard';
+import { InviteFamilyModal } from '../components/Family/InviteFamilyModal';
+import { JoinFamilyModal } from '../components/Family/JoinFamilyModal';
 
 // Types
 import { EditMetricState, Milestone } from '../types/profile';
@@ -29,6 +33,9 @@ import { EditMetricState, Milestone } from '../types/profile';
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const { theme, isDarkMode } = useTheme();
+
+  // Use activeChild instead of useBabyProfile
+  const { activeChild } = useActiveChild();
 
   const {
     baby,
@@ -39,7 +46,7 @@ export default function ProfileScreen() {
     updatePhoto,
     updateStats,
     updateBasicInfo,
-  } = useBabyProfile();
+  } = useBabyProfile(activeChild?.childId);
 
   const { addNew: addMilestone, remove: removeMilestone } = useMilestones();
 
@@ -47,6 +54,8 @@ export default function ProfileScreen() {
   const [isMilestoneOpen, setIsMilestoneOpen] = useState(false);
   const [isEditBasicInfoOpen, setIsEditBasicInfoOpen] = useState(false);
   const [isGuestInviteOpen, setIsGuestInviteOpen] = useState(false);
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [joinModalVisible, setJoinModalVisible] = useState(false);
 
   const { family } = useFamily();
 
@@ -159,26 +168,21 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Invite Guest Button */}
-        {family && (
-          <TouchableOpacity
-            style={[styles.inviteGuestBtn, { backgroundColor: theme.card }]}
-            onPress={() => {
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }
+        {/* Family Sharing Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Users size={18} color="#8B5CF6" />
+            <Text style={styles.sectionTitle}>שיתוף משפחתי</Text>
+          </View>
+          <FamilyMembersCard
+            onInvitePress={() => setInviteModalVisible(true)}
+            onJoinPress={() => setJoinModalVisible(true)}
+            onGuestInvitePress={family ? () => {
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setIsGuestInviteOpen(true);
-            }}
-          >
-            <LinearGradient
-              colors={['#10B981', '#059669']}
-              style={styles.inviteGuestGradient}
-            >
-              <UserPlus size={18} color="#fff" />
-              <Text style={styles.inviteGuestText}>הזמן אורח / בייביסיטר</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
+            } : undefined}
+          />
+        </View>
 
         {/* Growth Section */}
         <View style={styles.section}>
@@ -270,6 +274,23 @@ export default function ProfileScreen() {
           familyId={family.id}
         />
       )}
+
+      {/* Family Invite Modal */}
+      {baby?.id && family && (
+        <InviteFamilyModal
+          visible={inviteModalVisible}
+          onClose={() => setInviteModalVisible(false)}
+          childId={baby.id}
+          childName={baby.name || 'הילד'}
+          familyId={family.id}
+        />
+      )}
+
+      {/* Join Family Modal */}
+      <JoinFamilyModal
+        visible={joinModalVisible}
+        onClose={() => setJoinModalVisible(false)}
+      />
     </View>
   );
 }

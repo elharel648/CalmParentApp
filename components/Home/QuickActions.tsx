@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { Utensils, Moon, Layers, Music, Anchor, Pill, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -49,6 +49,16 @@ const QuickActions = memo<QuickActionsProps>(({
     const takenCount = (meds?.vitaminD ? 1 : 0) + (meds?.iron ? 1 : 0);
     const allTaken = takenCount === 2;
 
+    // Ref to scroll to right side on mount
+    const scrollViewRef = useRef<ScrollView>(null);
+
+    useEffect(() => {
+        // Auto-scroll to the right (end) so Food shows first in RTL
+        setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: false });
+        }, 50);
+    }, []);
+
     return (
         <View>
             <Text style={[styles.sectionTitle, { color: dynamicStyles.text }]}>
@@ -56,6 +66,7 @@ const QuickActions = memo<QuickActionsProps>(({
             </Text>
 
             <ScrollView
+                ref={scrollViewRef}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.actionsSlider}
@@ -189,6 +200,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row-reverse',
         gap: 10,
         paddingLeft: 20,
+        paddingRight: 20,
         paddingBottom: 16,
     },
     actionBtn: {

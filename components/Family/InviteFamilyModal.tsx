@@ -83,7 +83,7 @@ export const InviteFamilyModal: React.FC<InviteFamilyModalProps> = ({
     };
 
     return (
-        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
             <View style={styles.overlay}>
                 <View style={styles.modalContent}>
                     {/* Header */}
@@ -160,16 +160,14 @@ const styles = StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+        justifyContent: 'flex-end',
     },
     modalContent: {
         backgroundColor: '#fff',
-        borderRadius: 24,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
         padding: 24,
-        width: '100%',
-        maxWidth: 360,
+        paddingBottom: 40,
     },
     header: {
         flexDirection: 'row',

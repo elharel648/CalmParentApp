@@ -32,6 +32,8 @@ export const useNotifications = (): UseNotificationsReturn => {
             // Schedule recurring notifications
             if (success) {
                 await notificationService.scheduleSupplementReminder();
+                await notificationService.scheduleDiaperReminder();
+                await notificationService.scheduleSleepReminder();
                 await notificationService.scheduleDailySummary();
             }
         };
@@ -66,6 +68,29 @@ export const useNotifications = (): UseNotificationsReturn => {
         setSettings(prev => ({ ...prev, ...newSettings }));
 
         // Reschedule notifications based on new settings
+        if (newSettings.feedingReminder !== undefined || newSettings.feedingIntervalHours !== undefined) {
+            if (newSettings.feedingReminder === false) {
+                await notificationService.cancelNotification('feeding_reminder');
+            }
+            // Feeding reminder is scheduled per-event, not here
+        }
+
+        if (newSettings.diaperReminder !== undefined || newSettings.diaperIntervalHours !== undefined) {
+            if (newSettings.diaperReminder === false) {
+                await notificationService.cancelNotification('diaper_reminder');
+            } else {
+                await notificationService.scheduleDiaperReminder();
+            }
+        }
+
+        if (newSettings.sleepReminder !== undefined || newSettings.sleepTime !== undefined) {
+            if (newSettings.sleepReminder === false) {
+                await notificationService.cancelNotification('sleep_reminder');
+            } else {
+                await notificationService.scheduleSleepReminder();
+            }
+        }
+
         if (newSettings.supplementReminder !== undefined || newSettings.supplementTime !== undefined) {
             if (newSettings.supplementReminder === false) {
                 await notificationService.cancelNotification('supplement_reminder');

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../services/firebaseConfig';
 import { getLastEvent, formatTimeFromTimestamp, getRecentHistory } from '../services/firebaseService';
@@ -15,6 +15,7 @@ interface UseHomeDataReturn extends HomeDataState {
     toggleBabyStatus: () => void;
     generateInsight: () => Promise<void>;
     refresh: () => Promise<void>;
+    isLoading: boolean;
 }
 
 /**
@@ -31,11 +32,15 @@ export const useHomeData = (
     const [babyStatus, setBabyStatus] = useState<'sleeping' | 'awake'>('awake');
     const [aiTip, setAiTip] = useState('אוסף נתונים לניתוח...');
     const [loadingAI, setLoadingAI] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [dailyStats, setDailyStats] = useState<DailyStats>({
         feedCount: 0,
         sleepMinutes: 0,
         diaperCount: 0,
     });
+
+    // Track last childId to prevent stale data
+    const lastChildIdRef = useRef<string | undefined>(undefined);
 
     const user = auth.currentUser;
 
@@ -135,15 +140,49 @@ export const useHomeData = (
 
     // Auto-refresh when childId changes - MUST be after refresh definition
     useEffect(() => {
-        if (childId) {
-            refresh();
-        } else {
-            // Reset data when no child
-            setLastFeedTime('--:--');
-            setLastSleepTime('--:--');
-            setDailyStats({ feedCount: 0, sleepMinutes: 0, diaperCount: 0 });
-        }
-    }, [childId, refresh]);
+        const fetchDataForChild = async () => {
+            if (!childId) {
+                // Reset data when no child
+                setLastFeedTime('--:--');
+                setLastSleepTime('--:--');
+                setDailyStats({ feedCount: 0, sleepMinutes: 0, diaperCount: 0 });
+                return;
+            }
+
+            console.log('🔄 useHomeData: Fetching data for childId =', childId);
+
+            try {
+                // Fetch last events
+                const lastFeed = await getLastEvent(childId, 'food', creatorId);
+                const lastSleep = await getLastEvent(childId, 'sleep', creatorId);
+
+                setLastFeedTime(formatTimeFromTimestamp(lastFeed?.timestamp));
+                setLastSleepTime(formatTimeFromTimestamp(lastSleep?.timestamp));
+
+                // Fetch current status
+                const childRef = doc(db, 'babies', childId);
+                const snap = await getDoc(childRef);
+
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data.status) setBabyStatus(data.status);
+                }
+
+                // Calculate daily stats from history
+                const history = await getRecentHistory(childId, creatorId);
+                const stats = calculateDailyStats(history);
+                setDailyStats(stats);
+
+                console.log('✅ useHomeData: Data fetched for childId =', childId, 'stats =', stats);
+
+            } catch (e) {
+                console.error('Home data refresh error:', e);
+            }
+        };
+
+        fetchDataForChild();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [childId]); // Only refresh when childId changes
 
     return {
         lastFeedTime,
@@ -152,6 +191,7 @@ export const useHomeData = (
         aiTip,
         loadingAI,
         dailyStats,
+        isLoading,
         toggleBabyStatus,
         generateInsight,
         refresh,

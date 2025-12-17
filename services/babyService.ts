@@ -10,7 +10,8 @@ import {
   doc,
   arrayUnion,
   arrayRemove,
-  getDoc
+  getDoc,
+  deleteDoc
 } from 'firebase/firestore';
 
 export type BabyData = {
@@ -85,6 +86,20 @@ export const getBabyData = async (): Promise<BabyData | null> => {
   }
 
   return null;
+};
+
+// Get baby data by specific child ID
+export const getBabyDataById = async (childId: string): Promise<BabyData | null> => {
+  try {
+    const babyDoc = await getDoc(doc(db, 'babies', childId));
+    if (babyDoc.exists()) {
+      return { id: babyDoc.id, ...babyDoc.data() } as BabyData;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error loading baby by ID:', error);
+    return null;
+  }
 };
 
 export const updateBabyData = async (babyId: string, dataToUpdate: any) => {
@@ -291,4 +306,20 @@ export const saveBabyProfile = async (name: string, birthDate: Date, gender: str
     vaccines: {},
     customVaccines: []
   });
+};
+
+// Delete child completely from database
+export const deleteChild = async (childId: string): Promise<void> => {
+  if (!childId) throw new Error('Child ID is required');
+
+  try {
+    // Delete the baby document
+    const babyRef = doc(db, 'babies', childId);
+    await deleteDoc(babyRef);
+
+    console.log('✅ Child deleted:', childId);
+  } catch (error) {
+    console.error('Error deleting child:', error);
+    throw error;
+  }
 };

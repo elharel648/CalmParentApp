@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // --- Types ---
 export type NotificationType =
     | 'feeding_reminder'
+    | 'diaper_reminder'
     | 'sleep_reminder'
     | 'supplement_reminder'
     | 'vaccine_reminder'
@@ -14,8 +15,12 @@ export type NotificationType =
 export interface NotificationSettings {
     enabled: boolean;
     feedingReminder: boolean;
-    feedingIntervalHours: number;
+    feedingIntervalHours: 1 | 2 | 3 | 4;
+    feedingStartTime: string; // HH:MM format
+    diaperReminder: boolean;
+    diaperIntervalHours: 2 | 3 | 4;
     sleepReminder: boolean;
+    sleepTime: string; // HH:MM format
     supplementReminder: boolean;
     supplementTime: string; // HH:MM format
     vaccineReminder: boolean;
@@ -27,23 +32,30 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
     enabled: true,
     feedingReminder: true,
     feedingIntervalHours: 3,
+    feedingStartTime: '08:00',
+    diaperReminder: true,
+    diaperIntervalHours: 3,
     sleepReminder: true,
+    sleepTime: '20:00',
     supplementReminder: true,
-    supplementTime: '08:00',
+    supplementTime: '09:00',
     vaccineReminder: true,
     dailySummary: false,
     dailySummaryTime: '20:00',
 };
 
-// --- Notification Content ---
 const NOTIFICATION_CONTENT = {
     feeding_reminder: {
         title: '🍼 זמן לארוחה',
         body: 'עברו {hours} שעות מהאכלה האחרונה',
     },
+    diaper_reminder: {
+        title: '🔄 זמן להחלפת חיתול',
+        body: 'כדאי לבדוק את התינוק',
+    },
     sleep_reminder: {
-        title: '😴 הגיע זמן לנוח?',
-        body: 'הבייבי ער כבר זמן מה, אולי צריך מנוחה',
+        title: '😴 הגיע זמן לישון',
+        body: 'שעת השינה המומלצת',
     },
     supplement_reminder: {
         title: '💊 תזכורת תוספים',
@@ -202,6 +214,53 @@ class NotificationService {
         });
 
         this.scheduledNotifications.set('supplement_reminder', id);
+    }
+
+    // Schedule diaper reminder (repeating every X hours)
+    async scheduleDiaperReminder(): Promise<void> {
+        if (!this.settings.enabled || !this.settings.diaperReminder) return;
+
+        await this.cancelNotification('diaper_reminder');
+
+        // Schedule repeating notification every X hours
+        const id = await Notifications.scheduleNotificationAsync({
+            content: {
+                title: NOTIFICATION_CONTENT.diaper_reminder.title,
+                body: NOTIFICATION_CONTENT.diaper_reminder.body,
+                data: { type: 'diaper_reminder' },
+            },
+            trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+                seconds: this.settings.diaperIntervalHours * 60 * 60,
+                repeats: true,
+            },
+        });
+
+        this.scheduledNotifications.set('diaper_reminder', id);
+    }
+
+    // Schedule sleep reminder (daily at bedtime)
+    async scheduleSleepReminder(): Promise<void> {
+        if (!this.settings.enabled || !this.settings.sleepReminder) return;
+
+        await this.cancelNotification('sleep_reminder');
+
+        const [hours, minutes] = this.settings.sleepTime.split(':').map(Number);
+
+        const id = await Notifications.scheduleNotificationAsync({
+            content: {
+                title: NOTIFICATION_CONTENT.sleep_reminder.title,
+                body: NOTIFICATION_CONTENT.sleep_reminder.body,
+                data: { type: 'sleep_reminder' },
+            },
+            trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.DAILY,
+                hour: hours,
+                minute: minutes,
+            },
+        });
+
+        this.scheduledNotifications.set('sleep_reminder', id);
     }
 
     // Schedule daily summary

@@ -46,7 +46,8 @@ import {
   Utensils,
   Pill,
   Users,
-  UserPlus
+  UserPlus,
+  Baby,
 } from 'lucide-react-native';
 import { auth, db } from '../services/firebaseConfig';
 import { deleteUser, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
@@ -54,9 +55,10 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { useTheme } from '../context/ThemeContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { useChildProfile } from '../hooks/useChildProfile';
-import { FamilyMembersCard } from '../components/Family/FamilyMembersCard';
-import { InviteFamilyModal } from '../components/Family/InviteFamilyModal';
-import { JoinFamilyModal } from '../components/Family/JoinFamilyModal';
+import { useActiveChild } from '../context/ActiveChildContext';
+import { deleteChild } from '../services/babyService';
+import { IntervalPicker } from '../components/Settings/IntervalPicker';
+import { TimePicker } from '../components/Settings/TimePicker';
 
 // --- צבעים ועיצוב ---
 const COLORS = {
@@ -92,6 +94,9 @@ export default function SettingsScreen() {
   const { isDarkMode, setDarkMode, theme } = useTheme();
   const navigation = useNavigation<any>();
 
+  // --- Active Child Context ---
+  const { activeChild, allChildren, setActiveChild, refreshChildren } = useActiveChild();
+
   // --- Notifications ---
   const { settings: notifSettings, updateSettings: updateNotifSettings, hasPermission, sendTestNotification } = useNotifications();
 
@@ -110,10 +115,6 @@ export default function SettingsScreen() {
   const [isContactModalVisible, setContactModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
   const [contactMessage, setContactMessage] = useState('');
-
-  // Family Modal States
-  const [isInviteModalVisible, setInviteModalVisible] = useState(false);
-  const [isJoinModalVisible, setJoinModalVisible] = useState(false);
 
   // Baby profile for family
   const { profile } = useChildProfile();
@@ -366,6 +367,64 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const handleDeleteChild = async () => {
+    if (!activeChild) return Alert.alert('Error', 'No child selected');
+
+    const childName = activeChild.childName;
+
+    Alert.alert(
+      `Delete ${childName}?`,
+      'This will delete ALL child data: photos, stats, events.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you absolutely sure?',
+              `This is irreversible! Cannot recover ${childName}.`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Yes, delete everything',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const deletedChildId = activeChild.childId;
+                      await deleteChild(deletedChildId);
+
+                      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+                      // Refresh children list
+                      await refreshChildren();
+
+                      // Find remaining children (excluding the deleted one)
+                      const remainingChildren = allChildren.filter(child => child.childId !== deletedChildId);
+
+                      if (remainingChildren.length === 0) {
+                        // No children left - go to CreateBaby
+                        Alert.alert('Deleted', `${childName} deleted. Add a new child.`, [
+                          { text: 'OK', onPress: () => navigation.navigate('CreateBaby') }
+                        ]);
+                      } else {
+                        // Switch to next child (first in remaining list)
+                        setActiveChild(remainingChildren[0]);
+                        Alert.alert('Deleted', `${childName} deleted. Switched to ${remainingChildren[0].childName}`);
+                      }
+                    } catch (error) {
+                      Alert.alert('Error', 'Failed to delete child');
+                    }
+                  }
+                }
+              ]
+            );
+          }
+        }
+      ]
+    );
+  };
+
   const handleDeleteAccount = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert(
@@ -473,18 +532,10 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* משפחה - Family Sharing */}
-        <SectionHeader icon={Users} title="שיתוף משפחתי" color="#10B981" />
-        <FamilyMembersCard
-          onInvitePress={() => setInviteModalVisible(true)}
-          onJoinPress={() => setJoinModalVisible(true)}
-        />
-
-
-
         {/* התראות ותזכורות */}
         <SectionHeader icon={Bell} title="התראות ותזכורות" color="#FF9500" />
         <View style={[styles.sectionContainer, { backgroundColor: theme.card }]}>
+          {/* Master Toggle */}
           <SettingItem
             icon={Bell}
             title="התראות מופעלות"
@@ -493,6 +544,8 @@ export default function SettingsScreen() {
             onPress={(val: boolean) => updateNotifSettings({ enabled: val })}
             color="#FF9500"
           />
+
+          {/* Food Reminder */}
           <SettingItem
             icon={Utensils}
             title="תזכורת האכלה"
@@ -502,6 +555,25 @@ export default function SettingsScreen() {
             color="#F59E0B"
             subtitle={`כל ${notifSettings.feedingIntervalHours} שעות`}
           />
+          {notifSettings.feedingReminder && (
+            <>
+              <IntervalPicker
+                value={notifSettings.feedingIntervalHours}
+                options={[1, 2, 3, 4]}
+                unit="שעות"
+                onChange={(val) => updateNotifSettings({ feedingIntervalHours: val as 1 | 2 | 3 | 4 })}
+                disabled={!notifSettings.enabled}
+              />
+              <TimePicker
+                value={notifSettings.feedingStartTime || "08:00"}
+                label="שעת התחלה"
+                onChange={(time) => updateNotifSettings({ feedingStartTime: time })}
+                disabled={!notifSettings.enabled}
+              />
+            </>
+          )}
+
+          {/* Supplements Reminder */}
           <SettingItem
             icon={Pill}
             title="תזכורת תוספים"
@@ -511,15 +583,33 @@ export default function SettingsScreen() {
             color="#10B981"
             subtitle={`כל יום ב-${notifSettings.supplementTime}`}
           />
+          {notifSettings.supplementReminder && (
+            <TimePicker
+              value={notifSettings.supplementTime}
+              label="שעת נטילה"
+              onChange={(time) => updateNotifSettings({ supplementTime: time })}
+              disabled={!notifSettings.enabled}
+            />
+          )}
+
+          {/* Daily Summary */}
           <SettingItem
             icon={FileText}
             title="סיכום יומי"
             type="switch"
             value={notifSettings.dailySummary}
             onPress={(val: boolean) => updateNotifSettings({ dailySummary: val })}
-            color="#8B5CF6"
+            color="#EC4899"
             subtitle={`כל יום ב-${notifSettings.dailySummaryTime}`}
           />
+          {notifSettings.dailySummary && (
+            <TimePicker
+              value={notifSettings.dailySummaryTime}
+              label="שעת סיכום"
+              onChange={(time) => updateNotifSettings({ dailySummaryTime: time })}
+              disabled={!notifSettings.enabled}
+            />
+          )}
         </View>
 
         {/* תצוגה והתנהגות */}
@@ -550,6 +640,13 @@ export default function SettingsScreen() {
         <SectionHeader icon={Trash2} title="אזור מסוכן" color="#EF4444" />
         <View style={[styles.sectionContainer, { backgroundColor: theme.card }]}>
           <SettingItem icon={Key} title="שינוי סיסמה" onPress={handleChangePassword} color="#007AFF" subtitle="שלח מייל לאיפוס" />
+          <SettingItem
+            icon={Trash2}
+            title="מחיקת ילד נוכחי"
+            isDestructive
+            onPress={handleDeleteChild}
+            subtitle={activeChild ? `מחק את ${activeChild.childName}` : 'אין ילד נבחר'}
+          />
           <SettingItem icon={LogOut} title="התנתקות" isDestructive onPress={handleLogout} />
           <SettingItem icon={Trash2} title="מחיקת חשבון" isDestructive onPress={handleDeleteAccount} subtitle="פעולה זו בלתי הפיכה" />
         </View>
@@ -681,31 +778,6 @@ export default function SettingsScreen() {
         )
       }
 
-      {/* Family Modals */}
-      <InviteFamilyModal
-        visible={isInviteModalVisible}
-        onClose={() => setInviteModalVisible(false)}
-        babyId={profile.id}
-        babyName={profile.name}
-      />
-
-      <JoinFamilyModal
-        visible={isJoinModalVisible}
-        onClose={() => setJoinModalVisible(false)}
-        onSuccess={() => {
-          Alert.alert(
-            'הצטרפת בהצלחה! 🎉',
-            'הצטרפת למשפחה! לחץ אישור כדי לרענן את הנתונים.',
-            [{
-              text: 'אישור',
-              onPress: () => {
-                // Navigate to home tab to trigger refresh
-                navigation.navigate('בית');
-              }
-            }]
-          );
-        }}
-      />
 
     </View >
   );

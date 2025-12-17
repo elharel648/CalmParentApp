@@ -199,7 +199,7 @@ const ChildPicker: React.FC<ChildPickerProps> = ({ onChildSelect, onAddChild, on
                                             <Text style={styles.addOptionTitle}>רישום ילד חדש</Text>
                                             <Text style={styles.addOptionSubtitle}>צור פרופיל חדש לילד</Text>
                                         </View>
-                                        <ChevronDown size={16} color="#9CA3AF" style={{ transform: [{ rotate: '-90deg' }] }} />
+                                        <ChevronDown size={16} color="#9CA3AF" style={{ transform: [{ rotate: '90deg' }] }} />
                                     </TouchableOpacity>
 
                                     {/* Join with code */}
@@ -218,7 +218,7 @@ const ChildPicker: React.FC<ChildPickerProps> = ({ onChildSelect, onAddChild, on
                                             <Text style={styles.addOptionTitle}>הצטרפות עם קוד</Text>
                                             <Text style={styles.addOptionSubtitle}>קיבלת קוד מהשותף?</Text>
                                         </View>
-                                        <ChevronDown size={16} color="#9CA3AF" style={{ transform: [{ rotate: '-90deg' }] }} />
+                                        <ChevronDown size={16} color="#9CA3AF" style={{ transform: [{ rotate: '90deg' }] }} />
                                     </TouchableOpacity>
                                 </View>
                             )}

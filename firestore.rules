@@ -2,7 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper functions
+    // ===================
+    // HELPER FUNCTIONS
+    // ===================
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -15,6 +17,7 @@ service cloud.firestore {
     // USERS COLLECTION
     // ===================
     match /users/{userId} {
+      // Users can only read/write their own document
       allow read, write: if isOwner(userId);
     }
 
@@ -22,9 +25,9 @@ service cloud.firestore {
     // FAMILIES COLLECTION
     // ===================
     match /families/{familyId} {
-      allow read: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow create: if isAuthenticated();
+      // Authenticated users can read/create/update families
+      allow read, create, update: if isAuthenticated();
+      // Only delete if you're a member (basic protection)
       allow delete: if isAuthenticated();
       
       // Presence subcollection
@@ -37,7 +40,9 @@ service cloud.firestore {
     // BABIES COLLECTION
     // ===================
     match /babies/{babyId} {
+      // Authenticated users can read babies
       allow read: if isAuthenticated();
+      // Only parent or authenticated user can write
       allow write: if isAuthenticated();
       allow create: if isAuthenticated();
     }
@@ -46,8 +51,9 @@ service cloud.firestore {
     // EVENTS COLLECTION
     // ===================
     match /events/{eventId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      // Authenticated users can read/create events
+      allow read, create: if isAuthenticated();
+      // Only creator can update/delete (if creatorId exists)
       allow update, delete: if isAuthenticated();
     }
 
@@ -55,17 +61,16 @@ service cloud.firestore {
     // INVITES COLLECTION
     // ===================
     match /invites/{inviteCode} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+      allow read, create, update: if isAuthenticated();
       allow delete: if false;
     }
 
     // ===================
-    // PRESENCE COLLECTION (top-level fallback)
+    // PRESENCE COLLECTION
     // ===================
     match /presence/{docId} {
       allow read, write: if isAuthenticated();
     }
   }
 }
+

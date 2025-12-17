@@ -139,6 +139,7 @@ export const saveEventToFirebase = async (userId: string, childId: string, data:
     const docRef = await addDoc(eventsRef, {
       userId,
       childId, // 🔑 קריטי לשיתוף ולריבוי ילדים
+      creatorId: userId, // 🔑 נדרש עבור security rules
       ...data,
       timestamp
     });
@@ -198,41 +199,30 @@ export const getLastEvent = async (childId: string, eventType: 'food' | 'sleep' 
   }
 };
 
-// 💡 שונה userId ל-childId + תמיכה ב-creatorId
+// 💡 Query ONLY by childId - this is the correct behavior for per-child data
 export const getRecentHistory = async (childId: string, creatorId?: string) => {
-  console.log('🔎 getRecentHistory: Querying for childId =', childId, 'creatorId =', creatorId);
+  console.log('🔎 getRecentHistory: Querying for childId =', childId);
+
+  if (!childId) {
+    console.log('🔎 getRecentHistory: No childId provided, returning empty');
+    return [];
+  }
 
   try {
     const eventsRef = collection(db, EVENTS_COLLECTION);
 
-    // 1. Query by childId
-    const q1 = query(
+    // Query ONLY by childId - each child has their own events
+    // Note: No orderBy to avoid composite index requirement
+    const q = query(
       eventsRef,
       where('childId', '==', childId),
       limit(50)
     );
-    const snap1 = await getDocs(q1);
 
-    // 2. Query by creatorId (if provided)
-    let docs = [...snap1.docs];
+    const snapshot = await getDocs(q);
+    console.log('🔎 getRecentHistory: Found', snapshot.docs.length, 'events for childId =', childId);
 
-    if (creatorId) {
-      const q2 = query(
-        eventsRef,
-        where('userId', '==', creatorId),
-        limit(50)
-      );
-      const snap2 = await getDocs(q2);
-      // Merge without duplicates
-      const existingIds = new Set(docs.map(d => d.id));
-      snap2.docs.forEach(d => {
-        if (!existingIds.has(d.id)) {
-          docs.push(d);
-        }
-      });
-    }
-
-    const events = docs.map(doc => {
+    const events = snapshot.docs.map(doc => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -244,8 +234,8 @@ export const getRecentHistory = async (childId: string, creatorId?: string) => {
     // Sort client-side (newest first)
     events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-    // Return top 20
-    return events.slice(0, 20);
+    // Return top 30
+    return events.slice(0, 30);
   } catch (error) {
     console.error('🔎 getRecentHistory ERROR:', error);
     return [];

@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { Timestamp } from 'firebase/firestore';
-import { getBabyData, updateBabyData, saveAlbumImage, BabyData } from '../services/babyService';
+import { getBabyData, updateBabyData, saveAlbumImage, BabyData, getBabyDataById } from '../services/babyService';
 import { GrowthStats } from '../types/profile';
 
 interface UseBabyProfileReturn {
@@ -20,21 +20,38 @@ interface UseBabyProfileReturn {
     updateBasicInfo: (data: { name: string; gender: 'boy' | 'girl' | 'other'; birthDate: Date }) => Promise<void>;
 }
 
-export const useBabyProfile = (): UseBabyProfileReturn => {
+export const useBabyProfile = (childId?: string): UseBabyProfileReturn => {
     const [baby, setBaby] = useState<BabyData | null>(null);
     const [loading, setLoading] = useState(true);
     const [savingImage, setSavingImage] = useState(false);
+    const prevChildId = useRef<string | undefined>(childId);
 
     const loadData = useCallback(async () => {
         try {
-            const data = await getBabyData();
-            if (data) setBaby(data);
+            setLoading(true);
+            // If childId is provided, load that specific child's data
+            if (childId) {
+                const data = await getBabyDataById(childId);
+                if (data) setBaby(data);
+            } else {
+                // Fall back to default behavior
+                const data = await getBabyData();
+                if (data) setBaby(data);
+            }
         } catch (e) {
             console.error('Error loading baby profile:', e);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [childId]);
+
+    // Reload when childId changes (for live updates when switching children)
+    useEffect(() => {
+        if (prevChildId.current !== childId) {
+            prevChildId.current = childId;
+            loadData();
+        }
+    }, [childId, loadData]);
 
     useFocusEffect(
         useCallback(() => {

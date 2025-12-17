@@ -489,11 +489,17 @@ export const joinAsGuest = async (
 
     try {
         // Find the invite
-        const inviteDoc = await getDoc(doc(db, 'invites', inviteCode.trim()));
+        const trimmedCode = inviteCode.trim();
+        console.log('🔍 joinAsGuest: Looking for invite code:', trimmedCode);
+
+        const inviteDoc = await getDoc(doc(db, 'invites', trimmedCode));
 
         if (!inviteDoc.exists()) {
+            console.log('❌ joinAsGuest: Invite not found in Firestore');
             return { success: false, message: 'קוד הזמנה לא תקין' };
         }
+
+        console.log('✅ joinAsGuest: Found invite:', inviteDoc.data());
 
         const inviteData = inviteDoc.data();
 

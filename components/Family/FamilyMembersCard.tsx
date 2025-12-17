@@ -17,6 +17,7 @@ import { auth } from '../../services/firebaseConfig';
 interface FamilyMembersCardProps {
     onInvitePress: () => void;
     onJoinPress: () => void;
+    onGuestInvitePress?: () => void;
 }
 
 const ROLE_CONFIG: Record<FamilyRole, { label: string; icon: any; color: string; bgColor: string; gradient: [string, string] }> = {
@@ -29,6 +30,7 @@ const ROLE_CONFIG: Record<FamilyRole, { label: string; icon: any; color: string;
 export const FamilyMembersCard: React.FC<FamilyMembersCardProps> = ({
     onInvitePress,
     onJoinPress,
+    onGuestInvitePress,
 }) => {
     const { family, members, isAdmin, remove, leave } = useFamily();
 
@@ -206,6 +208,25 @@ export const FamilyMembersCard: React.FC<FamilyMembersCardProps> = ({
                     <Text style={[styles.inviteButtonText, { color: '#10B981' }]}>הצטרף עם קוד</Text>
                 </TouchableOpacity>
 
+                {/* Guest Invite Button - Large Green */}
+                {onGuestInvitePress && (
+                    <TouchableOpacity
+                        style={[styles.guestInviteButton, { marginTop: 8 }]}
+                        onPress={onGuestInvitePress}
+                        activeOpacity={0.9}
+                    >
+                        <LinearGradient
+                            colors={['#10B981', '#059669']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.guestInviteGradient}
+                        >
+                            <UserPlus size={20} color="#fff" strokeWidth={2.5} />
+                            <Text style={styles.guestInviteText}>הזמן אורח</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                )}
+
                 {!isAdmin && (
                     <TouchableOpacity
                         style={[styles.leaveButton, { marginTop: 8 }]}
@@ -381,18 +402,20 @@ const styles = StyleSheet.create({
         paddingTop: 8,
     },
     inviteButton: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
         gap: 8,
         backgroundColor: '#EEF2FF',
         paddingVertical: 14,
+        paddingHorizontal: 16,
         borderRadius: 12,
     },
     inviteButtonText: {
         fontSize: 15,
         fontWeight: '600',
         color: '#6366F1',
+        flex: 1,
+        textAlign: 'right',
     },
     leaveButton: {
         flexDirection: 'row-reverse',
@@ -407,6 +430,25 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         color: '#EF4444',
+    },
+    // Guest Invite Button
+    guestInviteButton: {
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    guestInviteGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        gap: 10,
+    },
+    guestInviteText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700',
+        flex: 1,
+        textAlign: 'right',
     },
 });
 
