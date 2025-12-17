@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Check, User, ChevronLeft, Sparkles, Heart, Baby } from 'lucide-react-native';
+import { Calendar, Check, User, ChevronLeft, ChevronRight, Sparkles, Heart, Baby, X } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { saveBabyProfile } from '../services/babyService';
@@ -25,9 +25,10 @@ const { width, height } = Dimensions.get('window');
 type BabyProfileScreenProps = {
   onProfileSaved: () => void;
   onSkip?: () => void;
+  onClose?: () => void; // For closing the screen with X button
 };
 
-export default function BabyProfileScreen({ onProfileSaved, onSkip }: BabyProfileScreenProps) {
+export default function BabyProfileScreen({ onProfileSaved, onSkip, onClose }: BabyProfileScreenProps) {
   const [name, setName] = useState('');
   const [birthDate, setBirthDate] = useState(new Date());
   const [gender, setGender] = useState<'boy' | 'girl' | 'other'>('boy');
@@ -113,6 +114,17 @@ export default function BabyProfileScreen({ onProfileSaved, onSkip }: BabyProfil
       <View style={[styles.blob, styles.blob2]} />
       <View style={[styles.blob, styles.blob3]} />
 
+      {/* Close button (X) */}
+      {onClose && (
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={onClose}
+          activeOpacity={0.7}
+        >
+          <X size={22} color="#6B7280" />
+        </TouchableOpacity>
+      )}
+
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -130,28 +142,32 @@ export default function BabyProfileScreen({ onProfileSaved, onSkip }: BabyProfil
 
             {/* Header with icon */}
             <View style={styles.headerContainer}>
-              <View style={styles.iconCircle}>
-                <Baby size={36} color="#6366F1" />
-              </View>
-              <View style={styles.sparkleContainer}>
-                <Sparkles size={20} color="#F59E0B" />
+              <View style={styles.logoContainer}>
+                <LinearGradient
+                  colors={['#6366F1', '#8B5CF6']}
+                  style={styles.logoGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Baby size={28} color="#fff" strokeWidth={2.5} />
+                </LinearGradient>
               </View>
             </View>
 
-            <Text style={styles.mainTitle}>היי הורים! 👋</Text>
-            <Text style={styles.subTitle}>בואו נכיר את התוספת החדשה והמתוקה למשפחה</Text>
+            <Text style={styles.mainTitle}>רישום ילד חדש</Text>
+            <Text style={styles.subTitle}>נא למלא את הפרטים הבאים</Text>
 
             {/* Name Card */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
+                <Text style={styles.cardLabel}>שם הילד</Text>
                 <View style={styles.cardIconBg}>
-                  <User size={18} color="#6366F1" />
+                  <User size={16} color="#6366F1" strokeWidth={2.5} />
                 </View>
-                <Text style={styles.cardLabel}>איך קוראים לנסיך/ה?</Text>
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="הקלידו את השם כאן..."
+                placeholder="הקלידו את השם..."
                 placeholderTextColor="#9CA3AF"
                 value={name}
                 onChangeText={setName}
@@ -160,7 +176,7 @@ export default function BabyProfileScreen({ onProfileSaved, onSkip }: BabyProfil
               />
               {name.length > 0 && (
                 <View style={styles.checkBadge}>
-                  <Check size={14} color="#10B981" />
+                  <Check size={14} color="#10B981" strokeWidth={3} />
                 </View>
               )}
             </View>
@@ -168,18 +184,22 @@ export default function BabyProfileScreen({ onProfileSaved, onSkip }: BabyProfil
             {/* Birth Date Card */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
-                <View style={[styles.cardIconBg, { backgroundColor: '#FEF3C7' }]}>
-                  <Calendar size={18} color="#F59E0B" />
-                </View>
                 <Text style={styles.cardLabel}>תאריך לידה</Text>
+                <Calendar size={18} color="#6B7280" strokeWidth={2} />
               </View>
               <TouchableOpacity
                 style={styles.dateButton}
                 onPress={() => setShowDatePicker(true)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.dateText}>{birthDate.toLocaleDateString('he-IL')}</Text>
-                <ChevronLeft size={18} color="#6B7280" />
+                <ChevronRight size={18} color="#6B7280" />
+                <Text style={styles.dateText}>
+                  {birthDate.toLocaleDateString('he-IL', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -188,47 +208,52 @@ export default function BabyProfileScreen({ onProfileSaved, onSkip }: BabyProfil
                 value={birthDate}
                 mode="date"
                 display="spinner"
+                locale="he"
                 maximumDate={new Date()}
                 onChange={onDateChange}
               />
             )}
 
             {/* Gender Selection */}
-            <Text style={styles.sectionTitle}>מין היילוד</Text>
+            <Text style={styles.sectionTitle}>מין הילד</Text>
             <View style={styles.genderContainer}>
-              <TouchableOpacity
-                style={[styles.genderCard, gender === 'boy' && styles.genderCardBoyActive]}
-                onPress={() => handleGenderSelect('boy')}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={gender === 'boy' ? ['#DBEAFE', '#EFF6FF'] : ['#FFFFFF', '#FFFFFF']}
-                  style={styles.genderGradient}
-                >
-                  <Text style={styles.genderEmoji}>👶</Text>
-                  <Text style={[styles.genderText, gender === 'boy' && styles.genderTextActive]}>בן</Text>
-                  {gender === 'boy' && (
-                    <View style={[styles.genderBadge, { backgroundColor: '#3B82F6' }]}>
-                      <Check size={12} color="#fff" />
-                    </View>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.genderCard, gender === 'girl' && styles.genderCardGirlActive]}
                 onPress={() => handleGenderSelect('girl')}
                 activeOpacity={0.8}
               >
                 <LinearGradient
-                  colors={gender === 'girl' ? ['#FCE7F3', '#FDF2F8'] : ['#FFFFFF', '#FFFFFF']}
+                  colors={gender === 'girl' ? ['#FCE7F3', '#FDF2F8'] : ['#F9FAFB', '#F9FAFB']}
                   style={styles.genderGradient}
                 >
-                  <Text style={styles.genderEmoji}>👧</Text>
+                  <View style={[styles.genderIconCircle, { backgroundColor: gender === 'girl' ? '#EC4899' : '#E5E7EB' }]}>
+                    <User size={20} color="#fff" strokeWidth={2.5} />
+                  </View>
                   <Text style={[styles.genderText, gender === 'girl' && styles.genderTextActive]}>בת</Text>
                   {gender === 'girl' && (
                     <View style={[styles.genderBadge, { backgroundColor: '#EC4899' }]}>
-                      <Check size={12} color="#fff" />
+                      <Check size={12} color="#fff" strokeWidth={3} />
+                    </View>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.genderCard, gender === 'boy' && styles.genderCardBoyActive]}
+                onPress={() => handleGenderSelect('boy')}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={gender === 'boy' ? ['#DBEAFE', '#EFF6FF'] : ['#F9FAFB', '#F9FAFB']}
+                  style={styles.genderGradient}
+                >
+                  <View style={[styles.genderIconCircle, { backgroundColor: gender === 'boy' ? '#3B82F6' : '#E5E7EB' }]}>
+                    <User size={20} color="#fff" strokeWidth={2.5} />
+                  </View>
+                  <Text style={[styles.genderText, gender === 'boy' && styles.genderTextActive]}>בן</Text>
+                  {gender === 'boy' && (
+                    <View style={[styles.genderBadge, { backgroundColor: '#3B82F6' }]}>
+                      <Check size={12} color="#fff" strokeWidth={3} />
                     </View>
                   )}
                 </LinearGradient>
@@ -253,8 +278,8 @@ export default function BabyProfileScreen({ onProfileSaved, onSkip }: BabyProfil
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
                     <>
+                      <ChevronRight size={22} color="#fff" />
                       <Text style={styles.submitText}>שמירה והמשך</Text>
-                      <ChevronLeft size={22} color="#fff" />
                     </>
                   )}
                 </LinearGradient>
@@ -293,10 +318,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 24,
-    paddingBottom: 50
+    paddingBottom: 20
   },
   content: {
-    paddingTop: 80,
+    paddingTop: 50,
   },
 
   // Decorative blobs
@@ -326,80 +351,89 @@ const styles = StyleSheet.create({
     bottom: 100,
     right: -40,
   },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 10,
+  },
 
   // Header
   headerContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     position: 'relative',
   },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#EEF2FF',
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  logoGradient: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  sparkleContainer: {
-    position: 'absolute',
-    top: 0,
-    right: width * 0.25,
+    shadowRadius: 8,
+    elevation: 6,
   },
 
   mainTitle: {
-    fontSize: 36,
-    fontWeight: '900',
+    fontSize: 24,
+    fontWeight: '800',
     color: '#1E1B4B',
-    marginBottom: 12,
+    marginBottom: 4,
     textAlign: 'center',
   },
   subTitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#6B7280',
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-    paddingHorizontal: 20,
+    lineHeight: 20,
+    marginBottom: 20,
   },
 
   // Cards
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 16,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
     position: 'relative',
   },
   cardHeader: {
     flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
-    gap: 10,
+    marginBottom: 10,
+  },
+  cardLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#374151',
   },
   cardIconBg: {
     width: 36,
     height: 36,
-    borderRadius: 12,
-    backgroundColor: '#EEF2FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardLabel: {
-    fontSize: 14,
-    fontWeight: '700',
     color: '#374151',
   },
 
@@ -441,17 +475,17 @@ const styles = StyleSheet.create({
 
   // Gender
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: '#374151',
-    marginBottom: 16,
+    marginBottom: 12,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   genderContainer: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 32,
+    gap: 12,
+    marginBottom: 20,
   },
   genderCard: {
     flex: 1,
@@ -472,16 +506,20 @@ const styles = StyleSheet.create({
     borderColor: '#EC4899',
   },
   genderGradient: {
-    paddingVertical: 24,
+    paddingVertical: 18,
     alignItems: 'center',
     position: 'relative',
   },
-  genderEmoji: {
-    fontSize: 40,
+  genderIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 8,
   },
   genderText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#9CA3AF',
   },

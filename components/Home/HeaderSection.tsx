@@ -1,4 +1,4 @@
-import React, { memo, useState, useEffect, useRef } from 'react';
+import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, Animated, Easing } from 'react-native';
 import { Camera, Utensils, Moon, Baby, Pill, Sun, Layers } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,7 @@ import { auth, db } from '../../services/firebaseConfig';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ChildProfile, MedicationsState } from '../../types/home';
 import { useWeather } from '../../hooks/useWeather';
+import ChildPicker from './ChildPicker';
 
 interface DailyStats {
     feedCount: number;
@@ -25,6 +26,8 @@ interface HeaderSectionProps {
     lastSleepTime?: string;
     meds?: MedicationsState;
     navigation?: any;
+    onAddChild?: () => void; // For adding new child from header
+    onJoinWithCode?: () => void; // For joining with family code
 }
 
 interface BannerData {
@@ -46,6 +49,8 @@ const HeaderSection = memo<HeaderSectionProps>(({
     lastSleepTime,
     meds,
     navigation,
+    onAddChild,
+    onJoinWithCode,
 }) => {
     const [uploading, setUploading] = useState(false);
     const [currentBanner, setCurrentBanner] = useState(0);
@@ -62,53 +67,59 @@ const HeaderSection = memo<HeaderSectionProps>(({
     // Weather
     const { weather } = useWeather();
 
-    // Generate banners
-    const banners: BannerData[] = [
-        {
-            title: 'האכלות',
-            summary: dailyStats?.feedCount ? `${dailyStats.feedCount} פעמים היום` : 'אין נתונים',
-            lastAction: lastFeedTime && lastFeedTime !== '--:--' ? `פעולה אחרונה: ${lastFeedTime}` : '',
-            icon: Utensils,
-            color: '#F59E0B',
-            bgGradient: ['#FFFBEB', '#FEF3C7'],
-        },
-        {
-            title: 'שינה',
-            summary: dailyStats?.sleepMinutes
-                ? `${Math.floor(dailyStats.sleepMinutes / 60)}:${String(dailyStats.sleepMinutes % 60).padStart(2, '0')} שעות היום`
-                : 'אין נתונים',
-            lastAction: lastSleepTime && lastSleepTime !== '--:--' ? `פעולה אחרונה: ${lastSleepTime}` : '',
-            icon: Moon,
-            color: '#8B5CF6',
-            bgGradient: ['#F5F3FF', '#EDE9FE'],
-        },
-        {
-            title: 'החתלות',
-            summary: dailyStats?.diaperCount ? `${dailyStats.diaperCount} החלפות היום` : 'אין נתונים',
-            lastAction: '',
-            icon: Layers,
-            color: '#10B981',
-            bgGradient: ['#ECFDF5', '#D1FAE5'],
-        },
-    ];
+    // Generate banners - MUST be memoized with data dependencies
+    const banners: BannerData[] = useMemo(() => {
+        console.log('🎯 HeaderSection: Generating banners for profile', profile.id, 'dailyStats =', dailyStats);
 
-    // Add Supplement Banner if meds exist
-    if (meds) {
-        const takenCount = (meds.vitaminD ? 1 : 0) + (meds.iron ? 1 : 0);
-        let summaryText = 'לא נלקח היום';
-        if (takenCount === 2) summaryText = 'ויטמין D + ברזל';
-        else if (meds.vitaminD) summaryText = 'ויטמין D נלקח';
-        else if (meds.iron) summaryText = 'ברזל נלקח';
+        const bannersArray: BannerData[] = [
+            {
+                title: 'האכלות',
+                summary: dailyStats?.feedCount ? `${dailyStats.feedCount} פעמים היום` : 'אין נתונים',
+                lastAction: lastFeedTime && lastFeedTime !== '--:--' ? `פעולה אחרונה: ${lastFeedTime}` : '',
+                icon: Utensils,
+                color: '#F59E0B',
+                bgGradient: ['#FFFBEB', '#FEF3C7'],
+            },
+            {
+                title: 'שינה',
+                summary: dailyStats?.sleepMinutes
+                    ? `${Math.floor(dailyStats.sleepMinutes / 60)}:${String(dailyStats.sleepMinutes % 60).padStart(2, '0')} שעות היום`
+                    : 'אין נתונים',
+                lastAction: lastSleepTime && lastSleepTime !== '--:--' ? `פעולה אחרונה: ${lastSleepTime}` : '',
+                icon: Moon,
+                color: '#8B5CF6',
+                bgGradient: ['#F5F3FF', '#EDE9FE'],
+            },
+            {
+                title: 'החתלות',
+                summary: dailyStats?.diaperCount ? `${dailyStats.diaperCount} החלפות היום` : 'אין נתונים',
+                lastAction: '',
+                icon: Layers,
+                color: '#10B981',
+                bgGradient: ['#ECFDF5', '#D1FAE5'],
+            },
+        ];
 
-        banners.push({
-            title: 'תוספי תזונה',
-            summary: summaryText,
-            lastAction: takenCount > 0 ? 'הושלם' : 'לביצוע',
-            icon: Sun,
-            color: '#0EA5E9', // Sky Blue
-            bgGradient: ['#E0F2FE', '#BAE6FD'],
-        });
-    }
+        // Add Supplement Banner if meds exist
+        if (meds) {
+            const takenCount = (meds.vitaminD ? 1 : 0) + (meds.iron ? 1 : 0);
+            let summaryText = 'לא נלקח היום';
+            if (takenCount === 2) summaryText = 'ויטמין D + ברזל';
+            else if (meds.vitaminD) summaryText = 'ויטמין D נלקח';
+            else if (meds.iron) summaryText = 'ברזל נלקח';
+
+            bannersArray.push({
+                title: 'תוספי תזונה',
+                summary: summaryText,
+                lastAction: takenCount > 0 ? 'הושלם' : 'לביצוע',
+                icon: Sun,
+                color: '#0EA5E9', // Sky Blue
+                bgGradient: ['#E0F2FE', '#BAE6FD'],
+            });
+        }
+
+        return bannersArray;
+    }, [dailyStats, lastFeedTime, lastSleepTime, meds, profile.id]);
 
     // Auto-rotate banners with smooth slide animation
     useEffect(() => {
@@ -247,35 +258,8 @@ const HeaderSection = memo<HeaderSectionProps>(({
                     </Text>
                 </View>
 
-                {/* Right: Avatar + Name + Age */}
-                <View style={styles.profileInfo}>
-                    <View style={styles.nameSection}>
-                        <Text style={[styles.babyName, { color: dynamicStyles.text }]}>
-                            {profile.name}
-                        </Text>
-                        <Text style={styles.ageText}>{getAgeText()}</Text>
-                    </View>
-
-                    <TouchableOpacity
-                        onPress={() => navigation?.navigate('פרופיל')}
-                        style={styles.avatarWrapper}
-                        activeOpacity={0.8}
-                    >
-                        <LinearGradient
-                            colors={['#6366F1', '#8B5CF6']}
-                            style={styles.avatarGradient}
-                        >
-                            {profile.photoUrl ? (
-                                <Image source={{ uri: profile.photoUrl }} style={styles.avatarImage} />
-                            ) : (
-                                <Text style={styles.avatarEmoji}>👶</Text>
-                            )}
-                        </LinearGradient>
-                        <View style={styles.cameraBadge}>
-                            <Camera size={8} color="#fff" />
-                        </View>
-                    </TouchableOpacity>
-                </View>
+                {/* Right: Compact Child Picker (dropdown) */}
+                <ChildPicker compact onAddChild={onAddChild} onJoinWithCode={onJoinWithCode} />
             </View>
 
             {/* Summary Banner - RTL Layout with Slide Animation */}
@@ -355,6 +339,8 @@ const styles = StyleSheet.create({
     },
     greetingSection: {
         gap: 4,
+        minWidth: 140,
+        flexShrink: 0,
     },
     greetingRow: {
         flexDirection: 'row',

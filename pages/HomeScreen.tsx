@@ -219,12 +219,8 @@ export default function HomeScreen({ navigation }: any) {
                             lastSleepTime={lastSleepTime}
                             meds={meds}
                             navigation={navigation}
-                        />
-
-                        {/* Child Picker - switch between children */}
-                        <ChildPicker
-                            onChildSelect={() => refreshHomeData()}
                             onAddChild={() => navigation.navigate('CreateBaby')}
+                            onJoinWithCode={() => setIsJoinModalOpen(true)}
                         />
 
                         {/* Family Status - who's online */}

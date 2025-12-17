@@ -28,6 +28,7 @@ import { SleepTimerProvider } from './context/SleepTimerContext';
 import { FoodTimerProvider } from './context/FoodTimerContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { ActiveChildProvider, useActiveChild } from './context/ActiveChildContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
@@ -166,6 +167,7 @@ function CreateBabyScreen({ navigation }: any) {
   return (
     <BabyProfileScreen
       onProfileSaved={handleProfileSaved}
+      onClose={() => navigation.goBack()}
     />
   );
 }
@@ -267,19 +269,21 @@ export default function App() {
   }
 
   return (
-    <SleepTimerProvider>
-      <FoodTimerProvider>
-        <ThemeProvider>
-          <ActiveChildProvider>
-            <SafeAreaProvider>
-              <NavigationContainer>
-                <MainAppNavigator />
-              </NavigationContainer>
-            </SafeAreaProvider>
-          </ActiveChildProvider>
-        </ThemeProvider>
-      </FoodTimerProvider>
-    </SleepTimerProvider>
+    <ErrorBoundary>
+      <SleepTimerProvider>
+        <FoodTimerProvider>
+          <ThemeProvider>
+            <ActiveChildProvider>
+              <SafeAreaProvider>
+                <NavigationContainer>
+                  <MainAppNavigator />
+                </NavigationContainer>
+              </SafeAreaProvider>
+            </ActiveChildProvider>
+          </ThemeProvider>
+        </FoodTimerProvider>
+      </SleepTimerProvider>
+    </ErrorBoundary>
   );
 }
 
