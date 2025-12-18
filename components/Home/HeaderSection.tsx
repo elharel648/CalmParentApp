@@ -1,6 +1,6 @@
-import React, { memo, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, ScrollView, Modal, Pressable } from 'react-native';
-import { Camera, Cloud, Plus, X, Link2, UserPlus } from 'lucide-react-native';
+import React, { memo, useState, useMemo, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, ScrollView, Modal, Pressable, Animated, Dimensions } from 'react-native';
+import { Camera, Cloud, Plus, X, Link2, UserPlus, Moon, Utensils, Baby as BabyIcon, Pill } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { auth, db } from '../../services/firebaseConfig';
@@ -140,12 +140,111 @@ const HeaderSection = memo<HeaderSectionProps>(({
         ? `${Math.floor(dailyStats.sleepMinutes / 60)}:${String(dailyStats.sleepMinutes % 60).padStart(2, '0')}`
         : '0:00';
 
+    // Banner rotation state
+    const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+    const fadeAnim = useRef(new Animated.Value(1)).current;
+    const slideAnim = useRef(new Animated.Value(0)).current;
+
+    // Define banners data
+    const banners = useMemo(() => {
+        // Calculate supplements taken
+        const supplementsTaken = (meds?.vitaminD ? 1 : 0) + (meds?.iron ? 1 : 0);
+
+        const items = [
+            {
+                type: 'sleep',
+                icon: Moon,
+                color: '#8B5CF6',
+                bgColor: '#F3F0FF',
+                label: 'שינה',
+                value: sleepHours !== '0:00' ? sleepHours : null,
+                noDataText: 'אין נתונים',
+                lastTime: lastSleepTime,
+            },
+            {
+                type: 'feed',
+                icon: Utensils,
+                color: '#F59E0B',
+                bgColor: '#FEF9E7',
+                label: 'האכלות',
+                value: dailyStats?.feedCount || null,
+                noDataText: 'אין נתונים',
+                lastTime: lastFeedTime,
+            },
+            {
+                type: 'diaper',
+                icon: BabyIcon,
+                color: '#10B981',
+                bgColor: '#ECFDF5',
+                label: 'החתלות',
+                value: dailyStats?.diaperCount || null,
+                noDataText: 'אין נתונים',
+                lastTime: null,
+            },
+            {
+                type: 'supplements',
+                icon: Pill,
+                color: '#0EA5E9',
+                bgColor: '#E0F2FE',
+                label: 'תוספים',
+                value: `${supplementsTaken}/2`,
+                noDataText: '0/2',
+                lastTime: null,
+            },
+        ];
+        return items;
+    }, [sleepHours, dailyStats, lastSleepTime, lastFeedTime, meds]);
+
+    // Banner rotation effect
+    useEffect(() => {
+        const interval = setInterval(() => {
+            // Fade out + slide out
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 0,
+                    duration: 250,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(slideAnim, {
+                    toValue: -20,
+                    duration: 250,
+                    useNativeDriver: true,
+                }),
+            ]).start(() => {
+                // Change banner
+                setCurrentBannerIndex((prev) => (prev + 1) % banners.length);
+                // Reset position
+                slideAnim.setValue(20);
+                // Fade in + slide in
+                Animated.parallel([
+                    Animated.timing(fadeAnim, {
+                        toValue: 1,
+                        duration: 300,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(slideAnim, {
+                        toValue: 0,
+                        duration: 300,
+                        useNativeDriver: true,
+                    }),
+                ]).start();
+            });
+        }, 4000);
+
+        return () => clearInterval(interval);
+    }, [banners.length, fadeAnim, slideAnim]);
+
+    const currentBanner = banners[currentBannerIndex];
+    const BannerIcon = currentBanner.icon;
+
     return (
         <View style={styles.container}>
             {/* Top Row: Greeting + Weather */}
             <View style={styles.topRow}>
                 <View style={styles.greetingSection}>
-                    <Text style={[styles.greeting, { color: theme.textSecondary }]}>{greeting}</Text>
+                    <Text style={[styles.greeting, { color: theme.textSecondary }]}>
+                        {greeting} {profile.name}
+                    </Text>
                 </View>
 
                 {/* Weather Badge */}
@@ -159,16 +258,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
 
             {/* Children Avatars Row */}
             <View style={styles.childrenRow}>
-                {/* Plus Button - Add Child (on LEFT) */}
-                <TouchableOpacity
-                    style={styles.addChildBtn}
-                    onPress={handlePlusPress}
-                    activeOpacity={0.7}
-                >
-                    <Plus size={18} color="#9CA3AF" />
-                </TouchableOpacity>
-
-                {/* Child avatars (on RIGHT) */}
+                {/* Child avatars (on right) */}
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -208,70 +298,65 @@ const HeaderSection = memo<HeaderSectionProps>(({
                         );
                     })}
                 </ScrollView>
+
+                {/* Plus Button - Add Child */}
+                <TouchableOpacity
+                    style={styles.addChildBtn}
+                    onPress={handlePlusPress}
+                    activeOpacity={0.7}
+                >
+                    <Plus size={18} color="#9CA3AF" />
+                </TouchableOpacity>
             </View>
 
-            {/* Profile Card */}
-            <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
-                {/* Avatar */}
-                <TouchableOpacity
-                    onPress={handlePhotoPress}
-                    style={styles.avatarWrapper}
-                    disabled={uploading}
+            {/* Minimalist Rotating Banner */}
+            <View style={[styles.bannerContainer, { backgroundColor: theme.card }]}>
+                <Animated.View
+                    style={[
+                        styles.bannerInner,
+                        {
+                            opacity: fadeAnim,
+                            transform: [{ translateY: slideAnim }],
+                        },
+                    ]}
                 >
-                    {profile.photoUrl ? (
-                        <Image source={{ uri: profile.photoUrl }} style={styles.avatar} />
-                    ) : (
-                        <View style={[styles.avatarPlaceholder, { backgroundColor: '#E5E7EB' }]}>
-                            <Text style={styles.avatarInitial}>
-                                {profile.name?.charAt(0) || '👶'}
-                            </Text>
+                    {/* Left side: Time */}
+                    <View style={styles.bannerTimeSection}>
+                        <Text style={[styles.bannerTime, { color: theme.textSecondary }]}>
+                            {currentBanner.lastTime && currentBanner.lastTime !== '--:--' ? currentBanner.lastTime : ''}
+                        </Text>
+                    </View>
+
+                    {/* Spacer */}
+                    <View style={{ flex: 1 }} />
+
+                    {/* Right side: Label + Value + Icon */}
+                    <View style={styles.bannerRightSection}>
+                        <Text style={[styles.bannerValue, { color: theme.textPrimary }]}>
+                            {currentBanner.value !== null ? currentBanner.value : '-'}
+                        </Text>
+                        <Text style={[styles.bannerLabel, { color: currentBanner.color }]}>
+                            {currentBanner.label}
+                        </Text>
+                        <View style={[styles.bannerIcon, { backgroundColor: currentBanner.bgColor }]}>
+                            <BannerIcon size={16} color={currentBanner.color} />
                         </View>
-                    )}
-                    <View style={styles.cameraBadge}>
-                        <Camera size={12} color="#fff" />
                     </View>
-                </TouchableOpacity>
+                </Animated.View>
 
-                {/* Baby Info */}
-                <View style={styles.babyInfo}>
-                    <Text style={[styles.babyName, { color: theme.textPrimary }]}>
-                        {profile.name || 'התינוק שלי'}
-                    </Text>
-                    {ageText ? (
-                        <Text style={[styles.ageText, { color: theme.textSecondary }]}>
-                            {ageText}
-                        </Text>
-                    ) : null}
-                </View>
-
-                {/* Quick Stats */}
-                <View style={styles.quickStats}>
-                    <View style={styles.statItem}>
-                        <Text style={[styles.statValue, { color: '#F59E0B' }]}>
-                            {dailyStats?.feedCount || 0}
-                        </Text>
-                        <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                            האכלות
-                        </Text>
-                    </View>
-                    <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-                    <View style={styles.statItem}>
-                        <Text style={[styles.statValue, { color: '#8B5CF6' }]}>
-                            {sleepHours}
-                        </Text>
-                        <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                            שעות שינה
-                        </Text>
-                    </View>
-                    <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-                    <View style={styles.statItem}>
-                        <Text style={[styles.statValue, { color: '#10B981' }]}>
-                            {dailyStats?.diaperCount || 0}
-                        </Text>
-                        <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                            החתלות
-                        </Text>
-                    </View>
+                {/* Dots indicator */}
+                <View style={styles.dotsContainer}>
+                    {banners.map((_, index) => (
+                        <View
+                            key={index}
+                            style={[
+                                styles.dot,
+                                {
+                                    backgroundColor: index === currentBannerIndex ? currentBanner.color : '#E5E7EB',
+                                },
+                            ]}
+                        />
+                    ))}
                 </View>
             </View>
 
@@ -359,11 +444,11 @@ const styles = StyleSheet.create({
         color: '#6B7280',
     },
 
-    // Children Row
+    // Children Row - aligned to right side
     childrenRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'flex-start',
+        justifyContent: 'flex-end',
         marginBottom: 16,
     },
 
@@ -372,6 +457,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         paddingHorizontal: 4,
         gap: 10,
+        flexGrow: 1,
+        justifyContent: 'flex-end',
     },
     childAvatar: {
         width: 42,
@@ -418,93 +505,66 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#F9FAFB',
-        marginRight: 8,
+        marginLeft: 8,
     },
 
-    // Profile Card
-    profileCard: {
+    // Minimalist Banner - Matching Quick Actions Style
+    bannerContainer: {
         borderRadius: 20,
-        padding: 20,
+        padding: 14,
+        paddingVertical: 12,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.03,
+        shadowRadius: 6,
+        elevation: 1,
+        minHeight: 56,
     },
-
-    // Avatar
-    avatarWrapper: {
-        alignSelf: 'center',
-        marginBottom: 12,
-        position: 'relative',
-    },
-    avatar: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
-    },
-    avatarPlaceholder: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
+    bannerInner: {
+        flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
+        height: 36,
+    },
+    bannerTimeSection: {
+        width: 38,
+        alignItems: 'flex-start',
         justifyContent: 'center',
     },
-    avatarInitial: {
-        fontSize: 28,
-    },
-    cameraBadge: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: '#6366F1',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: '#fff',
-    },
-
-    // Baby Info
-    babyInfo: {
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    babyName: {
-        fontSize: 20,
-        fontWeight: '700',
-        marginBottom: 2,
-    },
-    ageText: {
-        fontSize: 13,
+    bannerTime: {
+        fontSize: 10,
         fontWeight: '500',
     },
-
-    // Quick Stats
-    quickStats: {
+    bannerRightSection: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    bannerLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    bannerValue: {
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    bannerIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dotsContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        alignItems: 'center',
-        gap: 20,
+        gap: 4,
+        marginTop: 10,
     },
-    statItem: {
-        alignItems: 'center',
-        minWidth: 60,
-    },
-    statValue: {
-        fontSize: 22,
-        fontWeight: '800',
-    },
-    statLabel: {
-        fontSize: 11,
-        fontWeight: '500',
-        marginTop: 2,
-    },
-    statDivider: {
-        width: 1,
-        height: 30,
+    dot: {
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
     },
 
     // Modal

@@ -208,7 +208,7 @@ export default function ReportsScreen() {
 
     if (item.type === 'feeding' || item.type === 'food') {
       IconComp = Utensils; color = COLORS.food;
-      title = item.subType === 'bottle' ? 'בקבוק' : item.subType === 'breast' ? 'הנקה' : 'האכלה';
+      title = item.subType === 'bottle' ? 'בקבוק' : item.subType === 'breast' ? 'הנקה' : 'אוכל';
       subtitle = item.amount ? `${item.amount} מ"ל` : '';
     } else if (item.type === 'diaper') {
       IconComp = Droplets; color = COLORS.diaper;

@@ -14,6 +14,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface HealthCardProps {
     dynamicStyles: { text: string };
+    visible?: boolean;
+    onClose?: () => void;
 }
 
 type HealthScreen = 'menu' | 'vaccines' | 'doctor' | 'illness' | 'temperature' | 'medications' | 'history';
@@ -48,8 +50,8 @@ const HEALTH_OPTIONS: HealthOption[] = [
     { key: 'history', label: 'היסטוריה', description: 'צפה בכל השמירות', icon: ClipboardList, gradientColors: ['#0EA5E9', '#0284C7'], bgColor: '#E0F2FE' },
 ];
 
-const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
-    const [isModalOpen, setIsModalOpen] = useState(false);
+const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) => {
+    const [isModalOpen, setIsModalOpen] = useState(visible || false);
     const [currentScreen, setCurrentScreen] = useState<HealthScreen>('menu');
     const scaleAnims = useRef(HEALTH_OPTIONS.map(() => new Animated.Value(1))).current;
 
@@ -274,7 +276,15 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
         setIsModalOpen(false);
         setCurrentScreen('menu');
         resetForms();
+        onClose?.();
     };
+
+    // Sync with external visible prop
+    useEffect(() => {
+        if (visible !== undefined) {
+            setIsModalOpen(visible);
+        }
+    }, [visible]);
 
     const resetForms = () => {
         setTemperature(37.0);
@@ -874,52 +884,35 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
     };
 
     return (
-        <>
-            <TouchableOpacity onPress={openModal} activeOpacity={0.8} style={styles.card}>
-                <View style={styles.cardContent}>
-                    <View style={styles.cardIconWrapper}>
-                        <Heart size={24} color="#10B981" />
-                    </View>
-                    <View style={styles.cardText}>
-                        <Text style={styles.cardTitle}>בריאות</Text>
-                        <Text style={styles.cardSubtitle}>חיסונים • טמפרטורה • תרופות</Text>
-                    </View>
-                    <View style={styles.cardArrow}>
-                        <ChevronLeft size={20} color="#9CA3AF" />
+        <Modal visible={isModalOpen} transparent animationType="slide" onRequestClose={closeModal}>
+            <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                    <LinearGradient colors={getHeaderGradient()} style={styles.modalHeader}>
+                        {currentScreen !== 'menu' ? (
+                            <TouchableOpacity onPress={goBack} style={styles.headerBtn}>
+                                <ChevronRight size={24} color="#fff" />
+                            </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity onPress={closeModal} style={styles.headerBtn}>
+                                <X size={24} color="#fff" />
+                            </TouchableOpacity>
+                        )}
+                        <Text style={styles.modalTitle}>{getScreenTitle()}</Text>
+                        <View style={{ width: 40 }} />
+                    </LinearGradient>
+
+                    <View style={styles.modalBody}>
+                        {currentScreen === 'menu' && renderMenu()}
+                        {currentScreen === 'vaccines' && renderVaccines()}
+                        {currentScreen === 'doctor' && renderDoctor()}
+                        {currentScreen === 'illness' && renderIllness()}
+                        {currentScreen === 'temperature' && renderTemperature()}
+                        {currentScreen === 'medications' && renderMedications()}
+                        {currentScreen === 'history' && renderHistory()}
                     </View>
                 </View>
-            </TouchableOpacity>
-
-            <Modal visible={isModalOpen} transparent animationType="slide" onRequestClose={closeModal}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <LinearGradient colors={getHeaderGradient()} style={styles.modalHeader}>
-                            {currentScreen !== 'menu' ? (
-                                <TouchableOpacity onPress={goBack} style={styles.headerBtn}>
-                                    <ChevronRight size={24} color="#fff" />
-                                </TouchableOpacity>
-                            ) : (
-                                <TouchableOpacity onPress={closeModal} style={styles.headerBtn}>
-                                    <X size={24} color="#fff" />
-                                </TouchableOpacity>
-                            )}
-                            <Text style={styles.modalTitle}>{getScreenTitle()}</Text>
-                            <View style={{ width: 40 }} />
-                        </LinearGradient>
-
-                        <View style={styles.modalBody}>
-                            {currentScreen === 'menu' && renderMenu()}
-                            {currentScreen === 'vaccines' && renderVaccines()}
-                            {currentScreen === 'doctor' && renderDoctor()}
-                            {currentScreen === 'illness' && renderIllness()}
-                            {currentScreen === 'temperature' && renderTemperature()}
-                            {currentScreen === 'medications' && renderMedications()}
-                            {currentScreen === 'history' && renderHistory()}
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-        </>
+            </View>
+        </Modal>
     );
 });
 

@@ -35,7 +35,7 @@ const SupplementsModal = memo(({ visible, onClose, meds, onToggle }: Supplements
                     <TouchableWithoutFeedback>
                         <View style={styles.modalContent}>
                             <View style={styles.header}>
-                                <Text style={styles.title}>תוספי תזונה יומיים 💊</Text>
+                                <Text style={styles.title}>תוספי תזונה יומיים</Text>
                                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                                     <X size={20} color="#6B7280" />
                                 </TouchableOpacity>
@@ -90,8 +90,6 @@ const SupplementsModal = memo(({ visible, onClose, meds, onToggle }: Supplements
                                     ]}>ברזל</Text>
                                 </TouchableOpacity>
                             </View>
-
-                            <Text style={styles.hint}>לחצו לסימון ביצוע ✅</Text>
                         </View>
                     </TouchableWithoutFeedback>
                 </View>

@@ -26,6 +26,7 @@ import CalmModeModal from '../components/CalmModeModal';
 import TrackingModal from '../components/TrackingModal';
 import WhiteNoiseModal from '../components/WhiteNoiseModal';
 import SupplementsModal from '../components/Home/SupplementsModal';
+import AddCustomActionModal, { CustomAction } from '../components/Home/AddCustomActionModal';
 import { JoinFamilyModal } from '../components/Family/JoinFamilyModal';
 
 // Services
@@ -84,6 +85,9 @@ export default function HomeScreen({ navigation }: any) {
     const [isCalmModeOpen, setIsCalmModeOpen] = useState(false);
     const [isWhiteNoiseOpen, setIsWhiteNoiseOpen] = useState(false);
     const [isSupplementsOpen, setIsSupplementsOpen] = useState(false);
+    const [isHealthOpen, setIsHealthOpen] = useState(false);
+    const [isAddCustomOpen, setIsAddCustomOpen] = useState(false);
+    const [customActions, setCustomActions] = useState<CustomAction[]>([]);
     const [trackingModalType, setTrackingModalType] = useState<TrackingType>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [timelineRefresh, setTimelineRefresh] = useState(0);
@@ -235,11 +239,13 @@ export default function HomeScreen({ navigation }: any) {
                             onWhiteNoisePress={() => setIsWhiteNoiseOpen(true)}
                             onSOSPress={() => setIsCalmModeOpen(true)}
                             onSupplementsPress={() => setIsSupplementsOpen(true)}
+                            onHealthPress={() => setIsHealthOpen(true)}
+                            onCustomPress={() => setIsAddCustomOpen(true)}
                             meds={meds}
                             dynamicStyles={dynamicStyles}
                         />
 
-                        <HealthCard dynamicStyles={dynamicStyles} />
+                        <HealthCard dynamicStyles={dynamicStyles} visible={isHealthOpen} onClose={() => setIsHealthOpen(false)} />
 
                         <DailyTimeline refreshTrigger={timelineRefresh} childId={profile.id} />
 
@@ -269,6 +275,14 @@ export default function HomeScreen({ navigation }: any) {
                 onSuccess={() => {
                     setIsJoinModalOpen(false);
                     onRefresh();
+                }}
+            />
+            <AddCustomActionModal
+                visible={isAddCustomOpen}
+                onClose={() => setIsAddCustomOpen(false)}
+                onAdd={(action) => {
+                    setCustomActions(prev => [...prev, action]);
+                    Alert.alert('נוסף! ✅', `הפעולה "${action.name}" נוספה בהצלחה`);
                 }}
             />
         </SafeAreaView>

@@ -548,7 +548,7 @@ export default function SettingsScreen() {
           {/* Food Reminder */}
           <SettingItem
             icon={Utensils}
-            title="תזכורת האכלה"
+            title="תזכורת אוכל"
             type="switch"
             value={notifSettings.feedingReminder}
             onPress={(val: boolean) => updateNotifSettings({ feedingReminder: val })}

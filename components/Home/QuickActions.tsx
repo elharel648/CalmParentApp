@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Animated } from 'react-native';
-import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer, Plus, HeartPulse } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useSleepTimer } from '../../context/SleepTimerContext';
 import { useFoodTimer } from '../../context/FoodTimerContext';
@@ -16,6 +16,8 @@ interface QuickActionsProps {
     onWhiteNoisePress: () => void;
     onSOSPress: () => void;
     onSupplementsPress: () => void;
+    onHealthPress?: () => void;
+    onCustomPress?: () => void;
     meds?: MedicationsState;
     dynamicStyles: { text: string };
 }
@@ -24,7 +26,7 @@ interface QuickActionsProps {
 const ACTIONS = {
     food: {
         icon: Utensils,
-        label: 'האכלה',
+        label: 'אוכל',
         activeLabel: 'מאכילה',
         color: '#F59E0B',
         lightColor: '#FEF3C7',
@@ -39,31 +41,50 @@ const ACTIONS = {
     diaper: {
         icon: Droplets,
         label: 'החתלה',
+        activeLabel: 'החתלה',
         color: '#10B981',
         lightColor: '#D1FAE5',
     },
     supplements: {
         icon: Pill,
         label: 'תוספים',
+        activeLabel: 'תוספים',
         color: '#0EA5E9',
         lightColor: '#E0F2FE',
     },
     whiteNoise: {
         icon: Music,
         label: 'רעש לבן',
+        activeLabel: 'רעש לבן',
         color: '#8B5CF6',
         lightColor: '#F3E8FF',
     },
     sos: {
         icon: Heart,
         label: 'SOS',
+        activeLabel: 'SOS',
         color: '#EF4444',
         lightColor: '#FEE2E2',
+    },
+    custom: {
+        icon: Plus,
+        label: 'הוספה',
+        activeLabel: 'הוספה',
+        color: '#6B7280',
+        lightColor: '#FFFFFF',
+        hasBorder: true,
+    },
+    health: {
+        icon: HeartPulse,
+        label: 'בריאות',
+        activeLabel: 'בריאות',
+        color: '#14B8A6',
+        lightColor: '#CCFBF1',
     },
 };
 
 /**
- * Premium Minimalist Quick Actions - Clean white cards with color accents
+ * Premium Minimalist Quick Actions - Horizontal Slider with Circular Icons
  */
 const QuickActions = memo<QuickActionsProps>(({
     lastFeedTime,
@@ -74,6 +95,8 @@ const QuickActions = memo<QuickActionsProps>(({
     onWhiteNoisePress,
     onSOSPress,
     onSupplementsPress,
+    onHealthPress,
+    onCustomPress,
     meds,
     dynamicStyles,
 }) => {
@@ -101,7 +124,7 @@ const QuickActions = memo<QuickActionsProps>(({
         }, 50);
     }, []);
 
-    // Single action button component
+    // Single action button component - Circular minimalist design
     const ActionButton = ({
         config,
         onPress,
@@ -121,43 +144,46 @@ const QuickActions = memo<QuickActionsProps>(({
 
         return (
             <TouchableOpacity
-                style={[
-                    styles.actionCard,
-                    { backgroundColor: theme.card },
-                    isActive && { borderColor: config.color, borderWidth: 2 }
-                ]}
+                style={styles.actionItem}
                 onPress={() => handlePress(onPress)}
                 activeOpacity={0.7}
             >
-                {/* Icon Circle */}
-                <View style={[styles.iconCircle, { backgroundColor: config.lightColor }]}>
-                    <Icon size={22} color={config.color} strokeWidth={2} />
+                {/* Circular Icon */}
+                <View style={[
+                    styles.iconCircle,
+                    { backgroundColor: config.lightColor },
+                    isActive && { borderColor: config.color, borderWidth: 2 },
+                    (config as any).hasBorder && { borderColor: '#D1D5DB', borderWidth: 1.5, borderStyle: 'dashed' }
+                ]}>
+                    <Icon size={18} color={config.color} strokeWidth={2} />
+
+                    {/* Active indicator dot */}
+                    {isActive && (
+                        <View style={[styles.activeDot, { backgroundColor: config.color }]} />
+                    )}
                 </View>
 
                 {/* Label */}
-                <Text style={[styles.actionLabel, { color: theme.textPrimary }]}>
+                <Text style={[styles.actionLabel, { color: theme.textPrimary }]} numberOfLines={1}>
                     {isActive ? config.activeLabel : config.label}
                 </Text>
 
                 {/* Time or Badge */}
                 {activeTime && isActive ? (
                     <View style={[styles.timerBadge, { backgroundColor: config.color }]}>
-                        <Timer size={10} color="#fff" />
+                        <Timer size={8} color="#fff" />
                         <Text style={styles.timerText}>{activeTime}</Text>
                     </View>
                 ) : lastTime ? (
-                    <Text style={[styles.lastTimeText, { color: theme.textSecondary }]}>
+                    <Text style={[styles.subText, { color: theme.textSecondary }]}>
                         {lastTime}
                     </Text>
                 ) : badge ? (
-                    <Text style={[styles.badgeText, { color: config.color }]}>
+                    <Text style={[styles.subText, { color: config.color }]}>
                         {badge}
                     </Text>
-                ) : null}
-
-                {/* Active indicator dot */}
-                {isActive && (
-                    <View style={[styles.activeDot, { backgroundColor: config.color }]} />
+                ) : (
+                    <View style={styles.subTextPlaceholder} />
                 )}
             </TouchableOpacity>
         );
@@ -172,15 +198,51 @@ const QuickActions = memo<QuickActionsProps>(({
                 </Text>
             </View>
 
-            {/* Primary Actions Row */}
-            <View style={styles.primaryRow}>
+            {/* Horizontal Slider */}
+            <ScrollView
+                ref={scrollViewRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.sliderContent}
+            >
+                {/* Custom Action - Plus Button */}
                 <ActionButton
-                    config={ACTIONS.food}
-                    onPress={onFoodPress}
-                    isActive={foodIsRunning}
-                    activeTime={foodIsRunning ? foodFormatTime(foodElapsed) : undefined}
-                    lastTime={!foodIsRunning ? lastFeedTime : undefined}
+                    config={ACTIONS.custom}
+                    onPress={onCustomPress || (() => { })}
                 />
+
+                {/* Health */}
+                <ActionButton
+                    config={ACTIONS.health}
+                    onPress={onHealthPress || (() => { })}
+                />
+
+                {/* SOS */}
+                <ActionButton
+                    config={ACTIONS.sos}
+                    onPress={onSOSPress}
+                />
+
+                {/* White Noise */}
+                <ActionButton
+                    config={ACTIONS.whiteNoise}
+                    onPress={onWhiteNoisePress}
+                />
+
+                {/* Supplements */}
+                <ActionButton
+                    config={allTaken ? { ...ACTIONS.supplements, icon: Check } : ACTIONS.supplements}
+                    onPress={onSupplementsPress}
+                    badge={`${takenCount}/2`}
+                />
+
+                {/* Diaper */}
+                <ActionButton
+                    config={ACTIONS.diaper}
+                    onPress={onDiaperPress}
+                />
+
+                {/* Sleep */}
                 <ActionButton
                     config={ACTIONS.sleep}
                     onPress={onSleepPress}
@@ -188,28 +250,16 @@ const QuickActions = memo<QuickActionsProps>(({
                     activeTime={sleepIsRunning ? sleepFormatTime(sleepElapsed) : undefined}
                     lastTime={!sleepIsRunning ? lastSleepTime : undefined}
                 />
-                <ActionButton
-                    config={ACTIONS.diaper}
-                    onPress={onDiaperPress}
-                />
-            </View>
 
-            {/* Secondary Actions Row */}
-            <View style={styles.secondaryRow}>
+                {/* Food */}
                 <ActionButton
-                    config={allTaken ? { ...ACTIONS.supplements, icon: Check } : ACTIONS.supplements}
-                    onPress={onSupplementsPress}
-                    badge={`${takenCount}/2`}
+                    config={ACTIONS.food}
+                    onPress={onFoodPress}
+                    isActive={foodIsRunning}
+                    activeTime={foodIsRunning ? foodFormatTime(foodElapsed) : undefined}
+                    lastTime={!foodIsRunning ? lastFeedTime : undefined}
                 />
-                <ActionButton
-                    config={ACTIONS.whiteNoise}
-                    onPress={onWhiteNoisePress}
-                />
-                <ActionButton
-                    config={ACTIONS.sos}
-                    onPress={onSOSPress}
-                />
-            </View>
+            </ScrollView>
         </View>
     );
 });
@@ -218,95 +268,83 @@ QuickActions.displayName = 'QuickActions';
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 20,
+        marginBottom: 16,
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 12,
+        paddingHorizontal: 4,
     },
     sectionTitle: {
-        fontSize: 17,
-        fontWeight: '700',
-        textAlign: 'right',
+        fontSize: 15,
+        fontWeight: '600',
     },
 
-    // Primary row (3 main actions)
-    primaryRow: {
-        flexDirection: 'row-reverse',
-        gap: 12,
-        marginBottom: 12,
+    // Horizontal Slider
+    sliderContent: {
+        flexDirection: 'row',
+        paddingHorizontal: 4,
+        gap: 16,
     },
 
-    // Secondary row
-    secondaryRow: {
-        flexDirection: 'row-reverse',
-        gap: 12,
-    },
-
-    // Action Card
-    actionCard: {
-        flex: 1,
+    // Action Item - Compact circular design
+    actionItem: {
         alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 8,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        elevation: 1,
-        position: 'relative',
+        width: 56,
     },
 
     iconCircle: {
-        width: 48,
-        height: 48,
-        borderRadius: 14,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 10,
+        marginBottom: 6,
+        position: 'relative',
     },
 
     actionLabel: {
-        fontSize: 13,
-        fontWeight: '600',
-        marginBottom: 4,
+        fontSize: 10,
+        fontWeight: '500',
+        textAlign: 'center',
+        marginBottom: 2,
     },
 
-    lastTimeText: {
-        fontSize: 11,
+    subText: {
+        fontSize: 9,
         fontWeight: '500',
     },
 
-    badgeText: {
-        fontSize: 11,
-        fontWeight: '700',
+    subTextPlaceholder: {
+        height: 12,
     },
 
     timerBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 10,
+        gap: 2,
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+        borderRadius: 6,
     },
 
     timerText: {
-        fontSize: 11,
+        fontSize: 8,
         fontWeight: '700',
         color: '#fff',
     },
 
     activeDot: {
         position: 'absolute',
-        top: 8,
-        right: 8,
+        top: -2,
+        right: -2,
         width: 8,
         height: 8,
         borderRadius: 4,
+        borderWidth: 2,
+        borderColor: '#fff',
     },
 });
 
