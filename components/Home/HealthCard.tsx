@@ -875,21 +875,19 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
 
     return (
         <>
-            <TouchableOpacity onPress={openModal} activeOpacity={0.9}>
-                <LinearGradient colors={['#10B981', '#059669']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
-                    <View style={styles.cardContent}>
-                        <View style={styles.cardIconWrapper}>
-                            <Heart size={28} color="#fff" />
-                        </View>
-                        <View style={styles.cardText}>
-                            <Text style={styles.cardTitle}>בריאות</Text>
-                            <Text style={styles.cardSubtitle}>חיסונים • טמפרטורה • תרופות</Text>
-                        </View>
-                        <View style={styles.cardArrow}>
-                            <ChevronLeft size={24} color="rgba(255,255,255,0.8)" />
-                        </View>
+            <TouchableOpacity onPress={openModal} activeOpacity={0.8} style={styles.card}>
+                <View style={styles.cardContent}>
+                    <View style={styles.cardIconWrapper}>
+                        <Heart size={24} color="#10B981" />
                     </View>
-                </LinearGradient>
+                    <View style={styles.cardText}>
+                        <Text style={styles.cardTitle}>בריאות</Text>
+                        <Text style={styles.cardSubtitle}>חיסונים • טמפרטורה • תרופות</Text>
+                    </View>
+                    <View style={styles.cardArrow}>
+                        <ChevronLeft size={20} color="#9CA3AF" />
+                    </View>
+                </View>
             </TouchableOpacity>
 
             <Modal visible={isModalOpen} transparent animationType="slide" onRequestClose={closeModal}>
@@ -928,13 +926,30 @@ const HealthCard = memo(({ dynamicStyles }: HealthCardProps) => {
 HealthCard.displayName = 'HealthCard';
 
 const styles = StyleSheet.create({
-    card: { borderRadius: 24, padding: 20, marginBottom: 16, shadowColor: '#10B981', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
+    card: {
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        padding: 18,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 2
+    },
     cardContent: { flexDirection: 'row-reverse', alignItems: 'center' },
-    cardIconWrapper: { width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-    cardText: { flex: 1, marginRight: 16, alignItems: 'flex-end' },
-    cardTitle: { fontSize: 22, fontWeight: '800', color: '#fff' },
-    cardSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.9)', marginTop: 4 },
-    cardArrow: { opacity: 0.8 },
+    cardIconWrapper: {
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        backgroundColor: '#D1FAE5',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    cardText: { flex: 1, marginRight: 14, alignItems: 'flex-end' },
+    cardTitle: { fontSize: 17, fontWeight: '700', color: '#1F2937' },
+    cardSubtitle: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+    cardArrow: { opacity: 0.6 },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
     modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, height: '92%', overflow: 'hidden' },

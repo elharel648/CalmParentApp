@@ -21,6 +21,8 @@ import BabyProfileScreen from './pages/BabyProfileScreen';
 // מסכי הבייביסיטר
 import BabySitterScreen from './pages/BabySitterScreen';
 import SitterProfileScreen from './pages/SitterProfileScreen';
+import SitterRegistrationScreen from './pages/SitterRegistrationScreen';
+import SitterDashboardScreen from './pages/SitterDashboardScreen';
 import ChatScreen from './pages/ChatScreen';
 
 import { checkIfBabyExists } from './services/babyService';
@@ -178,6 +180,8 @@ function BabysitterStackScreen() {
     <BabysitterStack.Navigator screenOptions={{ headerShown: false }}>
       <BabysitterStack.Screen name="SitterList" component={BabySitterScreen} />
       <BabysitterStack.Screen name="SitterProfile" component={SitterProfileScreen} />
+      <BabysitterStack.Screen name="SitterRegistration" component={SitterRegistrationScreen} />
+      <BabysitterStack.Screen name="SitterDashboard" component={SitterDashboardScreen} />
       <BabysitterStack.Screen name="ChatScreen" component={ChatScreen} />
     </BabysitterStack.Navigator>
   );

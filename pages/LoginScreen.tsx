@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Baby, Mail, Lock, Eye, EyeOff, AlertCircle, Check, Shield, Users, X } from 'lucide-react-native';
+import { Baby, Mail, Lock, Eye, EyeOff, AlertCircle, Check, Shield, Users, X, Briefcase } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as Haptics from 'expo-haptics';
@@ -78,6 +78,9 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [showJoinCodeModal, setShowJoinCodeModal] = useState(false);
   const [pendingInviteCode, setPendingInviteCode] = useState('');
   const [joiningFamily, setJoiningFamily] = useState(false);
+
+  // Babysitter registration
+  const [registerAsBabysitter, setRegisterAsBabysitter] = useState(false);
 
   // Animation refs
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -467,6 +470,33 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                 {isLogin && (
                   <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotBtn}>
                     <Text style={styles.forgotText}>שכחת סיסמה?</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Babysitter Registration Option - Visible in signup mode */}
+                {!isLogin && (
+                  <TouchableOpacity
+                    style={[styles.babysitterOptionCard, registerAsBabysitter && styles.babysitterOptionCardActive]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      setRegisterAsBabysitter(!registerAsBabysitter);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.babysitterIconCircle, registerAsBabysitter && styles.babysitterIconCircleActive]}>
+                      <Briefcase size={20} color={registerAsBabysitter ? '#fff' : '#F59E0B'} />
+                    </View>
+                    <View style={styles.babysitterTextSection}>
+                      <Text style={[styles.babysitterTitle, registerAsBabysitter && { color: '#F59E0B' }]}>
+                        {registerAsBabysitter ? '✓ נרשם/ת כבייביסיטר' : 'רוצה לעבוד כבייביסיטר?'}
+                      </Text>
+                      <Text style={styles.babysitterSubtitle}>
+                        {registerAsBabysitter ? 'תוכל/י לקבל הזמנות משפחות' : 'הצטרפ/י לרשת הבייביסיטרים שלנו'}
+                      </Text>
+                    </View>
+                    <View style={[styles.babysitterCheckbox, registerAsBabysitter && styles.babysitterCheckboxActive]}>
+                      {registerAsBabysitter && <Check size={14} color="#fff" />}
+                    </View>
                   </TouchableOpacity>
                 )}
 
@@ -955,5 +985,67 @@ const styles = StyleSheet.create({
   backToLogin: {
     fontSize: 14,
     color: '#9CA3AF',
+  },
+
+  // Babysitter Registration Styles
+  babysitterOptionCard: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  babysitterOptionCardActive: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#FEF3C7',
+  },
+  babysitterBtnActive: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#FFFBEB',
+  },
+  babysitterIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  babysitterIconCircleActive: {
+    backgroundColor: '#F59E0B',
+  },
+  babysitterTextSection: {
+    flex: 1,
+    marginRight: 12,
+    alignItems: 'flex-end',
+  },
+  babysitterTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#92400E',
+    textAlign: 'right',
+  },
+  babysitterSubtitle: {
+    fontSize: 12,
+    color: '#B45309',
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  babysitterCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  babysitterCheckboxActive: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#F59E0B',
   },
 });

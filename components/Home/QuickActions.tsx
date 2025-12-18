@@ -1,11 +1,11 @@
 import React, { memo, useCallback, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
-import { Utensils, Moon, Layers, Music, Anchor, Pill, Check } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Animated } from 'react-native';
+import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useSleepTimer } from '../../context/SleepTimerContext';
 import { useFoodTimer } from '../../context/FoodTimerContext';
 import { MedicationsState } from '../../types/home';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from '../../context/ThemeContext';
 
 interface QuickActionsProps {
     lastFeedTime: string;
@@ -15,13 +15,55 @@ interface QuickActionsProps {
     onDiaperPress: () => void;
     onWhiteNoisePress: () => void;
     onSOSPress: () => void;
-    onSupplementsPress: () => void; // New prop
+    onSupplementsPress: () => void;
     meds?: MedicationsState;
     dynamicStyles: { text: string };
 }
 
+// Action button configuration
+const ACTIONS = {
+    food: {
+        icon: Utensils,
+        label: 'האכלה',
+        activeLabel: 'מאכילה',
+        color: '#F59E0B',
+        lightColor: '#FEF3C7',
+    },
+    sleep: {
+        icon: Moon,
+        label: 'שינה',
+        activeLabel: 'ישנ/ה',
+        color: '#6366F1',
+        lightColor: '#EEF2FF',
+    },
+    diaper: {
+        icon: Droplets,
+        label: 'החתלה',
+        color: '#10B981',
+        lightColor: '#D1FAE5',
+    },
+    supplements: {
+        icon: Pill,
+        label: 'תוספים',
+        color: '#0EA5E9',
+        lightColor: '#E0F2FE',
+    },
+    whiteNoise: {
+        icon: Music,
+        label: 'רעש לבן',
+        color: '#8B5CF6',
+        lightColor: '#F3E8FF',
+    },
+    sos: {
+        icon: Heart,
+        label: 'SOS',
+        color: '#EF4444',
+        lightColor: '#FEE2E2',
+    },
+};
+
 /**
- * Quick action buttons including Supplements modal trigger
+ * Premium Minimalist Quick Actions - Clean white cards with color accents
  */
 const QuickActions = memo<QuickActionsProps>(({
     lastFeedTime,
@@ -35,12 +77,13 @@ const QuickActions = memo<QuickActionsProps>(({
     meds,
     dynamicStyles,
 }) => {
+    const { theme } = useTheme();
     const { isRunning: sleepIsRunning, elapsedSeconds: sleepElapsed, formatTime: sleepFormatTime } = useSleepTimer();
     const { isRunning: foodIsRunning, elapsedSeconds: foodElapsed, formatTime: foodFormatTime } = useFoodTimer();
 
     const handlePress = useCallback((callback: () => void) => {
         if (Platform.OS !== 'web') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
         callback();
     }, []);
@@ -53,136 +96,120 @@ const QuickActions = memo<QuickActionsProps>(({
     const scrollViewRef = useRef<ScrollView>(null);
 
     useEffect(() => {
-        // Auto-scroll to the right (end) so Food shows first in RTL
         setTimeout(() => {
             scrollViewRef.current?.scrollToEnd({ animated: false });
         }, 50);
     }, []);
 
-    return (
-        <View>
-            <Text style={[styles.sectionTitle, { color: dynamicStyles.text }]}>
-                פעולות מהירות
-            </Text>
+    // Single action button component
+    const ActionButton = ({
+        config,
+        onPress,
+        isActive = false,
+        activeTime,
+        lastTime,
+        badge,
+    }: {
+        config: typeof ACTIONS.food;
+        onPress: () => void;
+        isActive?: boolean;
+        activeTime?: string;
+        lastTime?: string;
+        badge?: string;
+    }) => {
+        const Icon = config.icon;
 
-            <ScrollView
-                ref={scrollViewRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.actionsSlider}
+        return (
+            <TouchableOpacity
+                style={[
+                    styles.actionCard,
+                    { backgroundColor: theme.card },
+                    isActive && { borderColor: config.color, borderWidth: 2 }
+                ]}
+                onPress={() => handlePress(onPress)}
+                activeOpacity={0.7}
             >
-                {/* Food */}
-                <TouchableOpacity
-                    style={[
-                        styles.actionBtn,
-                        { backgroundColor: foodIsRunning ? '#F59E0B' : '#FEF3C7' }
-                    ]}
-                    onPress={() => handlePress(onFoodPress)}
-                    accessibilityRole="button"
-                >
-                    <View style={[styles.actionIcon, { backgroundColor: foodIsRunning ? '#fff' : '#F59E0B' }]}>
-                        <Utensils size={24} color={foodIsRunning ? '#F59E0B' : '#fff'} />
+                {/* Icon Circle */}
+                <View style={[styles.iconCircle, { backgroundColor: config.lightColor }]}>
+                    <Icon size={22} color={config.color} strokeWidth={2} />
+                </View>
+
+                {/* Label */}
+                <Text style={[styles.actionLabel, { color: theme.textPrimary }]}>
+                    {isActive ? config.activeLabel : config.label}
+                </Text>
+
+                {/* Time or Badge */}
+                {activeTime && isActive ? (
+                    <View style={[styles.timerBadge, { backgroundColor: config.color }]}>
+                        <Timer size={10} color="#fff" />
+                        <Text style={styles.timerText}>{activeTime}</Text>
                     </View>
-                    <Text style={[styles.actionText, foodIsRunning && { color: '#fff' }]}>
-                        {foodIsRunning ? 'שאיבה' : 'אוכל'}
+                ) : lastTime ? (
+                    <Text style={[styles.lastTimeText, { color: theme.textSecondary }]}>
+                        {lastTime}
                     </Text>
-                    <Text style={[
-                        foodIsRunning ? styles.timerText : styles.lastTimeText,
-                        foodIsRunning && { color: '#FEF3C7' }
-                    ]}>
-                        {foodIsRunning ? foodFormatTime(foodElapsed) : lastFeedTime}
+                ) : badge ? (
+                    <Text style={[styles.badgeText, { color: config.color }]}>
+                        {badge}
                     </Text>
-                </TouchableOpacity>
+                ) : null}
 
-                {/* Sleep */}
-                <TouchableOpacity
-                    style={[
-                        styles.actionBtn,
-                        { backgroundColor: sleepIsRunning ? '#6366F1' : '#E0E7FF' }
-                    ]}
-                    onPress={() => handlePress(onSleepPress)}
-                    accessibilityRole="button"
-                >
-                    <View style={[
-                        styles.actionIcon,
-                        { backgroundColor: sleepIsRunning ? '#fff' : '#6366F1' }
-                    ]}>
-                        <Moon size={24} color={sleepIsRunning ? '#6366F1' : '#fff'} />
-                    </View>
-                    <Text style={[styles.actionText, sleepIsRunning && { color: '#fff' }]}>
-                        {sleepIsRunning ? 'ישנה' : 'שינה'}
-                    </Text>
-                    <Text style={[
-                        sleepIsRunning ? styles.timerText : styles.lastTimeText,
-                        sleepIsRunning && { color: '#E0E7FF' }
-                    ]}>
-                        {sleepIsRunning ? sleepFormatTime(sleepElapsed) : lastSleepTime}
-                    </Text>
-                </TouchableOpacity>
+                {/* Active indicator dot */}
+                {isActive && (
+                    <View style={[styles.activeDot, { backgroundColor: config.color }]} />
+                )}
+            </TouchableOpacity>
+        );
+    };
 
-                {/* Diaper */}
-                <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: '#D1FAE5' }]}
-                    onPress={() => handlePress(onDiaperPress)}
-                    accessibilityRole="button"
-                >
-                    <View style={[styles.actionIcon, { backgroundColor: '#10B981' }]}>
-                        <Layers size={24} color="#fff" />
-                    </View>
-                    <Text style={styles.actionText}>חיתול</Text>
-                </TouchableOpacity>
+    return (
+        <View style={styles.container}>
+            {/* Section Header */}
+            <View style={styles.header}>
+                <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+                    פעולות מהירות
+                </Text>
+            </View>
 
-                {/* Supplements (Single Button) */}
-                <TouchableOpacity
-                    style={[
-                        styles.actionBtn,
-                        allTaken ? { backgroundColor: '#E0F2FE' } : { backgroundColor: '#F3F4F6' } // Sky-100
-                    ]}
-                    onPress={() => handlePress(onSupplementsPress)}
-                    accessibilityRole="button"
-                >
-                    {allTaken ? (
-                        <View style={[styles.actionIcon, { backgroundColor: '#0EA5E9' }]}>
-                            <Check size={24} color="#fff" />
-                        </View>
-                    ) : (
-                        <View style={[styles.actionIcon, { backgroundColor: '#6B7280' }]}>
-                            <Pill size={24} color="#fff" />
-                        </View>
-                    )}
-                    <Text style={[styles.actionText, allTaken && { color: '#0284C7' }]}>
-                        תוספים
-                    </Text>
-                    <Text style={[styles.lastTimeText, allTaken && { color: '#0EA5E9' }]}>
-                        {takenCount}/2 נלקחו
-                    </Text>
-                </TouchableOpacity>
+            {/* Primary Actions Row */}
+            <View style={styles.primaryRow}>
+                <ActionButton
+                    config={ACTIONS.food}
+                    onPress={onFoodPress}
+                    isActive={foodIsRunning}
+                    activeTime={foodIsRunning ? foodFormatTime(foodElapsed) : undefined}
+                    lastTime={!foodIsRunning ? lastFeedTime : undefined}
+                />
+                <ActionButton
+                    config={ACTIONS.sleep}
+                    onPress={onSleepPress}
+                    isActive={sleepIsRunning}
+                    activeTime={sleepIsRunning ? sleepFormatTime(sleepElapsed) : undefined}
+                    lastTime={!sleepIsRunning ? lastSleepTime : undefined}
+                />
+                <ActionButton
+                    config={ACTIONS.diaper}
+                    onPress={onDiaperPress}
+                />
+            </View>
 
-                {/* Separator line */}
-                <View style={styles.separator} />
-
-                {/* White Noise */}
-                <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: '#F3E8FF' }]}
-                    onPress={() => handlePress(onWhiteNoisePress)}
-                >
-                    <View style={[styles.actionIcon, { backgroundColor: '#8B5CF6' }]}>
-                        <Music size={24} color="#fff" />
-                    </View>
-                    <Text style={[styles.actionText, { color: '#5B21B6' }]}>רעש לבן</Text>
-                </TouchableOpacity>
-
-                {/* SOS */}
-                <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: '#FCE7F3' }]}
-                    onPress={() => handlePress(onSOSPress)}
-                >
-                    <View style={[styles.actionIcon, { backgroundColor: '#F43F5E' }]}>
-                        <Anchor size={24} color="#fff" />
-                    </View>
-                    <Text style={[styles.actionText, { color: '#BE123C' }]}>SOS</Text>
-                </TouchableOpacity>
-            </ScrollView>
+            {/* Secondary Actions Row */}
+            <View style={styles.secondaryRow}>
+                <ActionButton
+                    config={allTaken ? { ...ACTIONS.supplements, icon: Check } : ACTIONS.supplements}
+                    onPress={onSupplementsPress}
+                    badge={`${takenCount}/2`}
+                />
+                <ActionButton
+                    config={ACTIONS.whiteNoise}
+                    onPress={onWhiteNoisePress}
+                />
+                <ActionButton
+                    config={ACTIONS.sos}
+                    onPress={onSOSPress}
+                />
+            </View>
         </View>
     );
 });
@@ -190,61 +217,96 @@ const QuickActions = memo<QuickActionsProps>(({
 QuickActions.displayName = 'QuickActions';
 
 const styles = StyleSheet.create({
+    container: {
+        marginBottom: 20,
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
     sectionTitle: {
-        fontSize: 18,
-        fontWeight: '800',
-        marginBottom: 12,
+        fontSize: 17,
+        fontWeight: '700',
         textAlign: 'right',
     },
-    actionsSlider: {
+
+    // Primary row (3 main actions)
+    primaryRow: {
         flexDirection: 'row-reverse',
-        gap: 10,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingBottom: 16,
+        gap: 12,
+        marginBottom: 12,
     },
-    actionBtn: {
-        width: 90,
-        height: 110,
-        borderRadius: 20,
+
+    // Secondary row
+    secondaryRow: {
+        flexDirection: 'row-reverse',
+        gap: 12,
+    },
+
+    // Action Card
+    actionCard: {
+        flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 8,
+        borderRadius: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 6,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 1,
+        position: 'relative',
     },
-    actionIcon: {
-        width: 44,
-        height: 44,
+
+    iconCircle: {
+        width: 48,
+        height: 48,
         borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 6,
+        marginBottom: 10,
     },
-    actionText: {
+
+    actionLabel: {
         fontSize: 13,
-        fontWeight: '700',
-        color: '#374151',
-    },
-    lastTimeText: {
-        fontSize: 10,
-        color: '#6B7280',
-        marginTop: 3,
         fontWeight: '600',
+        marginBottom: 4,
     },
+
+    lastTimeText: {
+        fontSize: 11,
+        fontWeight: '500',
+    },
+
+    badgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+
+    timerBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+    },
+
     timerText: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        marginTop: 3,
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#fff',
     },
-    separator: {
-        width: 1,
-        height: 80,
-        backgroundColor: '#E5E7EB',
-        marginHorizontal: 4,
-        alignSelf: 'center',
+
+    activeDot: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
     },
 });
 

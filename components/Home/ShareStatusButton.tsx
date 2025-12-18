@@ -1,8 +1,8 @@
 import React, { memo, useCallback, useState } from 'react';
-import { TouchableOpacity, Text, StyleSheet, Platform, Linking, Alert, View } from 'react-native';
-import { Share2, CheckCircle, MessageCircle } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { TouchableOpacity, Text, StyleSheet, Platform, Linking, View } from 'react-native';
+import { Send, Check, MessageCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { useTheme } from '../../context/ThemeContext';
 
 interface ShareStatusButtonProps {
     onShare: () => Promise<void>;
@@ -10,9 +10,10 @@ interface ShareStatusButtonProps {
 }
 
 /**
- * Circular WhatsApp share button
+ * Premium Minimalist Share Button - Inline card style
  */
 const ShareStatusButton = memo<ShareStatusButtonProps>(({ onShare, message }) => {
+    const { theme } = useTheme();
     const [showSuccess, setShowSuccess] = useState(false);
 
     const handlePress = useCallback(async () => {
@@ -21,7 +22,6 @@ const ShareStatusButton = memo<ShareStatusButtonProps>(({ onShare, message }) =>
         }
 
         try {
-            // Try to open WhatsApp with the message
             const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message || 'עדכון מ-CalmParent')}`;
             const canOpen = await Linking.canOpenURL(whatsappUrl);
 
@@ -35,37 +35,48 @@ const ShareStatusButton = memo<ShareStatusButtonProps>(({ onShare, message }) =>
 
                 setTimeout(() => setShowSuccess(false), 2000);
             } else {
-                // Fallback to regular share
                 await onShare();
             }
         } catch (e) {
-            // Fallback to regular share
             await onShare();
         }
     }, [onShare, message]);
 
     return (
-        <View style={styles.container}>
-            <TouchableOpacity
-                style={[styles.button, showSuccess && styles.successButton]}
-                onPress={handlePress}
-                activeOpacity={0.8}
-            >
-                <LinearGradient
-                    colors={showSuccess ? ['#10B981', '#059669'] : ['#25D366', '#128C7E']}
-                    style={styles.gradient}
-                >
+        <TouchableOpacity
+            style={[styles.container, { backgroundColor: theme.card }]}
+            onPress={handlePress}
+            activeOpacity={0.7}
+        >
+            <View style={styles.content}>
+                {/* Icon */}
+                <View style={[
+                    styles.iconCircle,
+                    { backgroundColor: showSuccess ? '#D1FAE5' : '#DCF8E6' }
+                ]}>
                     {showSuccess ? (
-                        <CheckCircle size={22} color="#fff" />
+                        <Check size={20} color="#10B981" strokeWidth={2.5} />
                     ) : (
-                        <MessageCircle size={22} color="#fff" fill="#fff" />
+                        <MessageCircle size={20} color="#25D366" fill="#25D366" />
                     )}
-                </LinearGradient>
-            </TouchableOpacity>
-            <Text style={styles.label}>
-                {showSuccess ? 'נשלח!' : 'שתף בוואטסאפ'}
-            </Text>
-        </View>
+                </View>
+
+                {/* Text */}
+                <View style={styles.textSection}>
+                    <Text style={[styles.title, { color: theme.textPrimary }]}>
+                        {showSuccess ? 'נשלח בהצלחה!' : 'שתף סיכום יומי'}
+                    </Text>
+                    <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+                        {showSuccess ? 'ההודעה נשלחה לוואטסאפ' : 'שלח עדכון למשפחה בוואטסאפ'}
+                    </Text>
+                </View>
+
+                {/* Arrow */}
+                <View style={styles.arrow}>
+                    <Send size={18} color="#25D366" />
+                </View>
+            </View>
+        </TouchableOpacity>
     );
 });
 
@@ -73,34 +84,42 @@ ShareStatusButton.displayName = 'ShareStatusButton';
 
 const styles = StyleSheet.create({
     container: {
+        marginTop: 8,
+        marginBottom: 16,
+        borderRadius: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+        elevation: 1,
+    },
+    content: {
+        flexDirection: 'row-reverse',
         alignItems: 'center',
-        marginVertical: 16,
+        padding: 16,
     },
-    button: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        shadowColor: '#25D366',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    successButton: {
-        shadowColor: '#10B981',
-    },
-    gradient: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+    iconCircle: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    label: {
-        marginTop: 8,
-        fontSize: 12,
+    textSection: {
+        flex: 1,
+        marginRight: 14,
+        alignItems: 'flex-end',
+    },
+    title: {
+        fontSize: 15,
         fontWeight: '600',
-        color: '#6B7280',
+    },
+    subtitle: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    arrow: {
+        opacity: 0.8,
     },
 });
 

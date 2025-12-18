@@ -31,6 +31,8 @@ const BabySitterScreen = ({ navigation }) => {
     const [viewMode, setViewMode] = useState(VIEW_MODES.LIST);
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [showCalendar, setShowCalendar] = useState(false);
+    const [userMode, setUserMode] = useState('parent'); // 'parent' or 'sitter'
+    const [isRegisteredSitter, setIsRegisteredSitter] = useState(true); // TODO: Check from Firebase
 
     // Handlers
     const handleSitterPress = useCallback((sitter) => {
@@ -76,47 +78,105 @@ const BabySitterScreen = ({ navigation }) => {
                 </TouchableOpacity>
             </View>
 
-            {/* Search Bar */}
-            <SearchBar
-                address={address}
-                isLoadingLocation={isLoadingLocation}
-                selectedDate={selectedDate}
-                onDatePress={() => setShowCalendar(true)}
-            />
-
-            {/* Content: List or Map View */}
-            {viewMode === VIEW_MODES.LIST ? (
-                <View style={styles.contentContainer}>
-                    {/* Filter Bar */}
-                    <FilterBar
-                        resultsCount={sortedData.length}
-                        filters={availableFilters}
-                        selectedFilter={sortBy}
-                        onFilterChange={setSortBy}
-                    />
-
-                    {/* Sitters List */}
-                    <ScrollView
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={styles.scrollContent}
+            {/* Mode Toggle - Only show if registered as sitter */}
+            {isRegisteredSitter ? (
+                <View style={styles.modeToggle}>
+                    <TouchableOpacity
+                        style={[styles.modeBtn, userMode === 'parent' && styles.modeBtnActive]}
+                        onPress={() => setUserMode('parent')}
                     >
-                        {sortedData.map((sitter) => (
-                            <SitterCard
-                                key={sitter.id}
-                                sitter={sitter}
-                                onPress={handleSitterPress}
-                                onPlayVideo={handlePlayVideo}
-                            />
-                        ))}
-                    </ScrollView>
+                        <Ionicons name="search" size={18} color={userMode === 'parent' ? '#fff' : '#6366F1'} />
+                        <Text style={[styles.modeBtnText, userMode === 'parent' && styles.modeBtnTextActive]}>
+                            מצב הורה
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.modeBtn, userMode === 'sitter' && styles.modeBtnActive]}
+                        onPress={() => setUserMode('sitter')}
+                    >
+                        <Ionicons name="briefcase" size={18} color={userMode === 'sitter' ? '#fff' : '#6366F1'} />
+                        <Text style={[styles.modeBtnText, userMode === 'sitter' && styles.modeBtnTextActive]}>
+                            מצב סיטר
+                        </Text>
+                    </TouchableOpacity>
                 </View>
             ) : (
-                // Map View
-                <SitterMapView
-                    sitters={sortedData}
-                    userLocation={coordinates}
-                    onMarkerPress={handleSitterPress}
-                />
+                /* Join as Sitter Banner - Show for non-sitters */
+                <TouchableOpacity
+                    style={styles.sitterBanner}
+                    onPress={() => navigation.navigate('SitterRegistration')}
+                    activeOpacity={0.9}
+                >
+                    <View style={styles.sitterBannerContent}>
+                        <Text style={styles.sitterBannerText}>את בייביסיטר? 💼</Text>
+                        <Text style={styles.sitterBannerLink}>הצטרפי אלינו ←</Text>
+                    </View>
+                </TouchableOpacity>
+            )}
+
+            {/* PARENT MODE CONTENT */}
+            {userMode === 'parent' && (
+                <>
+                    {/* Search Bar */}
+                    <SearchBar
+                        address={address}
+                        isLoadingLocation={isLoadingLocation}
+                        selectedDate={selectedDate}
+                        onDatePress={() => setShowCalendar(true)}
+                    />
+
+                    {/* Content: List or Map View */}
+                    {viewMode === VIEW_MODES.LIST ? (
+                        <View style={styles.contentContainer}>
+                            {/* Filter Bar */}
+                            <FilterBar
+                                resultsCount={sortedData.length}
+                                filters={availableFilters}
+                                selectedFilter={sortBy}
+                                onFilterChange={setSortBy}
+                            />
+
+                            {/* Sitters List */}
+                            <ScrollView
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={styles.scrollContent}
+                            >
+                                {sortedData.map((sitter) => (
+                                    <SitterCard
+                                        key={sitter.id}
+                                        sitter={sitter}
+                                        onPress={handleSitterPress}
+                                        onPlayVideo={handlePlayVideo}
+                                    />
+                                ))}
+                            </ScrollView>
+                        </View>
+                    ) : (
+                        // Map View
+                        <SitterMapView
+                            sitters={sortedData}
+                            userLocation={coordinates}
+                            onMarkerPress={handleSitterPress}
+                        />
+                    )}
+                </>
+            )}
+
+            {/* SITTER MODE - Redirect to Dashboard */}
+            {userMode === 'sitter' && (
+                <View style={styles.sitterModeContainer}>
+                    <View style={styles.sitterModeContent}>
+                        <Ionicons name="briefcase" size={60} color="#6366F1" />
+                        <Text style={styles.sitterModeTitle}>מצב סיטר</Text>
+                        <Text style={styles.sitterModeSubtitle}>עברי לדשבורד שלך לראות הזמנות והכנסות</Text>
+                        <TouchableOpacity
+                            style={styles.dashboardBtn}
+                            onPress={() => navigation.navigate('SitterDashboard')}
+                        >
+                            <Text style={styles.dashboardBtnText}>עברי לדשבורד ←</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
             )}
 
             {/* Floating Toggle Button (List/Map) */}
@@ -224,6 +284,98 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: 'bold',
         fontSize: 14,
+    },
+
+    // Sitter Banner
+    sitterBanner: {
+        marginHorizontal: 24,
+        marginBottom: 12,
+        backgroundColor: '#EEF2FF',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#C7D2FE',
+    },
+    sitterBannerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+    },
+    sitterBannerText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#4338CA',
+    },
+    sitterBannerLink: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#6366F1',
+    },
+
+    // Mode Toggle
+    modeToggle: {
+        flexDirection: 'row',
+        marginHorizontal: 24,
+        marginBottom: 12,
+        backgroundColor: '#F3F4F6',
+        borderRadius: 14,
+        padding: 4,
+    },
+    modeBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 12,
+        borderRadius: 12,
+    },
+    modeBtnActive: {
+        backgroundColor: '#6366F1',
+    },
+    modeBtnText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#6366F1',
+    },
+    modeBtnTextActive: {
+        color: '#fff',
+    },
+
+    // Sitter Mode
+    sitterModeContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
+    sitterModeContent: {
+        alignItems: 'center',
+        gap: 16,
+    },
+    sitterModeTitle: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#1A1A1A',
+    },
+    sitterModeSubtitle: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        lineHeight: 22,
+    },
+    dashboardBtn: {
+        backgroundColor: '#6366F1',
+        paddingVertical: 14,
+        paddingHorizontal: 32,
+        borderRadius: 14,
+        marginTop: 8,
+    },
+    dashboardBtnText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#fff',
     },
 });
 

@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert, Image } from 'react-native';
 import { Utensils, Moon, Layers, ChevronDown, ChevronUp, X } from 'lucide-react-native';
 import { getRecentHistory, deleteEvent } from '../services/firebaseService';
 import { useTheme } from '../context/ThemeContext';
@@ -11,6 +11,8 @@ interface TimelineEvent {
   amount?: string;
   note?: string;
   subType?: string;
+  reporterName?: string;
+  reporterPhotoUrl?: string;
   [key: string]: any;
 }
 
@@ -270,6 +272,21 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
                     <Text style={[styles.eventSubtext, { color: theme.textSecondary }]}>{subtext}</Text>
                   )}
                 </View>
+
+                {/* Reporter Badge - Small avatar showing who reported */}
+                {event.reporterName && (
+                  <View style={styles.reporterBadge}>
+                    {event.reporterPhotoUrl ? (
+                      <Image source={{ uri: event.reporterPhotoUrl }} style={styles.reporterAvatar} />
+                    ) : (
+                      <View style={[styles.reporterAvatarPlaceholder, { backgroundColor: config.color + '30' }]}>
+                        <Text style={[styles.reporterInitial, { color: config.color }]}>
+                          {event.reporterName.charAt(0)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
             </View>
           );
@@ -304,9 +321,8 @@ DailyTimeline.displayName = 'DailyTimeline';
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 32,
-    marginBottom: 32,
-    paddingHorizontal: 20,
+    marginTop: 24,
+    marginBottom: 16,
   },
 
   // Header
@@ -314,24 +330,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   titleSection: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   accentLine: {
     width: 3,
-    height: 20,
+    height: 18,
     backgroundColor: '#6366F1',
     borderRadius: 2,
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: '#111827',
-    letterSpacing: -0.4,
   },
   statsContainer: {
     flexDirection: 'row-reverse',
@@ -420,9 +435,12 @@ const styles = StyleSheet.create({
   eventCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -521,6 +539,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6B7280',
     letterSpacing: -0.1,
+  },
+
+  // Reporter Badge
+  reporterBadge: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    zIndex: 10,
+  },
+  reporterAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  reporterAvatarPlaceholder: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  reporterInitial: {
+    fontSize: 10,
+    fontWeight: '700',
   },
 });
 

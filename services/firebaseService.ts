@@ -12,7 +12,7 @@ import {
   getDoc,
   deleteDoc
 } from 'firebase/firestore';
-import { db } from './firebaseConfig';
+import { db, auth } from './firebaseConfig';
 
 // --- הגדרות קולקציה קבועות ---
 const EVENTS_COLLECTION = 'events';
@@ -136,10 +136,17 @@ export const saveEventToFirebase = async (userId: string, childId: string, data:
     const eventsRef = collection(db, EVENTS_COLLECTION);
     const timestamp = data.timestamp ? (data.timestamp instanceof Date ? Timestamp.fromDate(data.timestamp) : data.timestamp) : new Date();
 
+    // Get current user info for reporter badge
+    const currentUser = auth.currentUser;
+    const reporterName = currentUser?.displayName || 'אנונימי';
+    const reporterPhotoUrl = currentUser?.photoURL || null;
+
     const docRef = await addDoc(eventsRef, {
       userId,
       childId, // 🔑 קריטי לשיתוף ולריבוי ילדים
       creatorId: userId, // 🔑 נדרש עבור security rules
+      reporterName, // 👤 שם המדווח
+      reporterPhotoUrl, // 📸 תמונת המדווח
       ...data,
       timestamp
     });

@@ -5,12 +5,14 @@ import { Users, Circle } from 'lucide-react-native';
 import { useFamily } from '../../hooks/useFamily';
 import { subscribeToFamilyPresence, FamilyMemberPresence, setupPresenceListener } from '../../services/presenceService';
 import { auth } from '../../services/firebaseConfig';
+import { useTheme } from '../../context/ThemeContext';
 
 interface FamilyStatusIndicatorProps {
     onPress?: () => void;
 }
 
 const FamilyStatusIndicator = memo(({ onPress }: FamilyStatusIndicatorProps) => {
+    const { theme } = useTheme();
     const { family } = useFamily();
     const [members, setMembers] = useState<FamilyMemberPresence[]>([]);
 
@@ -42,7 +44,7 @@ const FamilyStatusIndicator = memo(({ onPress }: FamilyStatusIndicatorProps) => 
 
     return (
         <TouchableOpacity
-            style={styles.container}
+            style={[styles.container, { backgroundColor: theme.card }]}
             onPress={onPress}
             activeOpacity={0.8}
         >
