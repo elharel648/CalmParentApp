@@ -3,12 +3,24 @@ import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 interface FoodTimerContextType {
-    isRunning: boolean;
-    elapsedSeconds: number;
-    timerType: 'pumping' | 'breast_left' | 'breast_right' | null;
-    start: (type: 'pumping' | 'breast_left' | 'breast_right') => void;
-    stop: () => void;
-    reset: () => void;
+    // Pumping Timer
+    pumpingIsRunning: boolean;
+    pumpingElapsedSeconds: number;
+    startPumping: () => void;
+    stopPumping: () => void;
+    resetPumping: () => void;
+
+    // Breastfeeding Timer
+    breastIsRunning: boolean;
+    breastActiveSide: 'left' | 'right' | null;
+    breastElapsedSeconds: number;
+    leftBreastTime: number;
+    rightBreastTime: number;
+    startBreast: (side: 'left' | 'right') => void;
+    stopBreast: () => void;
+    resetBreast: () => void;
+
+    // Utility
     formatTime: (seconds: number) => string;
 }
 
@@ -27,53 +39,112 @@ interface FoodTimerProviderProps {
 }
 
 export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
-    const [isRunning, setIsRunning] = useState(false);
-    const [elapsedSeconds, setElapsedSeconds] = useState(0);
-    const [timerType, setTimerType] = useState<'pumping' | 'breast_left' | 'breast_right' | null>(null);
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // === PUMPING TIMER ===
+    const [pumpingIsRunning, setPumpingIsRunning] = useState(false);
+    const [pumpingElapsedSeconds, setPumpingElapsedSeconds] = useState(0);
+    const pumpingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Timer effect
+    // Pumping timer effect
     useEffect(() => {
-        if (isRunning) {
-            timerRef.current = setInterval(() => {
-                setElapsedSeconds(prev => prev + 1);
+        if (pumpingIsRunning) {
+            pumpingTimerRef.current = setInterval(() => {
+                setPumpingElapsedSeconds(prev => prev + 1);
             }, 1000);
         } else {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-                timerRef.current = null;
+            if (pumpingTimerRef.current) {
+                clearInterval(pumpingTimerRef.current);
+                pumpingTimerRef.current = null;
             }
         }
-
         return () => {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
+            if (pumpingTimerRef.current) clearInterval(pumpingTimerRef.current);
         };
-    }, [isRunning]);
+    }, [pumpingIsRunning]);
 
-    const start = useCallback((type: 'pumping' | 'breast_left' | 'breast_right') => {
-        if (Platform.OS !== 'web') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const startPumping = useCallback(() => {
+        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setPumpingIsRunning(true);
+        setPumpingElapsedSeconds(0);
+    }, []);
+
+    const stopPumping = useCallback(() => {
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setPumpingIsRunning(false);
+    }, []);
+
+    const resetPumping = useCallback(() => {
+        setPumpingIsRunning(false);
+        setPumpingElapsedSeconds(0);
+    }, []);
+
+    // === BREASTFEEDING TIMER ===
+    const [breastIsRunning, setBreastIsRunning] = useState(false);
+    const [breastActiveSide, setBreastActiveSide] = useState<'left' | 'right' | null>(null);
+    const [breastElapsedSeconds, setBreastElapsedSeconds] = useState(0);
+    const [leftBreastTime, setLeftBreastTime] = useState(0);
+    const [rightBreastTime, setRightBreastTime] = useState(0);
+    const breastTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // Breast timer effect
+    useEffect(() => {
+        console.log('🍼 Breast timer effect, isRunning:', breastIsRunning, 'activeSide:', breastActiveSide);
+        if (breastIsRunning && breastActiveSide) {
+            console.log('🍼 Starting breast interval...');
+            breastTimerRef.current = setInterval(() => {
+                setBreastElapsedSeconds(prev => prev + 1);
+            }, 1000);
+        } else {
+            if (breastTimerRef.current) {
+                clearInterval(breastTimerRef.current);
+                breastTimerRef.current = null;
+            }
         }
-        setTimerType(type);
-        setIsRunning(true);
-        setElapsedSeconds(0);
-    }, []);
+        return () => {
+            if (breastTimerRef.current) clearInterval(breastTimerRef.current);
+        };
+    }, [breastIsRunning, breastActiveSide]);
 
-    const stop = useCallback(() => {
-        if (Platform.OS !== 'web') {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const startBreast = useCallback((side: 'left' | 'right') => {
+        console.log('🍼 startBreast called, side:', side, 'isRunning:', breastIsRunning, 'activeSide:', breastActiveSide);
+        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        // If switching sides, accumulate current time first
+        if (breastIsRunning && breastActiveSide && breastActiveSide !== side) {
+            if (breastActiveSide === 'left') {
+                setLeftBreastTime(prev => prev + breastElapsedSeconds);
+            } else {
+                setRightBreastTime(prev => prev + breastElapsedSeconds);
+            }
         }
-        setIsRunning(false);
+
+        setBreastActiveSide(side);
+        setBreastIsRunning(true);
+        setBreastElapsedSeconds(0);
+    }, [breastIsRunning, breastActiveSide, breastElapsedSeconds]);
+
+    const stopBreast = useCallback(() => {
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        // Accumulate time before stopping
+        if (breastActiveSide === 'left') {
+            setLeftBreastTime(prev => prev + breastElapsedSeconds);
+        } else if (breastActiveSide === 'right') {
+            setRightBreastTime(prev => prev + breastElapsedSeconds);
+        }
+
+        setBreastIsRunning(false);
+        setBreastElapsedSeconds(0);
+    }, [breastActiveSide, breastElapsedSeconds]);
+
+    const resetBreast = useCallback(() => {
+        setBreastIsRunning(false);
+        setBreastActiveSide(null);
+        setBreastElapsedSeconds(0);
+        setLeftBreastTime(0);
+        setRightBreastTime(0);
     }, []);
 
-    const reset = useCallback(() => {
-        setIsRunning(false);
-        setElapsedSeconds(0);
-        setTimerType(null);
-    }, []);
-
+    // === UTILITY ===
     const formatTime = useCallback((seconds: number) => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
@@ -83,12 +154,22 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
     return (
         <FoodTimerContext.Provider
             value={{
-                isRunning,
-                elapsedSeconds,
-                timerType,
-                start,
-                stop,
-                reset,
+                // Pumping
+                pumpingIsRunning,
+                pumpingElapsedSeconds,
+                startPumping,
+                stopPumping,
+                resetPumping,
+                // Breastfeeding
+                breastIsRunning,
+                breastActiveSide,
+                breastElapsedSeconds,
+                leftBreastTime,
+                rightBreastTime,
+                startBreast,
+                stopBreast,
+                resetBreast,
+                // Utility
                 formatTime,
             }}
         >

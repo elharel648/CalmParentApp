@@ -157,7 +157,7 @@ export default function HomeScreen({ navigation }: any) {
             console.log('💾 Saving to Firebase...');
             await saveEventToFirebase(user.uid, profile.id, data);
             console.log('✅ Saved successfully!');
-            Alert.alert('מעולה!', 'התיעוד נשמר בהצלחה ✅');
+            // Alert removed - TrackingModal now shows checkmark animation
 
             // Schedule feeding reminder if this was a food event
             if (data.type === 'food') {
@@ -241,6 +241,35 @@ export default function HomeScreen({ navigation }: any) {
                             onSupplementsPress={() => setIsSupplementsOpen(true)}
                             onHealthPress={() => setIsHealthOpen(true)}
                             onCustomPress={() => setIsAddCustomOpen(true)}
+                            onFoodTimerStop={async (seconds, timerType) => {
+                                const mins = Math.floor(seconds / 60);
+                                const secs = seconds % 60;
+                                const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                                const subTypeMap: Record<string, string> = {
+                                    'breast_left': 'breast',
+                                    'breast_right': 'breast',
+                                    'pumping': 'pumping'
+                                };
+                                const subType = subTypeMap[timerType] || 'breast';
+                                const side = timerType === 'breast_left' ? 'שמאל' : timerType === 'breast_right' ? 'ימין' : '';
+                                await handleSaveTracking({
+                                    type: 'food',
+                                    subType,
+                                    note: side ? `${side}: ${timeStr}` : `זמן: ${timeStr}`,
+                                    timestamp: new Date()
+                                });
+                            }}
+                            onSleepTimerStop={async (seconds) => {
+                                const mins = Math.floor(seconds / 60);
+                                const secs = seconds % 60;
+                                const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                                await handleSaveTracking({
+                                    type: 'sleep',
+                                    note: `משך שינה: ${timeStr}`,
+                                    duration: seconds,
+                                    timestamp: new Date()
+                                });
+                            }}
                             meds={meds}
                             dynamicStyles={dynamicStyles}
                         />
@@ -262,6 +291,7 @@ export default function HomeScreen({ navigation }: any) {
                 onClose={() => setIsSupplementsOpen(false)}
                 meds={meds}
                 onToggle={toggleMed}
+                onRefresh={() => setTimelineRefresh(prev => prev + 1)}
             />
             <TrackingModal
                 visible={!!trackingModalType}
@@ -280,9 +310,24 @@ export default function HomeScreen({ navigation }: any) {
             <AddCustomActionModal
                 visible={isAddCustomOpen}
                 onClose={() => setIsAddCustomOpen(false)}
-                onAdd={(action) => {
+                onAdd={async (action) => {
+                    // Save to local state
                     setCustomActions(prev => [...prev, action]);
-                    Alert.alert('נוסף! ✅', `הפעולה "${action.name}" נוספה בהצלחה`);
+
+                    // Save to Firebase timeline
+                    if (user && profile.id) {
+                        try {
+                            await saveEventToFirebase(user.uid, profile.id, {
+                                type: 'custom',
+                                note: action.name,
+                                subType: action.icon,
+                            });
+                            setTimelineRefresh(prev => prev + 1);
+                            Alert.alert('נוסף!', `"${action.name}" נשמר בהצלחה`);
+                        } catch {
+                            Alert.alert('שגיאה בשמירה');
+                        }
+                    }
                 }}
             />
         </SafeAreaView>

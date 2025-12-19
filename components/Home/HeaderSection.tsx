@@ -1,6 +1,6 @@
 import React, { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, ScrollView, Modal, Pressable, Animated, Dimensions } from 'react-native';
-import { Camera, Cloud, Plus, X, Link2, UserPlus, Moon, Utensils, Baby as BabyIcon, Pill } from 'lucide-react-native';
+import { Camera, Cloud, Plus, X, Link2, UserPlus, Moon, Utensils, Baby as BabyIcon, Pill, Bell } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { auth, db } from '../../services/firebaseConfig';
@@ -247,22 +247,39 @@ const HeaderSection = memo<HeaderSectionProps>(({
                     </Text>
                 </View>
 
-                {/* Weather Badge */}
-                {weather && (
-                    <View style={[styles.weatherBadge, { backgroundColor: theme.card }]}>
-                        <Cloud size={14} color="#6B7280" />
-                        <Text style={styles.weatherText}>{weather.temp}°</Text>
-                    </View>
-                )}
+                {/* Weather + Notification Group */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {/* Notification Bell */}
+                    <TouchableOpacity style={styles.notificationBell} activeOpacity={0.7}>
+                        <Bell size={18} color="#9CA3AF" strokeWidth={1.5} />
+                        <View style={styles.notificationDot} />
+                    </TouchableOpacity>
+
+                    {weather && (
+                        <View style={styles.weatherBadge}>
+                            <Cloud size={14} color="#6B7280" />
+                            <Text style={styles.weatherText}>{weather.temp}°</Text>
+                        </View>
+                    )}
+                </View>
             </View>
 
             {/* Children Avatars Row */}
             <View style={styles.childrenRow}>
-                {/* Child avatars (on right) */}
+                {/* Plus Button - Add Child (now before avatars) */}
+                <TouchableOpacity
+                    style={styles.addChildBtn}
+                    onPress={handlePlusPress}
+                    activeOpacity={0.7}
+                >
+                    <Plus size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+
+                {/* Child avatars */}
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.childrenScrollContent}
+                    contentContainerStyle={{ flexDirection: 'row', gap: 10 }}
                 >
                     {allChildren.map((child) => {
                         const isActive = activeChild?.childId === child.childId;
@@ -298,19 +315,10 @@ const HeaderSection = memo<HeaderSectionProps>(({
                         );
                     })}
                 </ScrollView>
-
-                {/* Plus Button - Add Child */}
-                <TouchableOpacity
-                    style={styles.addChildBtn}
-                    onPress={handlePlusPress}
-                    activeOpacity={0.7}
-                >
-                    <Plus size={18} color="#9CA3AF" />
-                </TouchableOpacity>
             </View>
 
             {/* Minimalist Rotating Banner */}
-            <View style={[styles.bannerContainer, { backgroundColor: theme.card }]}>
+            <View style={styles.bannerContainer}>
                 <Animated.View
                     style={[
                         styles.bannerInner,
@@ -444,11 +452,11 @@ const styles = StyleSheet.create({
         color: '#6B7280',
     },
 
-    // Children Row - aligned to right side
+    // Children Row - aligned to left side
     childrenRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'flex-end',
+        justifyContent: 'flex-start',
         marginBottom: 16,
     },
 
@@ -457,8 +465,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         paddingHorizontal: 4,
         gap: 10,
-        flexGrow: 1,
-        justifyContent: 'flex-end',
     },
     childAvatar: {
         width: 42,
@@ -508,50 +514,75 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
 
-    // Minimalist Banner - Matching Quick Actions Style
+    // Minimalist Banner - Compact
     bannerContainer: {
+        backgroundColor: '#F9FAFB',
         borderRadius: 20,
-        padding: 14,
-        paddingVertical: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.03,
-        shadowRadius: 6,
-        elevation: 1,
-        minHeight: 56,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        padding: 10,
+        paddingVertical: 8,
+        minHeight: 44,
     },
     bannerInner: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        height: 36,
+        gap: 10,
+        height: 32,
+    },
+    bannerCenter: {
+        alignItems: 'flex-start',
+    },
+    notificationBell: {
+        padding: 6,
+        position: 'relative',
+    },
+    notificationDot: {
+        position: 'absolute',
+        top: 5,
+        right: 5,
+        width: 7,
+        height: 7,
+        borderRadius: 3.5,
+        backgroundColor: '#3B82F6',
+    },
+    bannerTimeBadge: {
+        backgroundColor: '#F3F4F6',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
     },
     bannerTimeSection: {
-        width: 38,
+        minWidth: 45,
         alignItems: 'flex-start',
         justifyContent: 'center',
     },
     bannerTime: {
-        fontSize: 10,
+        fontSize: 13,
         fontWeight: '500',
+        color: '#6B7280',
     },
     bannerRightSection: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 10,
     },
     bannerLabel: {
         fontSize: 11,
-        fontWeight: '600',
+        fontWeight: '500',
+        color: '#9CA3AF',
+        letterSpacing: 0.2,
+        textTransform: 'uppercase',
     },
     bannerValue: {
-        fontSize: 13,
-        fontWeight: '600',
+        fontSize: 16,
+        fontWeight: '700',
+        letterSpacing: -0.3,
     },
     bannerIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
     },

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { doc, updateDoc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db, auth } from '../services/firebaseConfig';
 import { MedicationsState } from '../types/home';
 
 interface UseMedicationsReturn {
@@ -34,11 +34,40 @@ export const useMedications = (childId: string | undefined): UseMedicationsRetur
         }
     }, [childId]);
 
+    // Save supplement event to timeline
+    const saveSupplementEvent = useCallback(async (type: 'vitaminD' | 'iron') => {
+        const user = auth.currentUser;
+        if (!user || !childId) return;
+
+        const supplementName = type === 'vitaminD' ? 'ויטמין D' : 'ברזל';
+
+        try {
+            await addDoc(collection(db, 'events'), {
+                userId: user.uid,
+                childId,
+                type: 'supplement',
+                subType: type,
+                note: supplementName,
+                timestamp: serverTimestamp(),
+                reporterName: user.displayName || 'אני',
+            });
+            console.log('💊 Supplement event saved:', supplementName);
+        } catch (e) {
+            console.error('Supplement event save error:', e);
+        }
+    }, [childId]);
+
     const toggleMed = useCallback((type: 'vitaminD' | 'iron') => {
-        const newMeds = { ...meds, [type]: !meds[type] };
+        const newValue = !meds[type];
+        const newMeds = { ...meds, [type]: newValue };
         setMeds(newMeds);
         syncToFirebase(newMeds);
-    }, [meds, syncToFirebase]);
+
+        // Save to timeline only when marking as TAKEN (true)
+        if (newValue) {
+            saveSupplementEvent(type);
+        }
+    }, [meds, syncToFirebase, saveSupplementEvent]);
 
     const refresh = useCallback(async () => {
         if (!childId) return;

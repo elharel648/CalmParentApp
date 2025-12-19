@@ -140,15 +140,22 @@ AddCustomActionModal.displayName = 'AddCustomActionModal';
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.4)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: 24,
     },
     container: {
         width: '100%',
+        maxWidth: 320,
         borderRadius: 20,
-        padding: 20,
+        paddingVertical: 24,
+        paddingHorizontal: 20,
+        shadowColor: '#1F2937',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 24,
+        elevation: 8,
     },
     header: {
         flexDirection: 'row',
@@ -157,11 +164,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     closeBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
+        padding: 6,
     },
     title: {
         fontSize: 18,

@@ -213,6 +213,7 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
         <View style={styles.statsContainer}>
           {Object.entries(stats).map(([type, count]) => {
             const config = TYPE_CONFIG[type as keyof typeof TYPE_CONFIG];
+            if (!config) return null; // Skip if type not in config
             const Icon = config.icon;
             return (
               <View key={type} style={[styles.statPill, { backgroundColor: theme.cardSecondary, borderColor: theme.border }]}>
@@ -227,7 +228,7 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
       {/* Timeline */}
       <View style={styles.timeline}>
         {visibleEvents.map((event, index) => {
-          const config = TYPE_CONFIG[event.type];
+          const config = TYPE_CONFIG[event.type as keyof typeof TYPE_CONFIG] || TYPE_CONFIG.food;
           const Icon = config.icon;
           const isLast = index === visibleEvents.length - 1;
           const details = getEventDetails(event);
@@ -256,7 +257,7 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
               </View>
 
               {/* Right side: Content */}
-              <View style={[styles.eventCard, { backgroundColor: theme.card }]}>
+              <View style={styles.eventCard}>
                 <View style={styles.cardContent}>
                   <View style={styles.eventHeader}>
                     <Text style={[styles.eventTitle, { color: theme.textPrimary }]}>{details}</Text>
@@ -431,16 +432,13 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
 
-  // Right: Content
+  // Right: Content - Pill Style
   eventCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     overflow: 'hidden',
     position: 'relative',
   },
@@ -450,7 +448,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   cardContent: {
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
   eventHeader: {
     flexDirection: 'row-reverse',
@@ -460,9 +459,9 @@ const styles = StyleSheet.create({
   },
   eventTitle: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#374151',
     lineHeight: 20,
     letterSpacing: -0.2,
     textAlign: 'right',
@@ -475,9 +474,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   eventSubtext: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#9CA3AF',
-    lineHeight: 16,
+    lineHeight: 18,
     fontWeight: '500',
     textAlign: 'right',
     marginTop: 2,

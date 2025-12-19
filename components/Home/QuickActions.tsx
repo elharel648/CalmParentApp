@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
-import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer, Plus, HeartPulse } from 'lucide-react-native';
+import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer, Plus, HeartPulse, Pause } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useSleepTimer } from '../../context/SleepTimerContext';
 import { useFoodTimer } from '../../context/FoodTimerContext';
@@ -18,6 +18,8 @@ interface QuickActionsProps {
     onSupplementsPress: () => void;
     onHealthPress?: () => void;
     onCustomPress?: () => void;
+    onFoodTimerStop?: (seconds: number, timerType: string) => void;
+    onSleepTimerStop?: (seconds: number) => void;
     meds?: MedicationsState;
     dynamicStyles: { text: string };
 }
@@ -97,12 +99,22 @@ const QuickActions = memo<QuickActionsProps>(({
     onSupplementsPress,
     onHealthPress,
     onCustomPress,
+    onFoodTimerStop,
+    onSleepTimerStop,
     meds,
     dynamicStyles,
 }) => {
     const { theme } = useTheme();
-    const { isRunning: sleepIsRunning, elapsedSeconds: sleepElapsed, formatTime: sleepFormatTime } = useSleepTimer();
-    const { isRunning: foodIsRunning, elapsedSeconds: foodElapsed, formatTime: foodFormatTime } = useFoodTimer();
+    const sleepTimer = useSleepTimer();
+    const foodTimer = useFoodTimer();
+
+    const { isRunning: sleepIsRunning, elapsedSeconds: sleepElapsed, formatTime: sleepFormatTime } = sleepTimer;
+    const { pumpingIsRunning, pumpingElapsedSeconds, breastIsRunning, breastElapsedSeconds, breastActiveSide, leftBreastTime, rightBreastTime, formatTime: foodFormatTime, stopPumping, stopBreast } = foodTimer;
+
+    // Check if any food timer is running
+    const foodIsRunning = pumpingIsRunning || breastIsRunning;
+    const foodTimerType = pumpingIsRunning ? 'pumping' : breastIsRunning ? (breastActiveSide === 'left' ? 'breast_left' : 'breast_right') : null;
+    const foodElapsed = pumpingIsRunning ? pumpingElapsedSeconds : breastIsRunning ? breastElapsedSeconds : 0;
 
     const handlePress = useCallback((callback: () => void) => {
         if (Platform.OS !== 'web') {
@@ -110,6 +122,46 @@ const QuickActions = memo<QuickActionsProps>(({
         }
         callback();
     }, []);
+
+    // Handler for food button - if timer running, stop and save; otherwise open modal
+    const handleFoodPress = useCallback(() => {
+        if (pumpingIsRunning) {
+            if (onFoodTimerStop && pumpingElapsedSeconds > 0) {
+                onFoodTimerStop(pumpingElapsedSeconds, 'pumping');
+            }
+            stopPumping();
+            if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } else if (breastIsRunning) {
+            const totalBreastTime = leftBreastTime + rightBreastTime + breastElapsedSeconds;
+            if (onFoodTimerStop && totalBreastTime > 0) {
+                onFoodTimerStop(totalBreastTime, breastActiveSide === 'left' ? 'breast_left' : 'breast_right');
+            }
+            stopBreast();
+            if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } else {
+            onFoodPress();
+        }
+    }, [pumpingIsRunning, breastIsRunning, pumpingElapsedSeconds, breastElapsedSeconds, leftBreastTime, rightBreastTime, breastActiveSide, stopPumping, stopBreast, onFoodPress, onFoodTimerStop]);
+
+    // Handler for sleep button - if timer running, stop and save; otherwise open modal
+    const handleSleepPress = useCallback(() => {
+        if (sleepIsRunning) {
+            // Save to timeline before stopping
+            if (onSleepTimerStop && sleepElapsed > 0) {
+                onSleepTimerStop(sleepElapsed);
+            }
+            sleepTimer.stop();
+            if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } else {
+            onSleepPress();
+        }
+    }, [sleepIsRunning, sleepTimer, sleepElapsed, onSleepPress, onSleepTimerStop]);
 
     // Calculate supplements taken
     const takenCount = (meds?.vitaminD ? 1 : 0) + (meds?.iron ? 1 : 0);
@@ -151,15 +203,13 @@ const QuickActions = memo<QuickActionsProps>(({
                 {/* Circular Icon */}
                 <View style={[
                     styles.iconCircle,
-                    { backgroundColor: config.lightColor },
-                    isActive && { borderColor: config.color, borderWidth: 2 },
+                    { backgroundColor: isActive ? config.color : config.lightColor },
                     (config as any).hasBorder && { borderColor: '#D1D5DB', borderWidth: 1.5, borderStyle: 'dashed' }
                 ]}>
-                    <Icon size={18} color={config.color} strokeWidth={2} />
-
-                    {/* Active indicator dot */}
-                    {isActive && (
-                        <View style={[styles.activeDot, { backgroundColor: config.color }]} />
+                    {isActive ? (
+                        <Pause size={18} color="#fff" strokeWidth={2.5} />
+                    ) : (
+                        <Icon size={18} color={config.color} strokeWidth={2} />
                     )}
                 </View>
 
@@ -245,7 +295,7 @@ const QuickActions = memo<QuickActionsProps>(({
                 {/* Sleep */}
                 <ActionButton
                     config={ACTIONS.sleep}
-                    onPress={onSleepPress}
+                    onPress={handleSleepPress}
                     isActive={sleepIsRunning}
                     activeTime={sleepIsRunning ? sleepFormatTime(sleepElapsed) : undefined}
                     lastTime={!sleepIsRunning ? lastSleepTime : undefined}
@@ -254,7 +304,7 @@ const QuickActions = memo<QuickActionsProps>(({
                 {/* Food */}
                 <ActionButton
                     config={ACTIONS.food}
-                    onPress={onFoodPress}
+                    onPress={handleFoodPress}
                     isActive={foodIsRunning}
                     activeTime={foodIsRunning ? foodFormatTime(foodElapsed) : undefined}
                     lastTime={!foodIsRunning ? lastFeedTime : undefined}

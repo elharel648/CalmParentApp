@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useState } from 'react';
 import { TouchableOpacity, Text, StyleSheet, Platform, Linking, View } from 'react-native';
-import { Send, Check, MessageCircle } from 'lucide-react-native';
+import { Send, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -10,7 +10,7 @@ interface ShareStatusButtonProps {
 }
 
 /**
- * Premium Minimalist Share Button - Inline card style
+ * Minimalist Share Button - Simple inline design
  */
 const ShareStatusButton = memo<ShareStatusButtonProps>(({ onShare, message }) => {
     const { theme } = useTheme();
@@ -18,7 +18,7 @@ const ShareStatusButton = memo<ShareStatusButtonProps>(({ onShare, message }) =>
 
     const handlePress = useCallback(async () => {
         if (Platform.OS !== 'web') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
 
         try {
@@ -44,38 +44,15 @@ const ShareStatusButton = memo<ShareStatusButtonProps>(({ onShare, message }) =>
 
     return (
         <TouchableOpacity
-            style={[styles.container, { backgroundColor: theme.card }]}
+            style={styles.container}
             onPress={handlePress}
-            activeOpacity={0.7}
+            activeOpacity={0.6}
         >
-            <View style={styles.content}>
-                {/* Icon */}
-                <View style={[
-                    styles.iconCircle,
-                    { backgroundColor: showSuccess ? '#D1FAE5' : '#DCF8E6' }
-                ]}>
-                    {showSuccess ? (
-                        <Check size={20} color="#10B981" strokeWidth={2.5} />
-                    ) : (
-                        <MessageCircle size={20} color="#25D366" fill="#25D366" />
-                    )}
-                </View>
-
-                {/* Text */}
-                <View style={styles.textSection}>
-                    <Text style={[styles.title, { color: theme.textPrimary }]}>
-                        {showSuccess ? 'נשלח בהצלחה!' : 'שתף סיכום יומי'}
-                    </Text>
-                    <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                        {showSuccess ? 'ההודעה נשלחה לוואטסאפ' : 'שלח עדכון למשפחה בוואטסאפ'}
-                    </Text>
-                </View>
-
-                {/* Arrow */}
-                <View style={styles.arrow}>
-                    <Send size={18} color="#25D366" />
-                </View>
-            </View>
+            <Send size={16} color="#9CA3AF" strokeWidth={2} />
+            <Text style={[styles.text, { color: theme.textSecondary }]}>
+                {showSuccess ? 'נשלח!' : 'שתף סיכום יומי'}
+            </Text>
+            {showSuccess && <Check size={14} color="#10B981" strokeWidth={2.5} />}
         </TouchableOpacity>
     );
 });
@@ -84,42 +61,18 @@ ShareStatusButton.displayName = 'ShareStatusButton';
 
 const styles = StyleSheet.create({
     container: {
-        marginTop: 8,
-        marginBottom: 16,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-        elevation: 1,
-    },
-    content: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        padding: 16,
-    },
-    iconCircle: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: 8,
+        marginTop: 12,
+        marginBottom: 8,
+        paddingVertical: 10,
     },
-    textSection: {
-        flex: 1,
-        marginRight: 14,
-        alignItems: 'flex-end',
-    },
-    title: {
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    subtitle: {
-        fontSize: 12,
-        marginTop: 2,
-    },
-    arrow: {
-        opacity: 0.8,
+    text: {
+        fontSize: 13,
+        fontWeight: '500',
+        letterSpacing: -0.2,
     },
 });
 

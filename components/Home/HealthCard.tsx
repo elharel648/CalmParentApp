@@ -23,10 +23,8 @@ type HealthScreen = 'menu' | 'vaccines' | 'doctor' | 'illness' | 'temperature' |
 interface HealthOption {
     key: HealthScreen;
     label: string;
-    description: string;
     icon: any;
-    gradientColors: [string, string];
-    bgColor: string;
+    iconColor: string;
 }
 
 // Common illnesses and medications
@@ -42,12 +40,12 @@ const COMMON_MEDICATIONS = [
 ];
 
 const HEALTH_OPTIONS: HealthOption[] = [
-    { key: 'doctor', label: 'ביקור רופא', description: 'תיעוד ביקורים', icon: Stethoscope, gradientColors: ['#10B981', '#059669'], bgColor: '#ECFDF5' },
-    { key: 'vaccines', label: 'חיסונים', description: 'מעקב חיסונים', icon: Syringe, gradientColors: ['#6366F1', '#4F46E5'], bgColor: '#EEF2FF' },
-    { key: 'illness', label: 'מחלות', description: 'היסטוריית מחלות', icon: Heart, gradientColors: ['#EF4444', '#DC2626'], bgColor: '#FEF2F2' },
-    { key: 'temperature', label: 'טמפרטורה', description: 'מעקב חום', icon: Thermometer, gradientColors: ['#F59E0B', '#D97706'], bgColor: '#FFFBEB' },
-    { key: 'medications', label: 'תרופות', description: 'ניהול תרופות', icon: Pill, gradientColors: ['#8B5CF6', '#7C3AED'], bgColor: '#F5F3FF' },
-    { key: 'history', label: 'היסטוריה', description: 'צפה בכל השמירות', icon: ClipboardList, gradientColors: ['#0EA5E9', '#0284C7'], bgColor: '#E0F2FE' },
+    { key: 'doctor', label: 'ביקור רופא', icon: Stethoscope, iconColor: '#10B981' },
+    { key: 'vaccines', label: 'חיסונים', icon: Syringe, iconColor: '#6366F1' },
+    { key: 'illness', label: 'מחלות', icon: Heart, iconColor: '#EF4444' },
+    { key: 'temperature', label: 'טמפרטורה', icon: Thermometer, iconColor: '#F59E0B' },
+    { key: 'medications', label: 'תרופות', icon: Pill, iconColor: '#8B5CF6' },
+    { key: 'history', label: 'היסטוריה', icon: ClipboardList, iconColor: '#0EA5E9' },
 ];
 
 const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) => {
@@ -68,6 +66,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
 
     // Illness state
     const [selectedIllness, setSelectedIllness] = useState<string | null>(null);
+    const [customIllness, setCustomIllness] = useState('');
     const [illnessNote, setIllnessNote] = useState('');
 
     // Medication state
@@ -86,6 +85,9 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
     const [healthLog, setHealthLog] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'temperature' | 'doctor' | 'illness' | 'medication'>('all');
+
+    // Save success state
+    const [saveSuccess, setSaveSuccess] = useState(false);
 
     useEffect(() => {
         if (isModalOpen && currentScreen === 'vaccines') {
@@ -338,8 +340,12 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
 
-        Alert.alert('נשמר! ✅', 'הנתונים נשמרו בהצלחה');
-        goBack();
+        // Show checkmark then go back
+        setSaveSuccess(true);
+        setTimeout(() => {
+            setSaveSuccess(false);
+            goBack();
+        }, 800);
     };
 
     // Get temperature color based on value
@@ -349,26 +355,26 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
         return '#EF4444';
     };
 
-    // Menu
+    // Menu - Minimal Premium Style
     const renderMenu = () => (
         <ScrollView contentContainerStyle={styles.menuContainer} showsVerticalScrollIndicator={false}>
-            <View style={styles.optionsGrid}>
+            <View style={styles.optionsList}>
                 {HEALTH_OPTIONS.map((option, index) => {
                     const Icon = option.icon;
                     return (
-                        <Animated.View key={option.key} style={[styles.optionCardWrapper, { transform: [{ scale: scaleAnims[index] }] }]}>
+                        <Animated.View key={option.key} style={[{ transform: [{ scale: scaleAnims[index] }] }]}>
                             <TouchableOpacity
-                                style={[styles.optionCard, { backgroundColor: option.bgColor }]}
+                                style={styles.optionRow}
                                 onPress={() => handleOptionPress(option)}
                                 onPressIn={() => handleCardPressIn(index)}
                                 onPressOut={() => handleCardPressOut(index)}
-                                activeOpacity={1}
+                                activeOpacity={0.7}
                             >
-                                <LinearGradient colors={option.gradientColors} style={styles.optionIconGradient}>
-                                    <Icon size={26} color="#fff" />
-                                </LinearGradient>
+                                <View style={styles.optionIconCircle}>
+                                    <Icon size={22} color={option.iconColor} strokeWidth={1.2} />
+                                </View>
                                 <Text style={styles.optionLabel}>{option.label}</Text>
-                                <Text style={styles.optionDescription}>{option.description}</Text>
+                                <ChevronLeft size={18} color="#9CA3AF" />
                             </TouchableOpacity>
                         </Animated.View>
                     );
@@ -381,9 +387,9 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
     const renderVaccines = () => (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.screenContent}>
             <View style={styles.screenHeader}>
-                <LinearGradient colors={['#6366F1', '#4F46E5']} style={styles.screenHeaderIcon}>
-                    <Syringe size={28} color="#fff" />
-                </LinearGradient>
+                <View style={styles.screenHeaderIconMinimal}>
+                    <Syringe size={24} color="#6366F1" strokeWidth={1.2} />
+                </View>
                 <Text style={styles.screenSubtitle}>לפי המלצות משרד הבריאות</Text>
             </View>
 
@@ -414,9 +420,9 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
             {/* Custom Vaccines */}
             {customVaccines.length > 0 && (
                 <View style={styles.vaccineGroup}>
-                    <LinearGradient colors={['#10B981', '#059669']} style={styles.ageBadge}>
-                        <Text style={styles.ageBadgeText}>חיסונים מותאמים</Text>
-                    </LinearGradient>
+                    <View style={styles.ageBadgeMinimal}>
+                        <Text style={styles.ageBadgeTextMinimal}>חיסונים מותאמים</Text>
+                    </View>
                     {customVaccines.map(vaccine => (
                         <View key={vaccine.id} style={styles.vaccineRowDone}>
                             <Text style={styles.vaccineNameDone}>{vaccine.name}</Text>
@@ -430,9 +436,9 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
 
             {VACCINE_SCHEDULE.map((group, gIdx) => (
                 <View key={gIdx} style={styles.vaccineGroup}>
-                    <LinearGradient colors={['#6366F1', '#8B5CF6']} style={styles.ageBadge}>
-                        <Text style={styles.ageBadgeText}>{group.ageTitle}</Text>
-                    </LinearGradient>
+                    <View style={styles.ageBadgeMinimal}>
+                        <Text style={styles.ageBadgeTextMinimal}>{group.ageTitle}</Text>
+                    </View>
 
                     {group.vaccines.map((vaccine, vIdx) => {
                         const isChecked = vaccines[vaccine.key] || false;
@@ -461,9 +467,9 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
     const renderTemperature = () => (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.screenContent}>
             <View style={styles.screenHeader}>
-                <LinearGradient colors={['#F59E0B', '#D97706']} style={styles.screenHeaderIcon}>
-                    <Thermometer size={28} color="#fff" />
-                </LinearGradient>
+                <View style={styles.screenHeaderIconMinimal}>
+                    <Thermometer size={24} color="#F59E0B" strokeWidth={1.2} />
+                </View>
             </View>
 
             <View style={styles.inputGroup}>
@@ -539,10 +545,10 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                 />
             </View>
 
-            <TouchableOpacity style={styles.saveButton} onPress={() => saveEntry('temperature', { value: temperature.toFixed(1), note: tempNote })}>
-                <LinearGradient colors={['#F59E0B', '#D97706']} style={styles.saveButtonGradient}>
-                    <Text style={styles.saveButtonText}>שמור</Text>
-                </LinearGradient>
+            <TouchableOpacity style={styles.saveButton} onPress={() => saveEntry('temperature', { value: temperature.toFixed(1), note: tempNote })} disabled={saveSuccess}>
+                <View style={[styles.saveButtonSolid, saveSuccess && styles.saveButtonSuccess]}>
+                    {saveSuccess ? <Check size={18} color="#10B981" strokeWidth={2} /> : <Text style={styles.saveButtonText}>שמור</Text>}
+                </View>
             </TouchableOpacity>
         </ScrollView>
     );
@@ -551,9 +557,9 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
     const renderDoctor = () => (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.screenContent}>
             <View style={styles.screenHeader}>
-                <LinearGradient colors={['#10B981', '#059669']} style={styles.screenHeaderIcon}>
-                    <Stethoscope size={28} color="#fff" />
-                </LinearGradient>
+                <View style={styles.screenHeaderIconMinimal}>
+                    <Stethoscope size={24} color="#10B981" strokeWidth={1.2} />
+                </View>
             </View>
 
             <View style={styles.inputGroup}>
@@ -633,10 +639,11 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                     hasPhoto: !!doctorPhoto,
                     hasDocument: !!doctorDocument
                 })}
+                disabled={saveSuccess}
             >
-                <LinearGradient colors={['#10B981', '#059669']} style={styles.saveButtonGradient}>
-                    <Text style={styles.saveButtonText}>שמור ביקור</Text>
-                </LinearGradient>
+                <View style={[styles.saveButtonSolid, saveSuccess && styles.saveButtonSuccess]}>
+                    {saveSuccess ? <Check size={18} color="#10B981" strokeWidth={2} /> : <Text style={styles.saveButtonText}>שמור ביקור</Text>}
+                </View>
             </TouchableOpacity>
         </ScrollView>
     );
@@ -645,33 +652,54 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
     const renderIllness = () => (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.screenContent}>
             <View style={styles.screenHeader}>
-                <LinearGradient colors={['#EF4444', '#DC2626']} style={styles.screenHeaderIcon}>
-                    <Heart size={28} color="#fff" />
-                </LinearGradient>
+                <View style={styles.screenHeaderIconMinimal}>
+                    <Heart size={24} color="#EF4444" strokeWidth={1.2} />
+                </View>
             </View>
 
             <Text style={styles.sectionTitle}>בחר מחלה</Text>
-            <View style={styles.chipsContainer}>
+            <View style={styles.chipsContainerRTL}>
                 {COMMON_ILLNESSES.map(illness => (
                     <TouchableOpacity
                         key={illness}
                         style={[styles.chip, selectedIllness === illness && styles.chipActive]}
-                        onPress={() => setSelectedIllness(illness)}
+                        onPress={() => { setSelectedIllness(illness); setCustomIllness(''); }}
                     >
                         <Text style={[styles.chipText, selectedIllness === illness && styles.chipTextActive]}>{illness}</Text>
                     </TouchableOpacity>
                 ))}
+                {/* Plus button for custom illness */}
+                <TouchableOpacity
+                    style={[styles.chip, styles.chipPlus]}
+                    onPress={() => setSelectedIllness('custom')}
+                >
+                    <Plus size={16} color="#9CA3AF" strokeWidth={1.5} />
+                </TouchableOpacity>
             </View>
+
+            {/* Custom illness input */}
+            {selectedIllness === 'custom' && (
+                <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>שם המחלה</Text>
+                    <TextInput
+                        style={styles.textInput}
+                        value={customIllness}
+                        onChangeText={setCustomIllness}
+                        placeholder="כתוב שם מחלה..."
+                        placeholderTextColor="#9CA3AF"
+                    />
+                </View>
+            )}
 
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>הערות</Text>
                 <TextInput style={styles.textArea} value={illnessNote} onChangeText={setIllnessNote} placeholder="תסמינים, טיפול..." placeholderTextColor="#9CA3AF" multiline />
             </View>
 
-            <TouchableOpacity style={styles.saveButton} onPress={() => saveEntry('illness', { name: selectedIllness, note: illnessNote })}>
-                <LinearGradient colors={['#EF4444', '#DC2626']} style={styles.saveButtonGradient}>
-                    <Text style={styles.saveButtonText}>שמור</Text>
-                </LinearGradient>
+            <TouchableOpacity style={styles.saveButton} onPress={() => saveEntry('illness', { name: selectedIllness === 'custom' ? customIllness : selectedIllness, note: illnessNote })} disabled={saveSuccess}>
+                <View style={[styles.saveButtonSolid, saveSuccess && styles.saveButtonSuccess]}>
+                    {saveSuccess ? <Check size={18} color="#10B981" strokeWidth={2} /> : <Text style={styles.saveButtonText}>שמור</Text>}
+                </View>
             </TouchableOpacity>
         </ScrollView>
     );
@@ -680,9 +708,9 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
     const renderMedications = () => (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.screenContent}>
             <View style={styles.screenHeader}>
-                <LinearGradient colors={['#8B5CF6', '#7C3AED']} style={styles.screenHeaderIcon}>
-                    <Pill size={28} color="#fff" />
-                </LinearGradient>
+                <View style={styles.screenHeaderIconMinimal}>
+                    <Pill size={24} color="#8B5CF6" strokeWidth={1.2} />
+                </View>
             </View>
 
             <Text style={styles.sectionTitle}>בחר סוג תרופה</Text>
@@ -699,10 +727,10 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                 <TextInput style={styles.textArea} value={medNote} onChangeText={setMedNote} placeholder="מינון: 5 מ״ל, פעמיים ביום..." placeholderTextColor="#9CA3AF" multiline />
             </View>
 
-            <TouchableOpacity style={styles.saveButton} onPress={() => saveEntry('medication', { name: selectedMed, note: medNote })}>
-                <LinearGradient colors={['#8B5CF6', '#7C3AED']} style={styles.saveButtonGradient}>
-                    <Text style={styles.saveButtonText}>שמור</Text>
-                </LinearGradient>
+            <TouchableOpacity style={styles.saveButton} onPress={() => saveEntry('medication', { name: selectedMed, note: medNote })} disabled={saveSuccess}>
+                <View style={[styles.saveButtonSolid, saveSuccess && styles.saveButtonSuccess]}>
+                    {saveSuccess ? <Check size={18} color="#10B981" strokeWidth={2} /> : <Text style={styles.saveButtonText}>שמור</Text>}
+                </View>
             </TouchableOpacity>
         </ScrollView>
     );
@@ -887,19 +915,20 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
         <Modal visible={isModalOpen} transparent animationType="slide" onRequestClose={closeModal}>
             <View style={styles.modalOverlay}>
                 <View style={styles.modalContent}>
-                    <LinearGradient colors={getHeaderGradient()} style={styles.modalHeader}>
+                    {/* Minimal Header */}
+                    <View style={styles.modalHeader}>
                         {currentScreen !== 'menu' ? (
                             <TouchableOpacity onPress={goBack} style={styles.headerBtn}>
-                                <ChevronRight size={24} color="#fff" />
+                                <ChevronRight size={22} color="#374151" />
                             </TouchableOpacity>
                         ) : (
                             <TouchableOpacity onPress={closeModal} style={styles.headerBtn}>
-                                <X size={24} color="#fff" />
+                                <X size={22} color="#374151" />
                             </TouchableOpacity>
                         )}
                         <Text style={styles.modalTitle}>{getScreenTitle()}</Text>
                         <View style={{ width: 40 }} />
-                    </LinearGradient>
+                    </View>
 
                     <View style={styles.modalBody}>
                         {currentScreen === 'menu' && renderMenu()}
@@ -944,30 +973,42 @@ const styles = StyleSheet.create({
     cardSubtitle: { fontSize: 12, color: '#6B7280', marginTop: 2 },
     cardArrow: { opacity: 0.6 },
 
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, height: '92%', overflow: 'hidden' },
-    modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
-    headerBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
-    modalTitle: { fontSize: 24, fontWeight: '800', color: '#fff' },
-    modalBody: { flex: 1, backgroundColor: '#F9FAFB' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '90%', overflow: 'hidden' },
+    modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+    headerBtn: { padding: 8, backgroundColor: '#F3F4F6', borderRadius: 10 },
+    modalTitle: { fontSize: 17, fontWeight: '600', color: '#1F2937' },
+    modalBody: { flex: 1, backgroundColor: '#FFFFFF' },
 
-    menuContainer: { padding: 20 },
-    statsRow: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-    statCard: { flex: 1, alignItems: 'center' },
-    statDivider: { width: 1, backgroundColor: '#E5E7EB' },
-    statNumber: { fontSize: 24, fontWeight: '800', color: '#1F2937' },
-    statLabel: { fontSize: 11, color: '#6B7280', marginTop: 4 },
-    optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 },
-    optionCardWrapper: { width: '47%', marginBottom: 8 },
-    optionCard: { borderRadius: 20, padding: 18, alignItems: 'center', minHeight: 150, justifyContent: 'center' },
-    optionIconGradient: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-    optionLabel: { fontSize: 15, fontWeight: '700', color: '#1F2937', marginTop: 2 },
-    optionDescription: { fontSize: 11, color: '#9CA3AF', marginTop: 6, textAlign: 'center' },
+    menuContainer: { padding: 16 },
+    optionsList: { gap: 10 },
+    optionRow: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        backgroundColor: '#F9FAFB',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        padding: 14,
+        gap: 12,
+    },
+    optionIconCircle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#FFFFFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
+    },
+    optionLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#374151', textAlign: 'right' },
 
     screenContent: { padding: 20, paddingBottom: 40 },
-    screenHeader: { alignItems: 'center', marginBottom: 24 },
+    screenHeader: { alignItems: 'center', marginBottom: 16 },
     screenHeaderIcon: { width: 72, height: 72, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-    screenSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 12 },
+    screenHeaderIconMinimal: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' },
+    screenSubtitle: { fontSize: 13, color: '#9CA3AF', marginTop: 10 },
 
     // Vaccine styles
     addVaccineBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#EEF2FF', padding: 14, borderRadius: 14, marginBottom: 20 },
@@ -978,6 +1019,8 @@ const styles = StyleSheet.create({
     vaccineGroup: { marginBottom: 20 },
     ageBadge: { alignSelf: 'flex-end', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginBottom: 12 },
     ageBadgeText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+    ageBadgeMinimal: { alignSelf: 'flex-end', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, marginBottom: 10, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB' },
+    ageBadgeTextMinimal: { color: '#6B7280', fontWeight: '600', fontSize: 13 },
     vaccineRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 16, borderRadius: 16, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
     vaccineRowDone: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F0FDF4', padding: 16, borderRadius: 16, marginBottom: 8, borderWidth: 1, borderColor: '#10B981' },
     vaccineName: { fontSize: 15, color: '#1F2937', fontWeight: '500' },
@@ -1016,15 +1059,18 @@ const styles = StyleSheet.create({
     // Chips
     sectionTitle: { fontSize: 15, fontWeight: '600', color: '#374151', marginBottom: 12, textAlign: 'right' },
     chipsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
-    chip: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB' },
+    chipsContainerRTL: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+    chip: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#F9FAFB', borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB' },
+    chipPlus: { paddingHorizontal: 12, paddingVertical: 10 },
     chipActive: { backgroundColor: '#EF4444', borderColor: '#EF4444' },
     chipActivePurple: { backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' },
     chipText: { fontSize: 14, fontWeight: '500', color: '#374151' },
     chipTextActive: { color: '#fff' },
 
-    saveButton: { marginTop: 8 },
-    saveButtonGradient: { paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
-    saveButtonText: { fontSize: 18, fontWeight: '700', color: '#fff' },
+    saveButton: { marginTop: 16 },
+    saveButtonSolid: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 24, alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB' },
+    saveButtonSuccess: { backgroundColor: '#ECFDF5', borderColor: '#10B981' },
+    saveButtonText: { fontSize: 15, fontWeight: '600', color: '#374151' },
 });
 
 export default HealthCard;

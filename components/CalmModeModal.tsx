@@ -272,62 +272,59 @@ export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 20,
+    backgroundColor: '#FFFFFF',
+    paddingTop: 16,
   },
   header: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   closeButton: {
-    padding: 10,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 20,
+    padding: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
   },
   titleContainer: {
     alignItems: 'center',
   },
   mainTitle: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#EF4444',
   },
   subtitle: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: 12,
+    color: '#9CA3AF',
     marginTop: 2,
   },
 
-  // Tabs
+  // Tabs - Premium Pills
   tabsContainer: {
     flexDirection: 'row-reverse',
     paddingHorizontal: 20,
-    marginBottom: 20,
-    gap: 10,
+    marginBottom: 16,
+    gap: 8,
   },
   tab: {
     flex: 1,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    gap: 6,
   },
   activeTab: {
     backgroundColor: '#EF4444',
-    borderColor: '#EF4444',
   },
   tabText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#6B7280',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9CA3AF',
   },
   activeTabText: {
     color: '#fff',
