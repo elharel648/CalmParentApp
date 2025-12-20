@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, TouchableWithoutFeedback, KeyboardAvoidingView, Platform, Animated } from 'react-native';
-import { X, Check, Droplets, Play, Pause, Baby, Moon, Utensils, Apple, Milk, Plus, Minus, Calendar, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { X, Check, Droplets, Play, Pause, Baby, Moon, Utensils, Apple, Milk, Plus, Minus, Calendar, ChevronLeft, ChevronRight, Clock, Hourglass, Timer, MessageSquare } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useSleepTimer } from '../context/SleepTimerContext';
@@ -138,7 +138,6 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
   };
 
   const handleSave = () => {
-    console.log('🎯 TrackingModal: handleSave called, type =', type);
     if (!type) return;
 
     if (Platform.OS !== 'web') {
@@ -236,7 +235,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
       if (diaperNote) data.note = diaperNote;
     }
 
-    console.log('🎯 TrackingModal: calling onSave with data =', JSON.stringify(data));
+
     onSave(data);
 
     // Show checkmark and delay close
@@ -508,24 +507,27 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
 
   const renderSleepContent = () => (
     <View style={{ width: '100%' }}>
-      {/* Mode Selector - Modern Pills */}
+      {/* Mode Selector - Icons Above Text */}
       <View style={styles.sleepModeRow}>
         <TouchableOpacity
           style={[styles.sleepModeBtn, sleepMode === 'timerange' && styles.sleepModeBtnActive]}
           onPress={() => { setSleepMode('timerange'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
+          <Clock size={20} color={sleepMode === 'timerange' ? '#fff' : '#9CA3AF'} strokeWidth={2} />
           <Text style={[styles.sleepModeText, sleepMode === 'timerange' && styles.sleepModeTextActive]}>שעות</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.sleepModeBtn, sleepMode === 'duration' && styles.sleepModeBtnActive]}
           onPress={() => { setSleepMode('duration'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
+          <Hourglass size={20} color={sleepMode === 'duration' ? '#fff' : '#9CA3AF'} strokeWidth={2} />
           <Text style={[styles.sleepModeText, sleepMode === 'duration' && styles.sleepModeTextActive]}>משך</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.sleepModeBtn, sleepMode === 'timer' && styles.sleepModeBtnActive]}
           onPress={() => { setSleepMode('timer'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
+          <Timer size={20} color={sleepMode === 'timer' ? '#fff' : '#9CA3AF'} strokeWidth={2} />
           <Text style={[styles.sleepModeText, sleepMode === 'timer' && styles.sleepModeTextActive]}>טיימר</Text>
         </TouchableOpacity>
       </View>
@@ -655,7 +657,10 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
 
       {/* Free Text Note */}
       <View style={styles.sleepNoteContainer}>
-        <Text style={styles.sleepNoteLabel}>הערה (אופציונלי)</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          <MessageSquare size={14} color="#9CA3AF" strokeWidth={2} />
+          <Text style={styles.sleepNoteLabel}>הערה (אופציונלי)</Text>
+        </View>
         <TextInput
           style={styles.sleepNoteInput}
           placeholder="לדוגמה: ישן עמוק, התעורר פעם אחת..."
@@ -1069,14 +1074,14 @@ const styles = StyleSheet.create({
   sleepSeparator: { fontSize: 32, fontWeight: '700', color: '#D1D5DB' },
   sleepPresets: { flexDirection: 'row', justifyContent: 'center', gap: 10 },
   sleepNoteContainer: { marginTop: 16 },
-  sleepNoteLabel: { fontSize: 13, fontWeight: '600', color: '#6B7280', textAlign: 'right', marginBottom: 8 },
+  sleepNoteLabel: { fontSize: 13, fontWeight: '600', color: '#6B7280', textAlign: 'right' },
   sleepNoteInput: { width: '100%', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, fontSize: 14, textAlign: 'right', borderWidth: 1, borderColor: '#E5E7EB', minHeight: 60 },
 
   // New Modern Sleep UI
   sleepModeRow: { flexDirection: 'row-reverse', justifyContent: 'center', gap: 8, marginBottom: 20, backgroundColor: '#F3F4F6', borderRadius: 12, padding: 4 },
-  sleepModeBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  sleepModeBtn: { flex: 1, flexDirection: 'column', paddingVertical: 10, alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 10 },
   sleepModeBtnActive: { backgroundColor: '#6366F1' },
-  sleepModeText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
+  sleepModeText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   sleepModeTextActive: { color: '#fff' },
 
   sleepTimerSection: { alignItems: 'center', marginVertical: 20 },

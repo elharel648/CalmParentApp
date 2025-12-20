@@ -17,7 +17,6 @@ import QuickActions from '../components/Home/QuickActions';
 import MedicationsTracker from '../components/Home/MedicationsTracker';
 import ShareStatusButton from '../components/Home/ShareStatusButton';
 import HealthCard from '../components/Home/HealthCard';
-import FamilyStatusIndicator from '../components/Home/FamilyStatusIndicator';
 import ChildPicker from '../components/Home/ChildPicker';
 import AddBabyPlaceholder from '../components/Home/AddBabyPlaceholder';
 
@@ -26,8 +25,11 @@ import CalmModeModal from '../components/CalmModeModal';
 import TrackingModal from '../components/TrackingModal';
 import WhiteNoiseModal from '../components/WhiteNoiseModal';
 import SupplementsModal from '../components/Home/SupplementsModal';
+import GrowthModal from '../components/Home/GrowthModal';
+import MilestonesModal from '../components/Home/MilestonesModal';
 import AddCustomActionModal, { CustomAction } from '../components/Home/AddCustomActionModal';
 import { JoinFamilyModal } from '../components/Family/JoinFamilyModal';
+import MagicMomentsModal from '../components/Home/MagicMomentsModal';
 
 // Services
 import { auth } from '../services/firebaseConfig';
@@ -86,7 +88,10 @@ export default function HomeScreen({ navigation }: any) {
     const [isWhiteNoiseOpen, setIsWhiteNoiseOpen] = useState(false);
     const [isSupplementsOpen, setIsSupplementsOpen] = useState(false);
     const [isHealthOpen, setIsHealthOpen] = useState(false);
+    const [isGrowthOpen, setIsGrowthOpen] = useState(false);
+    const [isMilestonesOpen, setIsMilestonesOpen] = useState(false);
     const [isAddCustomOpen, setIsAddCustomOpen] = useState(false);
+    const [isMagicMomentsOpen, setIsMagicMomentsOpen] = useState(false);
     const [customActions, setCustomActions] = useState<CustomAction[]>([]);
     const [trackingModalType, setTrackingModalType] = useState<TrackingType>(null);
     const [refreshing, setRefreshing] = useState(false);
@@ -138,10 +143,6 @@ export default function HomeScreen({ navigation }: any) {
 
     // --- Handlers ---
     const handleSaveTracking = useCallback(async (data: any) => {
-        console.log('🔍 handleSaveTracking called');
-        console.log('🔍 user:', user?.uid);
-        console.log('🔍 profile.id:', profile.id);
-
         if (!user) {
             Alert.alert('שגיאה', 'יש להתחבר למערכת');
             return;
@@ -149,14 +150,11 @@ export default function HomeScreen({ navigation }: any) {
 
         if (!profile.id) {
             Alert.alert('שגיאה', 'לא נמצא פרופיל ילד. אנא צור פרופיל בהגדרות.');
-            console.log('❌ No profile.id - cannot save!');
             return;
         }
 
         try {
-            console.log('💾 Saving to Firebase...');
             await saveEventToFirebase(user.uid, profile.id, data);
-            console.log('✅ Saved successfully!');
             // Alert removed - TrackingModal now shows checkmark animation
 
             // Schedule feeding reminder if this was a food event
@@ -227,9 +225,6 @@ export default function HomeScreen({ navigation }: any) {
                             onJoinWithCode={() => setIsJoinModalOpen(true)}
                         />
 
-                        {/* Family Status - who's online */}
-                        <FamilyStatusIndicator onPress={() => navigation.navigate('הגדרות')} />
-
                         <QuickActions
                             lastFeedTime={lastFeedTime}
                             lastSleepTime={lastSleepTime}
@@ -240,6 +235,9 @@ export default function HomeScreen({ navigation }: any) {
                             onSOSPress={() => setIsCalmModeOpen(true)}
                             onSupplementsPress={() => setIsSupplementsOpen(true)}
                             onHealthPress={() => setIsHealthOpen(true)}
+                            onGrowthPress={() => setIsGrowthOpen(true)}
+                            onMilestonesPress={() => setIsMilestonesOpen(true)}
+                            onMagicMomentsPress={() => setIsMagicMomentsOpen(true)}
                             onCustomPress={() => setIsAddCustomOpen(true)}
                             onFoodTimerStop={async (seconds, timerType) => {
                                 const mins = Math.floor(seconds / 60);
@@ -293,6 +291,14 @@ export default function HomeScreen({ navigation }: any) {
                 onToggle={toggleMed}
                 onRefresh={() => setTimelineRefresh(prev => prev + 1)}
             />
+            <GrowthModal
+                visible={isGrowthOpen}
+                onClose={() => setIsGrowthOpen(false)}
+            />
+            <MilestonesModal
+                visible={isMilestonesOpen}
+                onClose={() => setIsMilestonesOpen(false)}
+            />
             <TrackingModal
                 visible={!!trackingModalType}
                 type={trackingModalType}
@@ -306,6 +312,10 @@ export default function HomeScreen({ navigation }: any) {
                     setIsJoinModalOpen(false);
                     onRefresh();
                 }}
+            />
+            <MagicMomentsModal
+                visible={isMagicMomentsOpen}
+                onClose={() => setIsMagicMomentsOpen(false)}
             />
             <AddCustomActionModal
                 visible={isAddCustomOpen}

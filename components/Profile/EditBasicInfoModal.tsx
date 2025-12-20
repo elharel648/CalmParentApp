@@ -37,14 +37,32 @@ export default function EditBasicInfoModal({
 }: EditBasicInfoModalProps) {
     const [name, setName] = useState(initialData.name);
     const [gender, setGender] = useState<'boy' | 'girl' | 'other'>(initialData.gender);
-    const [birthDate, setBirthDate] = useState(initialData.birthDate);
+    const [birthDate, setBirthDate] = useState(() => {
+        // Ensure valid initial date
+        const date = initialData.birthDate;
+        if (!date) return new Date();
+        if (date instanceof Date && !isNaN(date.getTime())) return date;
+        if ((date as any)?.seconds) return new Date((date as any).seconds * 1000);
+        const parsed = new Date(date as any);
+        return isNaN(parsed.getTime()) ? new Date() : parsed;
+    });
     const [showDatePicker, setShowDatePicker] = useState(false);
+
+    // Helper to ensure valid date
+    const ensureValidDate = (date: any): Date => {
+        if (!date) return new Date();
+        if (date instanceof Date && !isNaN(date.getTime())) return date;
+        // Try to parse if it's a string or has seconds (Firestore Timestamp)
+        if (date?.seconds) return new Date(date.seconds * 1000);
+        const parsed = new Date(date);
+        return isNaN(parsed.getTime()) ? new Date() : parsed;
+    };
 
     useEffect(() => {
         if (visible) {
             setName(initialData.name);
             setGender(initialData.gender);
-            setBirthDate(initialData.birthDate);
+            setBirthDate(ensureValidDate(initialData.birthDate));
         }
     }, [visible, initialData]);
 
@@ -181,9 +199,11 @@ const styles = StyleSheet.create({
         padding: 8,
     },
     title: {
+        flex: 1,
         fontSize: 18,
         fontWeight: '700',
         color: '#111827',
+        textAlign: 'right',
     },
     content: {
         padding: 20,

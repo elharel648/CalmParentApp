@@ -71,6 +71,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
 
     // Medication state
     const [selectedMed, setSelectedMed] = useState<string | null>(null);
+    const [customMed, setCustomMed] = useState('');
     const [medNote, setMedNote] = useState('');
 
     // Doctor visit state with real uploads
@@ -348,6 +349,24 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
         }, 800);
     };
 
+    const deleteHistoryEntry = async (index: number) => {
+        if (!babyId) return;
+
+        try {
+            const updatedLog = [...healthLog];
+            updatedLog.splice(index, 1);
+            await updateDoc(doc(db, 'babies', babyId), { healthLog: updatedLog });
+            setHealthLog(updatedLog);
+
+            if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } catch (error) {
+            console.error('Error deleting entry:', error);
+            Alert.alert('שגיאה', 'לא ניתן למחוק');
+        }
+    };
+
     // Get temperature color based on value
     const getTemperatureColor = () => {
         if (temperature < 37.5) return '#10B981';
@@ -468,19 +487,19 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.screenContent}>
             <View style={styles.screenHeader}>
                 <View style={styles.screenHeaderIconMinimal}>
-                    <Thermometer size={24} color="#F59E0B" strokeWidth={1.2} />
+                    <Thermometer size={24} color="#9CA3AF" strokeWidth={1.2} />
                 </View>
             </View>
 
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>טמפרטורה (°C)</Text>
 
-                {/* Big temperature display */}
-                <View style={[styles.temperatureDisplay, { borderColor: getTemperatureColor() }]}>
-                    <Text style={[styles.temperatureValue, { color: getTemperatureColor() }]}>
+                {/* Big temperature display - minimalist with thin color border */}
+                <View style={[styles.temperatureDisplayMinimal, { borderWidth: 1.5, borderColor: getTemperatureColor() }]}>
+                    <Text style={styles.temperatureValueMinimal}>
                         {temperature.toFixed(1)}
                     </Text>
-                    <Text style={styles.temperatureUnit}>°C</Text>
+                    <Text style={styles.temperatureUnitMinimal}>°C</Text>
                 </View>
 
                 {/* Slider */}
@@ -512,21 +531,20 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                     </TouchableOpacity>
                 </View>
 
-                {/* Quick buttons */}
-                <View style={styles.quickSelectRow}>
+                {/* Quick buttons - minimalist, RTL */}
+                <View style={styles.quickSelectRowRTL}>
                     {[36.6, 37.0, 37.5, 38.0, 38.5, 39.0].map(temp => (
                         <TouchableOpacity
                             key={temp}
                             style={[
-                                styles.quickSelectBtn,
-                                Math.abs(temperature - temp) < 0.05 && styles.quickSelectBtnActive,
-                                temp >= 38 && styles.quickSelectBtnWarning
+                                styles.quickSelectBtnMinimal,
+                                Math.abs(temperature - temp) < 0.05 && styles.quickSelectBtnMinimalActive
                             ]}
                             onPress={() => setTemperature(temp)}
                         >
                             <Text style={[
-                                styles.quickSelectText,
-                                Math.abs(temperature - temp) < 0.05 && styles.quickSelectTextActive
+                                styles.quickSelectTextMinimal,
+                                Math.abs(temperature - temp) < 0.05 && styles.quickSelectTextMinimalActive
                             ]}>{temp.toFixed(1)}</Text>
                         </TouchableOpacity>
                     ))}
@@ -714,20 +732,41 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
             </View>
 
             <Text style={styles.sectionTitle}>בחר סוג תרופה</Text>
-            <View style={styles.chipsContainer}>
+            <View style={styles.chipsContainerRTL}>
                 {COMMON_MEDICATIONS.map(med => (
                     <TouchableOpacity key={med} style={[styles.chip, selectedMed === med && styles.chipActivePurple]} onPress={() => setSelectedMed(med)}>
                         <Text style={[styles.chipText, selectedMed === med && styles.chipTextActive]}>{med}</Text>
                     </TouchableOpacity>
                 ))}
+                {/* Plus button for custom medication */}
+                <TouchableOpacity
+                    style={[styles.chip, styles.chipPlus]}
+                    onPress={() => setSelectedMed('custom')}
+                >
+                    <Plus size={16} color="#9CA3AF" strokeWidth={1.5} />
+                </TouchableOpacity>
             </View>
+
+            {/* Custom medication input */}
+            {selectedMed === 'custom' && (
+                <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>שם התרופה</Text>
+                    <TextInput
+                        style={styles.textInput}
+                        value={customMed}
+                        onChangeText={setCustomMed}
+                        placeholder="כתוב שם תרופה..."
+                        placeholderTextColor="#9CA3AF"
+                    />
+                </View>
+            )}
 
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>הערות (מינון, תדירות)</Text>
                 <TextInput style={styles.textArea} value={medNote} onChangeText={setMedNote} placeholder="מינון: 5 מ״ל, פעמיים ביום..." placeholderTextColor="#9CA3AF" multiline />
             </View>
 
-            <TouchableOpacity style={styles.saveButton} onPress={() => saveEntry('medication', { name: selectedMed, note: medNote })} disabled={saveSuccess}>
+            <TouchableOpacity style={styles.saveButton} onPress={() => saveEntry('medication', { name: selectedMed === 'custom' ? customMed : selectedMed, note: medNote })} disabled={saveSuccess}>
                 <View style={[styles.saveButtonSolid, saveSuccess && styles.saveButtonSuccess]}>
                     {saveSuccess ? <Check size={18} color="#10B981" strokeWidth={2} /> : <Text style={styles.saveButtonText}>שמור</Text>}
                 </View>
@@ -749,11 +788,11 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
 
         const getTypeConfig = (type: string) => {
             switch (type) {
-                case 'temperature': return { label: 'חום', icon: Thermometer, color: '#F59E0B', bg: '#FEF3C7' };
-                case 'doctor': return { label: 'רופא', icon: Stethoscope, color: '#10B981', bg: '#D1FAE5' };
-                case 'illness': return { label: 'מחלה', icon: Heart, color: '#EF4444', bg: '#FEE2E2' };
-                case 'medication': return { label: 'תרופה', icon: Pill, color: '#8B5CF6', bg: '#EDE9FE' };
-                default: return { label: 'שונות', icon: ClipboardList, color: '#0EA5E9', bg: '#E0F2FE' };
+                case 'temperature': return { label: 'חום', icon: Thermometer, color: '#F59E0B', bg: '#F3F4F6' };
+                case 'doctor': return { label: 'רופא', icon: Stethoscope, color: '#10B981', bg: '#F3F4F6' };
+                case 'illness': return { label: 'מחלה', icon: Heart, color: '#EF4444', bg: '#F3F4F6' };
+                case 'medication': return { label: 'תרופה', icon: Pill, color: '#8B5CF6', bg: '#F3F4F6' };
+                default: return { label: 'שונות', icon: ClipboardList, color: '#0EA5E9', bg: '#F3F4F6' };
             }
         };
 
@@ -840,34 +879,37 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                                     shadowRadius: 4,
                                     elevation: 2,
                                 }}>
-                                    {/* Icon Badge - on right in RTL */}
+                                    {/* Icon Badge - circular like menu */}
                                     <View style={{
-                                        width: 48, height: 48, borderRadius: 14,
+                                        width: 48, height: 48, borderRadius: 24,
                                         backgroundColor: config.bg,
                                         alignItems: 'center', justifyContent: 'center',
                                         marginLeft: 16,
                                     }}>
-                                        <Icon size={24} color={config.color} />
+                                        <Icon size={22} color={config.color} strokeWidth={1.2} />
                                     </View>
 
                                     {/* Content - on left in RTL */}
                                     <View style={{ flex: 1, alignItems: 'flex-end' }}>
                                         <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                            <Text style={{ fontSize: 12, color: config.color, fontWeight: '700' }}>
+                                            <Text style={{ fontSize: 12, color: config.color, fontWeight: '500' }}>
                                                 {config.label}
                                             </Text>
-                                            <Text style={{ fontSize: 11, color: '#9CA3AF' }}>
-                                                {formatDate(item.timestamp)}
-                                            </Text>
+                                            <TouchableOpacity
+                                                onPress={() => deleteHistoryEntry(index)}
+                                                style={{ padding: 4 }}
+                                            >
+                                                <X size={16} color="#9CA3AF" />
+                                            </TouchableOpacity>
                                         </View>
 
                                         {item.value && (
-                                            <Text style={{ fontSize: 28, fontWeight: '800', color: '#1F2937', marginTop: 2, textAlign: 'right' }}>
+                                            <Text style={{ fontSize: 15, fontWeight: '500', color: '#374151', marginTop: 2, textAlign: 'right' }}>
                                                 {item.value}°
                                             </Text>
                                         )}
                                         {item.name && (
-                                            <Text style={{ fontSize: 16, fontWeight: '600', color: '#1F2937', marginTop: 2, textAlign: 'right' }}>
+                                            <Text style={{ fontSize: 15, fontWeight: '500', color: '#374151', marginTop: 2, textAlign: 'right' }}>
                                                 {item.name}
                                             </Text>
                                         )}
@@ -877,6 +919,9 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                                         {item.note && (
                                             <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4, textAlign: 'right' }}>{item.note}</Text>
                                         )}
+                                        <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>
+                                            {formatDate(item.timestamp)}
+                                        </Text>
                                     </View>
                                 </View>
                             );
@@ -1032,6 +1077,13 @@ const styles = StyleSheet.create({
     temperatureDisplay: { backgroundColor: '#fff', borderRadius: 20, padding: 20, alignItems: 'center', borderWidth: 3, marginBottom: 20 },
     temperatureValue: { fontSize: 64, fontWeight: '800' },
     temperatureUnit: { fontSize: 24, color: '#6B7280', marginTop: -8 },
+    temperatureDisplayMinimal: { backgroundColor: '#F9FAFB', borderRadius: 16, padding: 24, alignItems: 'center', marginBottom: 20 },
+    temperatureValueMinimal: { fontSize: 56, fontWeight: '700', color: '#374151' },
+    temperatureUnitMinimal: { fontSize: 20, color: '#9CA3AF', marginTop: -4 },
+    quickSelectBtnMinimal: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#F3F4F6', marginRight: 8, marginBottom: 8 },
+    quickSelectBtnMinimalActive: { backgroundColor: '#E5E7EB' },
+    quickSelectTextMinimal: { fontSize: 14, fontWeight: '500', color: '#6B7280' },
+    quickSelectTextMinimalActive: { color: '#374151', fontWeight: '600' },
     sliderContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
     sliderBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
     slider: { flex: 1, marginHorizontal: 10, height: 40 },
@@ -1042,6 +1094,7 @@ const styles = StyleSheet.create({
     textInput: { backgroundColor: '#fff', borderRadius: 16, padding: 16, fontSize: 16, textAlign: 'right', borderWidth: 1, borderColor: '#E5E7EB' },
     textArea: { backgroundColor: '#fff', borderRadius: 16, padding: 16, fontSize: 16, textAlign: 'right', borderWidth: 1, borderColor: '#E5E7EB', minHeight: 100, textAlignVertical: 'top' },
     quickSelectRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
+    quickSelectRowRTL: { flexDirection: 'row-reverse', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 8, marginBottom: 20 },
     quickSelectBtn: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB' },
     quickSelectBtnActive: { backgroundColor: '#F59E0B', borderColor: '#F59E0B' },
     quickSelectBtnWarning: { borderColor: '#EF4444' },

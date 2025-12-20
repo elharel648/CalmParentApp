@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
-import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer, Plus, HeartPulse, Pause } from 'lucide-react-native';
+import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer, Plus, HeartPulse, Pause, TrendingUp, Award, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useSleepTimer } from '../../context/SleepTimerContext';
 import { useFoodTimer } from '../../context/FoodTimerContext';
@@ -17,6 +17,9 @@ interface QuickActionsProps {
     onSOSPress: () => void;
     onSupplementsPress: () => void;
     onHealthPress?: () => void;
+    onGrowthPress?: () => void;
+    onMilestonesPress?: () => void;
+    onMagicMomentsPress?: () => void;
     onCustomPress?: () => void;
     onFoodTimerStop?: (seconds: number, timerType: string) => void;
     onSleepTimerStop?: (seconds: number) => void;
@@ -83,6 +86,27 @@ const ACTIONS = {
         color: '#14B8A6',
         lightColor: '#CCFBF1',
     },
+    growth: {
+        icon: TrendingUp,
+        label: 'מעקב גדילה',
+        activeLabel: 'מעקב גדילה',
+        color: '#10B981',
+        lightColor: '#D1FAE5',
+    },
+    milestones: {
+        icon: Award,
+        label: 'אבני דרך',
+        activeLabel: 'אבני דרך',
+        color: '#F59E0B',
+        lightColor: '#FEF3C7',
+    },
+    magicMoments: {
+        icon: Sparkles,
+        label: 'רגעים קסומים',
+        activeLabel: 'רגעים קסומים',
+        color: '#A78BFA',
+        lightColor: '#EDE9FE',
+    },
 };
 
 /**
@@ -98,6 +122,9 @@ const QuickActions = memo<QuickActionsProps>(({
     onSOSPress,
     onSupplementsPress,
     onHealthPress,
+    onGrowthPress,
+    onMilestonesPress,
+    onMagicMomentsPress,
     onCustomPress,
     onFoodTimerStop,
     onSleepTimerStop,
@@ -265,6 +292,24 @@ const QuickActions = memo<QuickActionsProps>(({
                 <ActionButton
                     config={ACTIONS.health}
                     onPress={onHealthPress || (() => { })}
+                />
+
+                {/* Growth Tracking */}
+                <ActionButton
+                    config={ACTIONS.growth}
+                    onPress={onGrowthPress || (() => { })}
+                />
+
+                {/* Magic Moments */}
+                <ActionButton
+                    config={ACTIONS.magicMoments}
+                    onPress={onMagicMomentsPress || (() => { })}
+                />
+
+                {/* Milestones */}
+                <ActionButton
+                    config={ACTIONS.milestones}
+                    onPress={onMilestonesPress || (() => { })}
                 />
 
                 {/* SOS */}

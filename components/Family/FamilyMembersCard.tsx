@@ -7,8 +7,7 @@ import {
     Alert,
     Platform,
 } from 'react-native';
-import { Users, UserPlus, Crown, Eye, Edit3, Trash2, LogOut, Link } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Users, UserPlus, Crown, Eye, Edit3, Trash2, LogOut, Link, ChevronLeft } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useFamily } from '../../hooks/useFamily';
 import { FamilyRole } from '../../services/familyService';
@@ -20,11 +19,11 @@ interface FamilyMembersCardProps {
     onGuestInvitePress?: () => void;
 }
 
-const ROLE_CONFIG: Record<FamilyRole, { label: string; icon: any; color: string; bgColor: string; gradient: [string, string] }> = {
-    admin: { label: 'מנהל', icon: Crown, color: '#F59E0B', bgColor: '#FEF3C7', gradient: ['#FBBF24', '#F59E0B'] },
-    member: { label: 'חבר', icon: Edit3, color: '#6366F1', bgColor: '#E0E7FF', gradient: ['#818CF8', '#6366F1'] },
-    viewer: { label: 'צופה', icon: Eye, color: '#10B981', bgColor: '#D1FAE5', gradient: ['#34D399', '#10B981'] },
-    guest: { label: 'אורח', icon: Eye, color: '#F59E0B', bgColor: '#FEF3C7', gradient: ['#FBBF24', '#F59E0B'] },
+const ROLE_CONFIG: Record<FamilyRole, { label: string; icon: any; color: string }> = {
+    admin: { label: 'מנהל', icon: Crown, color: '#F59E0B' },
+    member: { label: 'חבר', icon: Edit3, color: '#6366F1' },
+    viewer: { label: 'צופה', icon: Eye, color: '#10B981' },
+    guest: { label: 'אורח', icon: Eye, color: '#F59E0B' },
 };
 
 export const FamilyMembersCard: React.FC<FamilyMembersCardProps> = ({
@@ -59,7 +58,7 @@ export const FamilyMembersCard: React.FC<FamilyMembersCardProps> = ({
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         Alert.alert(
             'עזיבת משפחה',
-            'בטוח שברצונך לעזוב? לא תוכל לראות יותר את התיעודים',
+            'בטוח שברצונך לעזוב?',
             [
                 { text: 'ביטול', style: 'cancel' },
                 {
@@ -76,379 +75,239 @@ export const FamilyMembersCard: React.FC<FamilyMembersCardProps> = ({
         );
     };
 
-    // No family yet - show setup card
+    // No family yet - show minimal setup
     if (!family) {
         return (
-            <View style={styles.card}>
-                <View style={styles.emptyContainer}>
-                    <View style={styles.emptyIconWrapper}>
-                        <LinearGradient
-                            colors={['#6366F1', '#8B5CF6']}
-                            style={styles.emptyIconGradient}
-                        >
-                            <Users size={32} color="#fff" />
-                        </LinearGradient>
+            <View style={styles.container}>
+                {/* Create Family */}
+                <TouchableOpacity
+                    style={styles.actionRow}
+                    onPress={onInvitePress}
+                    activeOpacity={0.7}
+                >
+                    <ChevronLeft size={18} color="#D1D5DB" />
+                    <View style={styles.actionContent}>
+                        <Text style={styles.actionTitle}>צור משפחה</Text>
+                        <Text style={styles.actionSubtitle}>הזמן אחרים לצפות בתיעודים</Text>
                     </View>
+                    <View style={[styles.actionIcon, { backgroundColor: '#EEF2FF' }]}>
+                        <UserPlus size={18} color="#6366F1" strokeWidth={2} />
+                    </View>
+                </TouchableOpacity>
 
-                    <Text style={styles.emptyTitle}>שיתוף משפחתי</Text>
-                    <Text style={styles.emptyDescription}>
-                        שתפו את המעקב אחרי התינוק עם בן/בת הזוג, סבא וסבתא או המטפלת
-                    </Text>
-
-                    <TouchableOpacity
-                        style={styles.primaryButton}
-                        onPress={onInvitePress}
-                        activeOpacity={0.9}
-                    >
-                        <LinearGradient
-                            colors={['#6366F1', '#4F46E5']}
-                            style={styles.primaryButtonGradient}
-                        >
-                            <UserPlus size={20} color="#fff" />
-                            <Text style={styles.primaryButtonText}>הזמן לצפייה משותפת</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.secondaryButton} onPress={onJoinPress}>
-                        <Link size={16} color="#6366F1" />
-                        <Text style={styles.secondaryButtonText}>יש לי קוד הזמנה</Text>
-                    </TouchableOpacity>
-                </View>
+                {/* Join with code */}
+                <TouchableOpacity
+                    style={styles.actionRow}
+                    onPress={onJoinPress}
+                    activeOpacity={0.7}
+                >
+                    <ChevronLeft size={18} color="#D1D5DB" />
+                    <View style={styles.actionContent}>
+                        <Text style={styles.actionTitle}>הצטרף עם קוד</Text>
+                        <Text style={styles.actionSubtitle}>יש לך קוד הזמנה?</Text>
+                    </View>
+                    <View style={[styles.actionIcon, { backgroundColor: '#ECFDF5' }]}>
+                        <Link size={18} color="#10B981" strokeWidth={2} />
+                    </View>
+                </TouchableOpacity>
             </View>
         );
     }
 
-    // Has family - show members
+    // Has family - show minimal members list
     return (
-        <View style={styles.card}>
-            {/* Header with gradient */}
-            <LinearGradient
-                colors={['#6366F1', '#8B5CF6']}
-                style={styles.header}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-            >
-                <View style={styles.headerContent}>
-                    <View style={styles.headerIcon}>
-                        <Users size={20} color="#fff" />
-                    </View>
-                    <View>
-                        <Text style={styles.headerTitle}>משפחת {family.babyName}</Text>
-                        <Text style={styles.headerSubtitle}>{members.length} חברים משותפים</Text>
-                    </View>
-                </View>
-            </LinearGradient>
-
-            {/* Members list */}
-            <View style={styles.membersContainer}>
-                {members.map((member, index) => {
-                    const config = ROLE_CONFIG[member.role];
-                    const Icon = config.icon;
-                    const isMe = member.id === auth.currentUser?.uid;
-
-                    return (
-                        <View
-                            key={member.id || index}
-                            style={[
-                                styles.memberRow,
-                                index === members.length - 1 && { borderBottomWidth: 0 }
-                            ]}
-                        >
-                            <View style={styles.memberLeft}>
-                                <LinearGradient
-                                    colors={config.gradient}
-                                    style={styles.memberIcon}
-                                >
-                                    <Icon size={16} color="#fff" />
-                                </LinearGradient>
-                                <View style={styles.memberInfo}>
-                                    <Text style={styles.memberName}>
-                                        {member.name || 'משתמש'}
-                                        {isMe && <Text style={styles.meTag}> (אני)</Text>}
-                                    </Text>
-                                    <Text style={[styles.memberRole, { color: config.color }]}>
-                                        {config.label}
-                                    </Text>
-                                </View>
-                            </View>
-
-                            {isAdmin && !isMe && (
-                                <TouchableOpacity
-                                    style={styles.removeButton}
-                                    onPress={() => handleRemoveMember(member.id!, member.name)}
-                                >
-                                    <Trash2 size={16} color="#EF4444" />
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    );
-                })}
+        <View style={styles.container}>
+            {/* Family Name Header */}
+            <View style={styles.familyHeader}>
+                <Text style={styles.familySubtitle}>{members.length} חברים</Text>
+                <Text style={styles.familyName}>משפחת {family.babyName}</Text>
             </View>
+
+            {/* Members */}
+            {members.map((member, index) => {
+                const config = ROLE_CONFIG[member.role];
+                const isMe = member.id === auth.currentUser?.uid;
+
+                return (
+                    <View key={member.id || index} style={styles.memberRow}>
+                        {isAdmin && !isMe ? (
+                            <TouchableOpacity
+                                onPress={() => handleRemoveMember(member.id!, member.name)}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                                <Trash2 size={16} color="#EF4444" />
+                            </TouchableOpacity>
+                        ) : (
+                            <View style={{ width: 16 }} />
+                        )}
+                        <View style={styles.memberInfo}>
+                            <Text style={[styles.memberRole, { color: config.color }]}>
+                                {config.label}
+                            </Text>
+                            <Text style={styles.memberName}>
+                                {member.name || 'משתמש'}
+                                {isMe && <Text style={styles.meTag}> (אני)</Text>}
+                            </Text>
+                        </View>
+                        <View style={[styles.memberAvatar, { backgroundColor: config.color + '20' }]}>
+                            <Text style={[styles.memberInitial, { color: config.color }]}>
+                                {(member.name || 'מ').charAt(0)}
+                            </Text>
+                        </View>
+                    </View>
+                );
+            })}
+
+            {/* Divider */}
+            <View style={styles.divider} />
 
             {/* Actions */}
-            <View style={styles.actionsContainer}>
-                {isAdmin && (
-                    <TouchableOpacity
-                        style={styles.inviteButton}
-                        onPress={onInvitePress}
-                        activeOpacity={0.8}
-                    >
-                        <UserPlus size={18} color="#6366F1" />
-                        <Text style={styles.inviteButtonText}>הזמן עוד חברים</Text>
-                    </TouchableOpacity>
-                )}
-
-                {/* Join with code - always visible */}
+            {isAdmin && (
                 <TouchableOpacity
-                    style={[styles.inviteButton, { backgroundColor: '#ECFDF5', marginTop: isAdmin ? 8 : 0 }]}
-                    onPress={onJoinPress}
-                    activeOpacity={0.8}
+                    style={styles.actionRow}
+                    onPress={onInvitePress}
+                    activeOpacity={0.7}
                 >
-                    <Link size={18} color="#10B981" />
-                    <Text style={[styles.inviteButtonText, { color: '#10B981' }]}>הצטרף עם קוד</Text>
+                    <ChevronLeft size={18} color="#D1D5DB" />
+                    <Text style={styles.actionTitle}>הזמן חבר</Text>
+                    <View style={[styles.actionIcon, { backgroundColor: '#EEF2FF' }]}>
+                        <UserPlus size={16} color="#6366F1" strokeWidth={2} />
+                    </View>
                 </TouchableOpacity>
+            )}
 
-                {/* Guest Invite Button - Large Green */}
-                {onGuestInvitePress && (
-                    <TouchableOpacity
-                        style={[styles.guestInviteButton, { marginTop: 8 }]}
-                        onPress={onGuestInvitePress}
-                        activeOpacity={0.9}
-                    >
-                        <LinearGradient
-                            colors={['#10B981', '#059669']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.guestInviteGradient}
-                        >
-                            <UserPlus size={20} color="#fff" strokeWidth={2.5} />
-                            <Text style={styles.guestInviteText}>הזמן אורח</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                )}
+            {onGuestInvitePress && (
+                <TouchableOpacity
+                    style={styles.actionRow}
+                    onPress={onGuestInvitePress}
+                    activeOpacity={0.7}
+                >
+                    <ChevronLeft size={18} color="#D1D5DB" />
+                    <Text style={styles.actionTitle}>הזמן אורח</Text>
+                    <View style={[styles.actionIcon, { backgroundColor: '#ECFDF5' }]}>
+                        <Users size={16} color="#10B981" strokeWidth={2} />
+                    </View>
+                </TouchableOpacity>
+            )}
 
-                {!isAdmin && (
-                    <TouchableOpacity
-                        style={[styles.leaveButton, { marginTop: 8 }]}
-                        onPress={handleLeaveFamily}
-                        activeOpacity={0.8}
-                    >
-                        <LogOut size={18} color="#EF4444" />
-                        <Text style={styles.leaveButtonText}>עזוב משפחה</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
+            {!isAdmin && (
+                <TouchableOpacity
+                    style={styles.actionRow}
+                    onPress={handleLeaveFamily}
+                    activeOpacity={0.7}
+                >
+                    <ChevronLeft size={18} color="#D1D5DB" />
+                    <Text style={[styles.actionTitle, { color: '#EF4444' }]}>עזוב משפחה</Text>
+                    <View style={[styles.actionIcon, { backgroundColor: '#FEE2E2' }]}>
+                        <LogOut size={16} color="#EF4444" strokeWidth={2} />
+                    </View>
+                </TouchableOpacity>
+            )}
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    card: {
-        marginHorizontal: 16,
-        marginVertical: 8,
-        borderRadius: 20,
+    container: {
         backgroundColor: '#fff',
+        borderRadius: 16,
         overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-        elevation: 5,
     },
 
-    // Empty state
-    emptyContainer: {
-        padding: 28,
-        alignItems: 'center',
-    },
-    emptyIconWrapper: {
-        marginBottom: 16,
-    },
-    emptyIconGradient: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    emptyTitle: {
-        fontSize: 20,
-        fontWeight: '800',
-        color: '#1F2937',
-        marginBottom: 8,
-    },
-    emptyDescription: {
-        fontSize: 14,
-        color: '#6B7280',
-        textAlign: 'center',
-        lineHeight: 22,
-        marginBottom: 24,
-        paddingHorizontal: 16,
-    },
-    primaryButton: {
-        width: '100%',
-        borderRadius: 14,
-        overflow: 'hidden',
-        marginBottom: 12,
-    },
-    primaryButtonGradient: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
+    // Family Header
+    familyHeader: {
         paddingVertical: 16,
-    },
-    primaryButtonText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#fff',
-    },
-    secondaryButton: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        gap: 8,
-        paddingVertical: 10,
-    },
-    secondaryButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#6366F1',
-    },
-
-    // Header with members
-    header: {
-        padding: 16,
-    },
-    headerContent: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        gap: 12,
-    },
-    headerIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: '#fff',
-        textAlign: 'right',
-    },
-    headerSubtitle: {
-        fontSize: 13,
-        color: 'rgba(255,255,255,0.8)',
-        textAlign: 'right',
-    },
-
-    // Members
-    membersContainer: {
         paddingHorizontal: 16,
-        paddingTop: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+        alignItems: 'flex-end',
     },
+    familyName: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    familySubtitle: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        marginBottom: 2,
+    },
+
+    // Member Row
     memberRow: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
-    },
-    memberLeft: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
         gap: 12,
     },
-    memberIcon: {
+    memberAvatar: {
         width: 40,
         height: 40,
         borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
     },
+    memberInitial: {
+        fontSize: 16,
+        fontWeight: '700',
+    },
     memberInfo: {
+        flex: 1,
         alignItems: 'flex-end',
     },
     memberName: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#1F2937',
+        color: '#111827',
     },
     meTag: {
-        fontSize: 13,
         color: '#9CA3AF',
         fontWeight: '400',
     },
     memberRole: {
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: '600',
-        marginTop: 2,
-    },
-    removeButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#FEE2E2',
-        alignItems: 'center',
-        justifyContent: 'center',
+        marginTop: 1,
     },
 
-    // Actions
-    actionsContainer: {
-        padding: 16,
-        paddingTop: 8,
+    // Divider
+    divider: {
+        height: 1,
+        backgroundColor: '#F3F4F6',
+        marginVertical: 8,
     },
-    inviteButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        backgroundColor: '#EEF2FF',
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-    },
-    inviteButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#6366F1',
-        flex: 1,
-        textAlign: 'right',
-    },
-    leaveButton: {
+
+    // Action Row
+    actionRow: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: '#FEF2F2',
-        paddingVertical: 14,
-        borderRadius: 12,
-    },
-    leaveButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#EF4444',
-    },
-    // Guest Invite Button
-    guestInviteButton: {
-        borderRadius: 12,
-        overflow: 'hidden',
-    },
-    guestInviteGradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
         paddingVertical: 14,
         paddingHorizontal: 16,
-        gap: 10,
+        gap: 12,
     },
-    guestInviteText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '700',
+    actionIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    actionContent: {
         flex: 1,
+        alignItems: 'flex-end',
+    },
+    actionTitle: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#111827',
         textAlign: 'right',
+    },
+    actionSubtitle: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        marginTop: 1,
     },
 });
 

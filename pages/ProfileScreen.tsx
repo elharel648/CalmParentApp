@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, ActivityIndicator, Text, TouchableOpacity
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Edit2, TrendingUp, Award, Sparkles, ChevronRight, Camera, UserPlus, Users } from 'lucide-react-native';
+import { Edit2, TrendingUp, Award, Sparkles, ChevronRight, Camera, UserPlus, Users, User } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 // Custom Hooks
@@ -100,10 +100,10 @@ export default function ProfileScreen() {
     return months > 0 ? `${years} שנה ו-${months} חודשים` : `${years} שנה`;
   };
 
-  const getGenderEmoji = () => {
-    if (baby?.gender === 'boy') return '👶';
-    if (baby?.gender === 'girl') return '👧';
-    return '🧒';
+  // Get gender icon instead of emoji
+  const getGenderIcon = () => {
+    const color = baby?.gender === 'girl' ? '#EC4899' : '#60A5FA';
+    return <User size={28} color={color} strokeWidth={1.5} />;
   };
 
   if (loading) {
@@ -120,7 +120,7 @@ export default function ProfileScreen() {
 
       {/* Header */}
       <LinearGradient
-        colors={['#6366F1', '#8B5CF6']}
+        colors={['#A78BFA', '#C4B5FD']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.header}
@@ -141,7 +141,7 @@ export default function ProfileScreen() {
               <Image source={{ uri: baby.photoUrl }} style={styles.avatar} />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarEmoji}>{getGenderEmoji()}</Text>
+                {getGenderIcon()}
               </View>
             )}
             <View style={styles.cameraBadge}>
@@ -168,60 +168,10 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Family Sharing Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Users size={18} color="#8B5CF6" />
-            <Text style={styles.sectionTitle}>שיתוף משפחתי</Text>
-          </View>
-          <FamilyMembersCard
-            onInvitePress={() => setInviteModalVisible(true)}
-            onJoinPress={() => setJoinModalVisible(true)}
-            onGuestInvitePress={family ? () => {
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setIsGuestInviteOpen(true);
-            } : undefined}
-          />
-        </View>
 
-        {/* Growth Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <TrendingUp size={18} color="#10B981" />
-            <Text style={styles.sectionTitle}>מעקב גדילה</Text>
-          </View>
-          <GrowthSection
-            stats={baby?.stats}
-            onEditWeight={() => setEditMetric({ type: 'weight', value: baby?.stats?.weight || '', title: 'משקל', unit: 'ק״ג' })}
-            onEditHeight={() => setEditMetric({ type: 'height', value: baby?.stats?.height || '', title: 'גובה', unit: 'ס״מ' })}
-            onEditHead={() => setEditMetric({ type: 'head', value: baby?.stats?.headCircumference || '', title: 'היקף ראש', unit: 'ס״מ' })}
-          />
-        </View>
 
-        {/* Milestones Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Award size={18} color="#F59E0B" />
-            <Text style={styles.sectionTitle}>אבני דרך</Text>
-            <TouchableOpacity
-              style={styles.addTextBtn}
-              onPress={() => {
-                if (Platform.OS !== 'web') {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }
-                setIsMilestoneOpen(true);
-              }}
-            >
-              <Text style={styles.addText}>+ הוסף</Text>
-            </TouchableOpacity>
-          </View>
-          <MilestoneTimeline
-            milestones={baby?.milestones}
-            birthDate={baby?.birthDate}
-            onAdd={() => setIsMilestoneOpen(true)}
-            onDelete={handleDeleteMilestone}
-          />
-        </View>
+
+
 
         {/* Magical Moments Section */}
         <View style={styles.section}>
@@ -280,9 +230,8 @@ export default function ProfileScreen() {
         <InviteFamilyModal
           visible={inviteModalVisible}
           onClose={() => setInviteModalVisible(false)}
-          childId={baby.id}
-          childName={baby.name || 'הילד'}
-          familyId={family.id}
+          babyId={baby.id}
+          babyName={baby.name || 'הילד'}
         />
       )}
 

@@ -15,6 +15,7 @@ import HomeScreen from './pages/HomeScreen';
 import ReportsScreen from './pages/ReportsScreen';
 import ProfileScreen from './pages/ProfileScreen';
 import SettingsScreen from './pages/SettingsScreen';
+import FullSettingsScreen from './pages/FullSettingsScreen';
 import LoginScreen from './pages/LoginScreen';
 import BabyProfileScreen from './pages/BabyProfileScreen';
 
@@ -31,9 +32,31 @@ import { FoodTimerProvider } from './context/FoodTimerContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { ActiveChildProvider, useActiveChild } from './context/ActiveChildContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: 'https://d6f2c1e24015d5a729ac8fde1891d23d@o4510568313913344.ingest.us.sentry.io/4510568315486208',
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // 🔥 PERFORMANCE MONITORING - מעקב אחרי ביצועים
+  tracesSampleRate: 0.2, // 20% מהטרנזקציות יימדדו
+  enableAutoPerformanceTracing: true, // מעקב אוטומטי אחרי navigation ו-API calls
+
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
+const AccountStack = createNativeStackNavigator();
 // ✅ יצירת Stack לבייביסיטר
 const BabysitterStack = createNativeStackNavigator();
 
@@ -111,17 +134,12 @@ function MainAppNavigator() {
         }
       }}
     >
-      {/* Settings - always visible */}
-      <Tab.Screen name="הגדרות" component={SettingsScreen} options={{
-        tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Settings} label="הגדרות" />
+      {/* Account - always visible (renamed from Settings) */}
+      <Tab.Screen name="חשבון" component={AccountStackScreen} options={{
+        tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={User} label="חשבון" />
       }} />
 
-      {/* Profile - only for parents */}
-      {canAccessProfile && (
-        <Tab.Screen name="פרופיל" component={ProfileScreen} options={{
-          tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={User} label="פרופיל" />
-        }} />
-      )}
+
 
       {/* Reports - only for parents */}
       {canAccessReports && (
@@ -157,6 +175,16 @@ function HomeStackScreen() {
   );
 }
 
+// Account Stack Navigator
+function AccountStackScreen() {
+  return (
+    <AccountStack.Navigator screenOptions={{ headerShown: false }}>
+      <AccountStack.Screen name="Account" component={SettingsScreen} />
+      <AccountStack.Screen name="FullSettings" component={FullSettingsScreen} />
+    </AccountStack.Navigator>
+  );
+}
+
 // Wrapper screen for creating baby from home
 function CreateBabyScreen({ navigation }: any) {
   const { refreshChildren } = useActiveChild();
@@ -189,7 +217,7 @@ function BabysitterStackScreen() {
 
 // --- האפליקציה הראשית ---
 
-export default function App() {
+export default Sentry.wrap(function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [hasBabyProfile, setHasBabyProfile] = useState<boolean | null>(null);
   const [isAppLoading, setIsAppLoading] = useState(true);
@@ -289,7 +317,7 @@ export default function App() {
       </SleepTimerProvider>
     </ErrorBoundary>
   );
-}
+});
 
 const styles = StyleSheet.create({
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' },

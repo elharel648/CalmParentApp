@@ -87,9 +87,7 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
 
     // Breast timer effect
     useEffect(() => {
-        console.log('🍼 Breast timer effect, isRunning:', breastIsRunning, 'activeSide:', breastActiveSide);
         if (breastIsRunning && breastActiveSide) {
-            console.log('🍼 Starting breast interval...');
             breastTimerRef.current = setInterval(() => {
                 setBreastElapsedSeconds(prev => prev + 1);
             }, 1000);
@@ -105,7 +103,6 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
     }, [breastIsRunning, breastActiveSide]);
 
     const startBreast = useCallback((side: 'left' | 'right') => {
-        console.log('🍼 startBreast called, side:', side, 'isRunning:', breastIsRunning, 'activeSide:', breastActiveSide);
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         // If switching sides, accumulate current time first

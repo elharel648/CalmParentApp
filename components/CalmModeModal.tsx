@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Linking, Platform, Alert, Animated } from 'react-native';
 import { X, Phone, ListChecks, Siren, Stethoscope, Activity, CheckCircle } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
 interface CalmModeModalProps {
@@ -13,8 +12,7 @@ export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) 
   const [activeTab, setActiveTab] = useState<'emergency' | 'checklist'>('emergency');
   const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
 
-  // Pulse animation for emergency buttons
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Fade animation
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -28,27 +26,8 @@ export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) 
         duration: 300,
         useNativeDriver: true,
       }).start();
-
-      // Pulse animation for emergency feel
-      const pulseLoop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulseLoop.start();
-
-      return () => pulseLoop.stop();
     }
-  }, [visible, fadeAnim, pulseAnim]);
+  }, [visible, fadeAnim]);
 
   const makeCall = async (phoneNumber: string, name: string) => {
     // Haptic feedback
@@ -91,21 +70,24 @@ export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) 
       name: 'מד"א',
       subtitle: 'חירום רפואי',
       number: '101',
-      gradient: ['#EF4444', '#DC2626'] as [string, string],
-      icon: <Siren size={28} color="#fff" />,
+      bgColor: '#FEE2E2',
+      iconColor: '#EF4444',
+      icon: <Siren size={24} color="#EF4444" />,
     },
     {
       name: 'משטרה',
       subtitle: 'סכנה מיידית',
       number: '100',
-      gradient: ['#3B82F6', '#2563EB'] as [string, string],
-      icon: <Activity size={28} color="#fff" />,
+      bgColor: '#DBEAFE',
+      iconColor: '#3B82F6',
+      icon: <Activity size={24} color="#3B82F6" />,
     },
     {
       name: 'מוקד הרעלות',
       subtitle: 'בליעת חומר',
       number: '048541900',
-      gradient: ['#8B5CF6', '#7C3AED'] as [string, string],
+      bgColor: '#EDE9FE',
+      iconColor: '#8B5CF6',
       icon: <Text style={{ fontSize: 24 }}>☠️</Text>,
     },
   ];
@@ -171,34 +153,23 @@ export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) 
         <Animated.View style={[styles.contentArea, { opacity: fadeAnim }]}>
           {activeTab === 'emergency' ? (
             <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-              {/* Emergency contacts - Big buttons with pulse */}
+              {/* Emergency contacts - Minimalist Cards */}
               <Text style={styles.sectionHeader}>🚨 חירום מיידי</Text>
               <View style={styles.emergencyGrid}>
                 {emergencyContacts.map((contact, index) => (
-                  <Animated.View
+                  <TouchableOpacity
                     key={index}
-                    style={{ transform: [{ scale: pulseAnim }] }}
+                    style={[styles.emergencyCard, { backgroundColor: contact.bgColor }]}
+                    onPress={() => makeCall(contact.number, contact.name)}
+                    activeOpacity={0.8}
                   >
-                    <TouchableOpacity
-                      style={styles.emergencyCard}
-                      onPress={() => makeCall(contact.number, contact.name)}
-                      activeOpacity={0.8}
-                    >
-                      <LinearGradient
-                        colors={contact.gradient}
-                        style={styles.emergencyGradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                      >
-                        <View style={styles.emergencyIconContainer}>
-                          {contact.icon}
-                        </View>
-                        <Text style={styles.emergencyName}>{contact.name}</Text>
-                        <Text style={styles.emergencySubtitle}>{contact.subtitle}</Text>
-                        <Text style={styles.emergencyNumber}>{contact.number}</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </Animated.View>
+                    <View style={styles.emergencyIconContainer}>
+                      {contact.icon}
+                    </View>
+                    <Text style={styles.emergencyName}>{contact.name}</Text>
+                    <Text style={styles.emergencySubtitle}>{contact.subtitle}</Text>
+                    <Text style={styles.emergencyNumber}>{contact.number}</Text>
+                  </TouchableOpacity>
                 ))}
               </View>
 
@@ -301,7 +272,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Tabs - Premium Pills
+  // Tabs - Minimalist Pills
   tabsContainer: {
     flexDirection: 'row-reverse',
     paddingHorizontal: 20,
@@ -313,18 +284,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 12,
     backgroundColor: '#F9FAFB',
     gap: 6,
   },
   activeTab: {
-    backgroundColor: '#EF4444',
+    backgroundColor: '#6366F1',
   },
   tabText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#9CA3AF',
+    color: '#6B7280',
   },
   activeTabText: {
     color: '#fff',
@@ -347,7 +318,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
-  // Emergency cards
+  // Emergency cards - Minimalist
   emergencyGrid: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
@@ -357,62 +328,53 @@ const styles = StyleSheet.create({
   emergencyCard: {
     width: 105,
     height: 130,
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  emergencyGradient: {
-    flex: 1,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   emergencyIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.8)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
   emergencyName: {
     fontSize: 14,
-    fontWeight: '800',
-    color: '#fff',
+    fontWeight: '700',
+    color: '#1F2937',
     textAlign: 'center',
   },
   emergencySubtitle: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#6B7280',
     textAlign: 'center',
     marginTop: 2,
   },
   emergencyNumber: {
     fontSize: 13,
-    color: '#fff',
-    fontWeight: '700',
+    color: '#374151',
+    fontWeight: '600',
     marginTop: 4,
   },
 
-  // HMO list
+  // HMO list - Minimalist
   hmoList: {
     gap: 10,
   },
   hmoRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#F9FAFB',
     padding: 14,
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   hmoIcon: {
     width: 44,
@@ -427,34 +389,34 @@ const styles = StyleSheet.create({
   },
   hmoName: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'right',
     color: '#1F2937',
   },
   hmoSubtitle: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#6B7280',
     textAlign: 'right',
     marginTop: 2,
   },
   callBtn: {
     flexDirection: 'row-reverse',
     backgroundColor: '#10B981',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   callBtnText: {
     color: '#fff',
-    fontWeight: '700',
-    fontSize: 13,
+    fontWeight: '600',
+    fontSize: 12,
   },
 
-  // Checklist
+  // Checklist - Minimalist
   checklistHint: {
-    color: '#9CA3AF',
+    color: '#6B7280',
     fontSize: 13,
     textAlign: 'right',
     marginBottom: 16,
@@ -462,21 +424,21 @@ const styles = StyleSheet.create({
   checkRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#F9FAFB',
     padding: 16,
     borderRadius: 16,
     marginBottom: 10,
-    borderWidth: 2,
-    borderColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   checkRowChecked: {
     backgroundColor: '#ECFDF5',
     borderColor: '#10B981',
   },
   checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: '#D1D5DB',
     alignItems: 'center',

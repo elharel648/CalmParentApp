@@ -1,6 +1,7 @@
-
-const { getDefaultConfig } = require("expo/metro-config");
-const defaultConfig = getDefaultConfig(__dirname);
+const {
+  getSentryExpoConfig
+} = require("@sentry/react-native/metro");
+const defaultConfig = getSentryExpoConfig(__dirname);
 defaultConfig.resolver.assetExts.push("cjs");
 defaultConfig.resolver.unstable_enablePackageExports = false;
 module.exports = defaultConfig;

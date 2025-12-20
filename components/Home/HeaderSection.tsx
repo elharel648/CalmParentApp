@@ -1,6 +1,6 @@
 import React, { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, ScrollView, Modal, Pressable, Animated, Dimensions } from 'react-native';
-import { Camera, Cloud, Plus, X, Link2, UserPlus, Moon, Utensils, Baby as BabyIcon, Pill, Bell } from 'lucide-react-native';
+import { Camera, Cloud, Plus, X, Link2, UserPlus, Moon, Utensils, Baby as BabyIcon, Pill, Bell, Award, Heart } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { auth, db } from '../../services/firebaseConfig';
@@ -140,102 +140,196 @@ const HeaderSection = memo<HeaderSectionProps>(({
         ? `${Math.floor(dailyStats.sleepMinutes / 60)}:${String(dailyStats.sleepMinutes % 60).padStart(2, '0')}`
         : '0:00';
 
-    // Banner rotation state
-    const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-    const fadeAnim = useRef(new Animated.Value(1)).current;
-    const slideAnim = useRef(new Animated.Value(0)).current;
+    // Smart Reminders & Achievements Cards
+    const smartCards = useMemo(() => {
+        const cards: Array<{
+            type: string;
+            icon: any;
+            color: string;
+            bgColor: string;
+            title: string;
+            subtitle: string;
+            isUrgent?: boolean;
+        }> = [];
 
-    // Define banners data
-    const banners = useMemo(() => {
-        // Calculate supplements taken
-        const supplementsTaken = (meds?.vitaminD ? 1 : 0) + (meds?.iron ? 1 : 0);
+        // Calculate time since last feed
+        const getTimeSinceLastFeed = () => {
+            if (!lastFeedTime || lastFeedTime === '--:--') return null;
+            const [hours, minutes] = lastFeedTime.split(':').map(Number);
+            const now = new Date();
+            const lastFeed = new Date();
+            lastFeed.setHours(hours, minutes, 0, 0);
+            if (lastFeed > now) lastFeed.setDate(lastFeed.getDate() - 1);
+            const diffMs = now.getTime() - lastFeed.getTime();
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            return { hours: diffHours, mins: diffMins };
+        };
 
-        const items = [
-            {
-                type: 'sleep',
-                icon: Moon,
-                color: '#8B5CF6',
-                bgColor: '#F3F0FF',
-                label: 'שינה',
-                value: sleepHours !== '0:00' ? sleepHours : null,
-                noDataText: 'אין נתונים',
-                lastTime: lastSleepTime,
-            },
-            {
-                type: 'feed',
+        // 1. Next Feed Reminder
+        const feedTime = getTimeSinceLastFeed();
+        if (feedTime) {
+            const isOverdue = feedTime.hours >= 3;
+            cards.push({
+                type: 'feed_reminder',
+                icon: Utensils,
+                color: isOverdue ? '#EF4444' : '#F59E0B',
+                bgColor: isOverdue ? '#FEE2E2' : '#FEF3C7',
+                title: isOverdue ? 'הגיע הזמן להאכיל!' : 'האכלה אחרונה',
+                subtitle: `לפני ${feedTime.hours > 0 ? `${feedTime.hours} שעות ` : ''}${feedTime.mins} דקות`,
+                isUrgent: isOverdue,
+            });
+        } else {
+            cards.push({
+                type: 'feed_reminder',
                 icon: Utensils,
                 color: '#F59E0B',
-                bgColor: '#FEF9E7',
-                label: 'האכלות',
-                value: dailyStats?.feedCount || null,
-                noDataText: 'אין נתונים',
-                lastTime: lastFeedTime,
-            },
-            {
-                type: 'diaper',
-                icon: BabyIcon,
-                color: '#10B981',
-                bgColor: '#ECFDF5',
-                label: 'החתלות',
-                value: dailyStats?.diaperCount || null,
-                noDataText: 'אין נתונים',
-                lastTime: null,
-            },
-            {
-                type: 'supplements',
-                icon: Pill,
-                color: '#0EA5E9',
-                bgColor: '#E0F2FE',
-                label: 'תוספים',
-                value: `${supplementsTaken}/2`,
-                noDataText: '0/2',
-                lastTime: null,
-            },
-        ];
-        return items;
-    }, [sleepHours, dailyStats, lastSleepTime, lastFeedTime, meds]);
+                bgColor: '#FEF3C7',
+                title: 'האכלה ראשונה',
+                subtitle: 'עדיין לא תועד היום',
+            });
+        }
 
-    // Banner rotation effect
+        // 2. Vitamin D Reminder
+        if (!meds?.vitaminD) {
+            cards.push({
+                type: 'vitamin_reminder',
+                icon: Pill,
+                color: '#8B5CF6',
+                bgColor: '#F3E8FF',
+                title: 'ויטמין D',
+                subtitle: 'לא ניתן עדיין היום 💧',
+                isUrgent: true,
+            });
+        } else {
+            cards.push({
+                type: 'vitamin_done',
+                icon: Pill,
+                color: '#10B981',
+                bgColor: '#D1FAE5',
+                title: 'ויטמין D ✓',
+                subtitle: 'ניתן היום! 🎉',
+            });
+        }
+
+        // 3. Achievement / Sleep Streak
+        const sleepMins = dailyStats?.sleepMinutes || 0;
+        if (sleepMins >= 420) { // 7+ hours
+            cards.push({
+                type: 'achievement',
+                icon: Award,
+                color: '#F59E0B',
+                bgColor: '#FEF3C7',
+                title: 'מלך/ת השינה! 👑',
+                subtitle: `${sleepHours} שעות שינה היום`,
+            });
+        } else if ((dailyStats?.feedCount || 0) >= 5) {
+            cards.push({
+                type: 'achievement',
+                icon: Award,
+                color: '#10B981',
+                bgColor: '#D1FAE5',
+                title: 'יום מזין! 🍼',
+                subtitle: `${dailyStats?.feedCount} האכלות היום`,
+            });
+        } else {
+            // Default: Iron reminder or encouraging message
+            if (!meds?.iron) {
+                cards.push({
+                    type: 'iron_reminder',
+                    icon: Pill,
+                    color: '#EF4444',
+                    bgColor: '#FEE2E2',
+                    title: 'ברזל',
+                    subtitle: 'לא ניתן עדיין היום',
+                });
+            } else {
+                cards.push({
+                    type: 'encouragement',
+                    icon: Heart,
+                    color: '#EC4899',
+                    bgColor: '#FCE7F3',
+                    title: 'יום נהדר! 💕',
+                    subtitle: 'המשיכו ככה!',
+                });
+            }
+        }
+
+        return cards;
+    }, [lastFeedTime, meds, dailyStats, sleepHours]);
+
+    // 3 Card rotation states - each rotates independently at different intervals
+    const [card1Index, setCard1Index] = useState(0);
+    const [card2Index, setCard2Index] = useState(1);
+    const [card3Index, setCard3Index] = useState(2);
+
+    // Fade + Scale animations for elegant transitions
+    const fade1 = useRef(new Animated.Value(1)).current;
+    const fade2 = useRef(new Animated.Value(1)).current;
+    const fade3 = useRef(new Animated.Value(1)).current;
+    const scale1 = useRef(new Animated.Value(1)).current;
+    const scale2 = useRef(new Animated.Value(1)).current;
+    const scale3 = useRef(new Animated.Value(1)).current;
+
+    // Elegant rotation effect with scale + fade
     useEffect(() => {
-        const interval = setInterval(() => {
-            // Fade out + slide out
+        const rotateCard = (
+            fadeAnim: Animated.Value,
+            scaleAnim: Animated.Value,
+            setIndex: React.Dispatch<React.SetStateAction<number>>
+        ) => {
+            // Fade out + Scale down
             Animated.parallel([
                 Animated.timing(fadeAnim, {
                     toValue: 0,
-                    duration: 250,
+                    duration: 300,
                     useNativeDriver: true,
                 }),
-                Animated.timing(slideAnim, {
-                    toValue: -20,
-                    duration: 250,
+                Animated.timing(scaleAnim, {
+                    toValue: 0.85,
+                    duration: 300,
                     useNativeDriver: true,
                 }),
             ]).start(() => {
-                // Change banner
-                setCurrentBannerIndex((prev) => (prev + 1) % banners.length);
-                // Reset position
-                slideAnim.setValue(20);
-                // Fade in + slide in
+                setIndex((prev) => (prev + 1) % smartCards.length);
+                // Fade in + Scale up
                 Animated.parallel([
                     Animated.timing(fadeAnim, {
                         toValue: 1,
-                        duration: 300,
+                        duration: 350,
                         useNativeDriver: true,
                     }),
-                    Animated.timing(slideAnim, {
-                        toValue: 0,
-                        duration: 300,
+                    Animated.spring(scaleAnim, {
+                        toValue: 1,
+                        friction: 8,
+                        tension: 100,
                         useNativeDriver: true,
                     }),
                 ]).start();
             });
-        }, 4000);
+        };
 
-        return () => clearInterval(interval);
-    }, [banners.length, fadeAnim, slideAnim]);
+        const interval1 = setInterval(() => rotateCard(fade1, scale1, setCard1Index), 3500);
+        const interval2 = setInterval(() => rotateCard(fade2, scale2, setCard2Index), 4200);
+        const interval3 = setInterval(() => rotateCard(fade3, scale3, setCard3Index), 5000);
 
-    const currentBanner = banners[currentBannerIndex];
-    const BannerIcon = currentBanner.icon;
+        return () => {
+            clearInterval(interval1);
+            clearInterval(interval2);
+            clearInterval(interval3);
+        };
+    }, [smartCards.length, fade1, fade2, fade3, scale1, scale2, scale3]);
+
+    // Get cards - ensure no duplicates by using unique indices
+    const getUniqueIndex = (baseIndex: number, offset: number, total: number) => {
+        return (baseIndex + offset) % total;
+    };
+    const card1 = smartCards[getUniqueIndex(card1Index, 0, smartCards.length)];
+    const card2 = smartCards.length > 1 ? smartCards[getUniqueIndex(card1Index, 1, smartCards.length)] : card1;
+    const card3 = smartCards.length > 2 ? smartCards[getUniqueIndex(card1Index, 2, smartCards.length)] : card1;
+    const Card1Icon = card1.icon;
+    const Card2Icon = card2.icon;
+    const Card3Icon = card3.icon;
 
     return (
         <View style={styles.container}>
@@ -264,23 +358,10 @@ const HeaderSection = memo<HeaderSectionProps>(({
                 </View>
             </View>
 
-            {/* Children Avatars Row */}
+            {/* Children Avatars Row - RTL aligned to right */}
             <View style={styles.childrenRow}>
-                {/* Plus Button - Add Child (now before avatars) */}
-                <TouchableOpacity
-                    style={styles.addChildBtn}
-                    onPress={handlePlusPress}
-                    activeOpacity={0.7}
-                >
-                    <Plus size={18} color="#9CA3AF" />
-                </TouchableOpacity>
-
-                {/* Child avatars */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ flexDirection: 'row', gap: 10 }}
-                >
+                {/* Avatars container first in row-reverse = appears on right */}
+                <View style={styles.avatarsContainer}>
                     {allChildren.map((child) => {
                         const isActive = activeChild?.childId === child.childId;
                         return (
@@ -314,58 +395,46 @@ const HeaderSection = memo<HeaderSectionProps>(({
                             </TouchableOpacity>
                         );
                     })}
-                </ScrollView>
+                </View>
+
+                {/* Plus Button second in row-reverse = appears on left */}
+                <TouchableOpacity
+                    style={styles.addChildBtn}
+                    onPress={handlePlusPress}
+                    activeOpacity={0.7}
+                >
+                    <Plus size={18} color="#9CA3AF" />
+                </TouchableOpacity>
             </View>
 
-            {/* Minimalist Rotating Banner */}
-            <View style={styles.bannerContainer}>
-                <Animated.View
-                    style={[
-                        styles.bannerInner,
-                        {
-                            opacity: fadeAnim,
-                            transform: [{ translateY: slideAnim }],
-                        },
-                    ]}
-                >
-                    {/* Left side: Time */}
-                    <View style={styles.bannerTimeSection}>
-                        <Text style={[styles.bannerTime, { color: theme.textSecondary }]}>
-                            {currentBanner.lastTime && currentBanner.lastTime !== '--:--' ? currentBanner.lastTime : ''}
-                        </Text>
+            {/* 3 Smart Cards: Reminders & Achievements */}
+            <View style={styles.statsCardsRow}>
+                {/* Card 1 */}
+                <Animated.View style={[styles.statCard, { opacity: fade1, transform: [{ scale: scale1 }] }]}>
+                    <View style={[styles.statCardIcon, { backgroundColor: card1.bgColor }]}>
+                        <Card1Icon size={18} color={card1.color} strokeWidth={1.5} />
                     </View>
-
-                    {/* Spacer */}
-                    <View style={{ flex: 1 }} />
-
-                    {/* Right side: Label + Value + Icon */}
-                    <View style={styles.bannerRightSection}>
-                        <Text style={[styles.bannerValue, { color: theme.textPrimary }]}>
-                            {currentBanner.value !== null ? currentBanner.value : '-'}
-                        </Text>
-                        <Text style={[styles.bannerLabel, { color: currentBanner.color }]}>
-                            {currentBanner.label}
-                        </Text>
-                        <View style={[styles.bannerIcon, { backgroundColor: currentBanner.bgColor }]}>
-                            <BannerIcon size={16} color={currentBanner.color} />
-                        </View>
-                    </View>
+                    <Text style={[styles.statCardTitle, { color: theme.textPrimary }]} numberOfLines={1}>{card1.title}</Text>
+                    <Text style={[styles.statCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>{card1.subtitle}</Text>
                 </Animated.View>
 
-                {/* Dots indicator */}
-                <View style={styles.dotsContainer}>
-                    {banners.map((_, index) => (
-                        <View
-                            key={index}
-                            style={[
-                                styles.dot,
-                                {
-                                    backgroundColor: index === currentBannerIndex ? currentBanner.color : '#E5E7EB',
-                                },
-                            ]}
-                        />
-                    ))}
-                </View>
+                {/* Card 2 */}
+                <Animated.View style={[styles.statCard, { opacity: fade2, transform: [{ scale: scale2 }] }]}>
+                    <View style={[styles.statCardIcon, { backgroundColor: card2.bgColor }]}>
+                        <Card2Icon size={18} color={card2.color} strokeWidth={1.5} />
+                    </View>
+                    <Text style={[styles.statCardTitle, { color: theme.textPrimary }]} numberOfLines={1}>{card2.title}</Text>
+                    <Text style={[styles.statCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>{card2.subtitle}</Text>
+                </Animated.View>
+
+                {/* Card 3 */}
+                <Animated.View style={[styles.statCard, { opacity: fade3, transform: [{ scale: scale3 }] }]}>
+                    <View style={[styles.statCardIcon, { backgroundColor: card3.bgColor }]}>
+                        <Card3Icon size={18} color={card3.color} strokeWidth={1.5} />
+                    </View>
+                    <Text style={[styles.statCardTitle, { color: theme.textPrimary }]} numberOfLines={1}>{card3.title}</Text>
+                    <Text style={[styles.statCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>{card3.subtitle}</Text>
+                </Animated.View>
             </View>
 
             {/* Add Child Modal */}
@@ -452,12 +521,16 @@ const styles = StyleSheet.create({
         color: '#6B7280',
     },
 
-    // Children Row - aligned to left side
+    // Children Row - RTL aligned to right side
     childrenRow: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         alignItems: 'center',
-        justifyContent: 'flex-start',
         marginBottom: 16,
+    },
+    avatarsContainer: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 8,
     },
 
     // Adjust children scroll content spacing for names
@@ -514,24 +587,42 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
 
-    // Minimalist Banner - Compact
-    bannerContainer: {
+    // 3 Rotating Stat Cards
+    statsCardsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 10,
+    },
+    statCard: {
+        flex: 1,
         backgroundColor: '#F9FAFB',
-        borderRadius: 20,
+        borderRadius: 16,
         borderWidth: 1,
         borderColor: '#E5E7EB',
-        padding: 10,
-        paddingVertical: 8,
-        minHeight: 44,
-    },
-    bannerInner: {
-        flexDirection: 'row',
+        paddingVertical: 12,
+        paddingHorizontal: 8,
         alignItems: 'center',
-        gap: 10,
-        height: 32,
+        minHeight: 85,
     },
-    bannerCenter: {
-        alignItems: 'flex-start',
+    statCardIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 6,
+    },
+    statCardTitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        textAlign: 'center',
+        marginBottom: 2,
+    },
+    statCardSubtitle: {
+        fontSize: 10,
+        fontWeight: '500',
+        textAlign: 'center',
+        opacity: 0.8,
     },
     notificationBell: {
         padding: 6,
@@ -545,57 +636,6 @@ const styles = StyleSheet.create({
         height: 7,
         borderRadius: 3.5,
         backgroundColor: '#3B82F6',
-    },
-    bannerTimeBadge: {
-        backgroundColor: '#F3F4F6',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    bannerTimeSection: {
-        minWidth: 45,
-        alignItems: 'flex-start',
-        justifyContent: 'center',
-    },
-    bannerTime: {
-        fontSize: 13,
-        fontWeight: '500',
-        color: '#6B7280',
-    },
-    bannerRightSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-    },
-    bannerLabel: {
-        fontSize: 11,
-        fontWeight: '500',
-        color: '#9CA3AF',
-        letterSpacing: 0.2,
-        textTransform: 'uppercase',
-    },
-    bannerValue: {
-        fontSize: 16,
-        fontWeight: '700',
-        letterSpacing: -0.3,
-    },
-    bannerIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    dotsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 4,
-        marginTop: 10,
-    },
-    dot: {
-        width: 5,
-        height: 5,
-        borderRadius: 2.5,
     },
 
     // Modal
