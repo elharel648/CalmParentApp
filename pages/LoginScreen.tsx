@@ -22,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Baby, Mail, Lock, Eye, EyeOff, AlertCircle, Check, Shield, Users, X, Briefcase } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Haptics from 'expo-haptics';
 
 import {
@@ -31,6 +32,7 @@ import {
   sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithCredential,
+  OAuthProvider,
 } from 'firebase/auth';
 
 import { auth } from '../services/firebaseConfig';
@@ -544,9 +546,33 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
                   <TouchableOpacity
                     style={styles.socialBtn}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      Alert.alert('בקרוב', 'התחברות עם Apple תתווסף בקרוב!');
+                    onPress={async () => {
+                      try {
+                        const credential = await AppleAuthentication.signInAsync({
+                          requestedScopes: [
+                            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                          ],
+                        });
+
+                        // Create Firebase credential
+                        const provider = new OAuthProvider('apple.com');
+                        const firebaseCredential = provider.credential({
+                          idToken: credential.identityToken!,
+                        });
+
+                        setLoading(true);
+                        await signInWithCredential(auth, firebaseCredential);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        onLoginSuccess();
+                      } catch (e: any) {
+                        if (e.code !== 'ERR_REQUEST_CANCELED') {
+                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                          Alert.alert('שגיאה', 'לא הצלחנו להתחבר עם Apple');
+                        }
+                      } finally {
+                        setLoading(false);
+                      }
                     }}
                   >
                     <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/0/747.png' }} style={styles.socialIcon} />
