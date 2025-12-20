@@ -8,6 +8,7 @@ import {
     TextInput,
     ActivityIndicator,
     Platform,
+    KeyboardAvoidingView,
 } from 'react-native';
 import { X, Users, LogIn } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -84,7 +85,10 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
 
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-            <View style={styles.overlay}>
+            <KeyboardAvoidingView
+                style={styles.overlay}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
                 <View style={styles.modalContent}>
                     {/* Header */}
                     <View style={styles.header}>
@@ -137,7 +141,7 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
                         💡 קיבלת קוד מבן/בת הזוג? הזן אותו כאן
                     </Text>
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 };
