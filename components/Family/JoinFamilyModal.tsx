@@ -40,39 +40,47 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
         setLoading(true);
         setError('');
 
-        // First try to join as guest (for guest invite codes)
-        const guestResult = await joinAsGuest(code);
+        try {
+            // First try to join as guest (for guest invite codes)
+            const guestResult = await joinAsGuest(code);
 
-        if (guestResult.success) {
-            // Successfully joined as guest
+            if (guestResult.success) {
+                // Successfully joined as guest
+                setLoading(false);
+                if (Platform.OS !== 'web') {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+                setCode('');
+                onClose();
+                onSuccess?.();
+                return;
+            }
+
+            // If guest join failed, try regular family join
+            const familyResult = await join(code);
+
             setLoading(false);
-            if (Platform.OS !== 'web') {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+            if (familyResult.success) {
+                if (Platform.OS !== 'web') {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+                setCode('');
+                onClose();
+                onSuccess?.();
+            } else {
+                if (Platform.OS !== 'web') {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                }
+                // Show error from guest attempt if it was more specific, otherwise show family error
+                setError(guestResult.message !== 'קוד הזמנה לא תקין' ? guestResult.message : familyResult.message);
             }
-            setCode('');
-            onClose();
-            onSuccess?.();
-            return;
-        }
-
-        // If guest join failed, try regular family join
-        const familyResult = await join(code);
-
-        setLoading(false);
-
-        if (familyResult.success) {
-            if (Platform.OS !== 'web') {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            }
-            setCode('');
-            onClose();
-            onSuccess?.();
-        } else {
+        } catch (error) {
+            setLoading(false);
             if (Platform.OS !== 'web') {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             }
-            // Show error from guest attempt if it was more specific, otherwise show family error
-            setError(guestResult.message !== 'קוד הזמנה לא תקין' ? guestResult.message : familyResult.message);
+            setError('שגיאה בהצטרפות. נסה שוב.');
         }
     };
 

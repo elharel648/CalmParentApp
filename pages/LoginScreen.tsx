@@ -23,6 +23,7 @@ import { Baby, Mail, Lock, Eye, EyeOff, AlertCircle, Check, Shield, Users, X, Br
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 
 import {
@@ -548,17 +549,29 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                     style={styles.socialBtn}
                     onPress={async () => {
                       try {
+                        // Generate a random nonce
+                        const rawNonce = Math.random().toString(36).substring(2, 15) +
+                          Math.random().toString(36).substring(2, 15);
+
+                        // Hash the nonce using SHA256
+                        const hashedNonce = await Crypto.digestStringAsync(
+                          Crypto.CryptoDigestAlgorithm.SHA256,
+                          rawNonce
+                        );
+
                         const credential = await AppleAuthentication.signInAsync({
                           requestedScopes: [
                             AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
                             AppleAuthentication.AppleAuthenticationScope.EMAIL,
                           ],
+                          nonce: hashedNonce,
                         });
 
-                        // Create Firebase credential
+                        // Create Firebase credential with rawNonce
                         const provider = new OAuthProvider('apple.com');
                         const firebaseCredential = provider.credential({
                           idToken: credential.identityToken!,
+                          rawNonce: rawNonce,
                         });
 
                         setLoading(true);
