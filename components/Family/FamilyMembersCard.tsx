@@ -190,6 +190,19 @@ export const FamilyMembersCard: React.FC<FamilyMembersCardProps> = ({
                 </TouchableOpacity>
             )}
 
+            {/* Join another family with code */}
+            <TouchableOpacity
+                style={styles.actionRow}
+                onPress={onJoinPress}
+                activeOpacity={0.7}
+            >
+                <ChevronLeft size={18} color="#D1D5DB" />
+                <Text style={styles.actionTitle}>הצטרף עם קוד</Text>
+                <View style={[styles.actionIcon, { backgroundColor: '#FFF7ED' }]}>
+                    <Link size={16} color="#F59E0B" strokeWidth={2} />
+                </View>
+            </TouchableOpacity>
+
             {!isAdmin && (
                 <TouchableOpacity
                     style={styles.actionRow}

@@ -241,7 +241,7 @@ const QuickActions = memo<QuickActionsProps>(({
                 </View>
 
                 {/* Label */}
-                <Text style={[styles.actionLabel, { color: theme.textPrimary }]} numberOfLines={1}>
+                <Text style={[styles.actionLabel, { color: theme.textPrimary }]} numberOfLines={2}>
                     {isActive ? config.activeLabel : config.label}
                 </Text>
 

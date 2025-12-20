@@ -360,8 +360,13 @@ const HeaderSection = memo<HeaderSectionProps>(({
 
             {/* Children Avatars Row - RTL aligned to right */}
             <View style={styles.childrenRow}>
-                {/* Avatars container first in row-reverse = appears on right */}
-                <View style={styles.avatarsContainer}>
+                {/* Avatars container in horizontal ScrollView for many children */}
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.avatarsScrollContent}
+                    style={styles.avatarsScrollView}
+                >
                     {allChildren.map((child) => {
                         const isActive = activeChild?.childId === child.childId;
                         return (
@@ -395,7 +400,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
                             </TouchableOpacity>
                         );
                     })}
-                </View>
+                </ScrollView>
 
                 {/* Plus Button second in row-reverse = appears on left */}
                 <TouchableOpacity
@@ -531,6 +536,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row-reverse',
         alignItems: 'center',
         gap: 8,
+    },
+    avatarsScrollView: {
+        flex: 1,
+    },
+    avatarsScrollContent: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 4,
     },
 
     // Adjust children scroll content spacing for names

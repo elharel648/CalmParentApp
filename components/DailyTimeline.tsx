@@ -1,6 +1,6 @@
 import React, { memo, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert, Image } from 'react-native';
-import { Utensils, Moon, Layers, ChevronDown, ChevronUp, X } from 'lucide-react-native';
+import { Utensils, Moon, Layers, ChevronDown, ChevronUp, X, FileText } from 'lucide-react-native';
 import { getRecentHistory, deleteEvent } from '../services/firebaseService';
 import { useTheme } from '../context/ThemeContext';
 
@@ -191,7 +191,7 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
 
         <View style={[styles.emptyCard, { backgroundColor: theme.card }]}>
           <View style={styles.emptyIcon}>
-            <Text style={styles.emptyEmoji}>📝</Text>
+            <FileText size={28} color="#9CA3AF" strokeWidth={1.5} />
           </View>
           <Text style={[styles.emptyText, { color: theme.textPrimary }]}>אין תיעודים להיום</Text>
           <Text style={[styles.emptyHint, { color: theme.textSecondary }]}>השתמש בכפתורים למעלה כדי להתחיל</Text>

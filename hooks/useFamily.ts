@@ -121,8 +121,12 @@ export const useFamily = (): UseFamilyReturn => {
     }, []);
 
     const join = useCallback(async (code: string) => {
-        const result = await joinFamily(code);
-        return { success: result.success, message: result.message };
+        try {
+            const result = await joinFamily(code);
+            return { success: result.success, message: result.message };
+        } catch (error) {
+            return { success: false, message: 'שגיאה בהצטרפות למשפחה. נסה שוב.' };
+        }
     }, []);
 
     const leave = useCallback(async (): Promise<boolean> => {

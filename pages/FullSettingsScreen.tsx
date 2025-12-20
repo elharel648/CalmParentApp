@@ -523,21 +523,7 @@ export default function SettingsScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-        {/* User Avatar - small gray circle with initials */}
-        {/* User Avatar - small gray circle with initials - NON CLICKABLE */}
-        <View style={styles.userAvatarCard}>
-          <View style={{ flexDirection: 'row-reverse', alignItems: 'center' }}>
-            <View style={styles.userAvatarSmall}>
-              <Text style={styles.userAvatarInitials}>
-                {userData.email ? userData.email.substring(0, 2).toUpperCase() : 'ME'}
-              </Text>
-            </View>
-            <View style={{ marginRight: 12, alignItems: 'flex-end' }}>
-              <Text style={[styles.userAvatarName, { color: theme.textPrimary }]}>החשבון שלי</Text>
-              <Text style={[styles.userAvatarEmail, { color: theme.textSecondary }]}>{userData.email}</Text>
-            </View>
-          </View>
-        </View>
+        {/* User Avatar - REMOVED - already shown in Profile/Account tab */}
 
         {/* התראות ותזכורות */}
         <SectionHeader icon={Bell} title="התראות ותזכורות" color="#FF9500" />
