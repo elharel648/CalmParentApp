@@ -120,25 +120,41 @@ export const ActiveChildProvider: React.FC<ActiveChildProviderProps> = ({ childr
             // 2. Get guest access children
             if (userData?.guestAccess) {
                 for (const [familyId, guestInfo] of Object.entries(userData.guestAccess as Record<string, any>)) {
-                    // Check if access hasn't expired
-                    if (guestInfo.expiresAt && new Date(guestInfo.expiresAt.toDate()) < new Date()) {
-                        continue; // Skip expired access
-                    }
+                    try {
+                        // Check if access hasn't expired - safely handle different date formats
+                        if (guestInfo?.expiresAt) {
+                            const expirationDate = guestInfo.expiresAt.toDate ?
+                                guestInfo.expiresAt.toDate() :
+                                new Date(guestInfo.expiresAt);
+                            if (expirationDate < new Date()) {
+                                continue; // Skip expired access
+                            }
+                        }
 
-                    const familyDoc = await getDoc(doc(db, 'families', familyId));
-                    if (familyDoc.exists()) {
-                        const familyData = familyDoc.data();
-                        const babyDoc = await getDoc(doc(db, 'babies', familyData.babyId));
-                        const babyData = babyDoc.exists() ? babyDoc.data() : null;
+                        const familyDoc = await getDoc(doc(db, 'families', familyId));
+                        if (familyDoc.exists()) {
+                            const familyData = familyDoc.data();
 
-                        childrenList.push({
-                            childId: familyData.babyId,
-                            childName: babyData?.name || familyData.babyName || 'תינוק',
-                            photoUrl: babyData?.photoUrl,
-                            role: 'guest',
-                            accessLevel: 'actions_only',
-                            familyId,
-                        });
+                            // Skip if no babyId in family
+                            if (!familyData?.babyId) {
+                                continue;
+                            }
+
+                            const babyDoc = await getDoc(doc(db, 'babies', familyData.babyId));
+                            const babyData = babyDoc.exists() ? babyDoc.data() : null;
+
+                            childrenList.push({
+                                childId: familyData.babyId,
+                                childName: babyData?.name || familyData.babyName || 'תינוק',
+                                photoUrl: babyData?.photoUrl,
+                                role: 'guest',
+                                accessLevel: 'actions_only',
+                                familyId,
+                            });
+                        }
+                    } catch (err) {
+                        console.warn('Error loading guest family:', familyId, err);
+                        // Continue to next family, don't crash
                     }
                 }
             }

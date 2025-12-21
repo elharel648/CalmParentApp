@@ -18,6 +18,7 @@ interface UseBabyProfileReturn {
     updateBirthDate: (date: Date) => Promise<void>;
     updateStats: (type: 'weight' | 'height' | 'head', value: string) => Promise<void>;
     updateBasicInfo: (data: { name: string; gender: 'boy' | 'girl' | 'other'; birthDate: Date }) => Promise<void>;
+    updateAlbumNote: (month: number, note: string) => Promise<void>;
 }
 
 export const useBabyProfile = (childId?: string): UseBabyProfileReturn => {
@@ -157,6 +158,29 @@ export const useBabyProfile = (childId?: string): UseBabyProfileReturn => {
         }
     }, [baby?.id]);
 
+    const updateAlbumNote = useCallback(async (month: number, note: string) => {
+        if (!baby?.id) return;
+
+        try {
+            // Get current album data
+            const currentAlbum = baby.albumNotes || {};
+            const updatedNotes = { ...currentAlbum, [month]: note };
+
+            // Save to Firebase
+            await updateBabyData(baby.id, { albumNotes: updatedNotes });
+
+            // Update local state
+            setBaby(prev => prev ? { ...prev, albumNotes: updatedNotes } : null);
+
+            if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } catch (e) {
+            console.error('Error saving album note:', e);
+            Alert.alert('שגיאה', 'לא הצלחנו לשמור את ההערה');
+        }
+    }, [baby?.id, baby?.albumNotes]);
+
     return {
         baby,
         loading,
@@ -168,6 +192,7 @@ export const useBabyProfile = (childId?: string): UseBabyProfileReturn => {
         updateBirthDate,
         updateStats,
         updateBasicInfo,
+        updateAlbumNote,
     };
 };
 

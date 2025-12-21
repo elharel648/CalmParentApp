@@ -198,7 +198,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
                 color: '#8B5CF6',
                 bgColor: '#F3E8FF',
                 title: 'ויטמין D',
-                subtitle: 'לא ניתן עדיין היום 💧',
+                subtitle: 'לא ניתן עדיין היום',
                 isUrgent: true,
             });
         } else {
@@ -208,7 +208,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
                 color: '#10B981',
                 bgColor: '#D1FAE5',
                 title: 'ויטמין D ✓',
-                subtitle: 'ניתן היום! 🎉',
+                subtitle: 'ניתן היום!',
             });
         }
 
@@ -220,8 +220,8 @@ const HeaderSection = memo<HeaderSectionProps>(({
                 icon: Award,
                 color: '#F59E0B',
                 bgColor: '#FEF3C7',
-                title: 'מלך/ת השינה! 👑',
-                subtitle: `${sleepHours} שעות שינה היום`,
+                title: 'מלך/ת השינה!',
+                subtitle: `${sleepHours} שעות שינה`,
             });
         } else if ((dailyStats?.feedCount || 0) >= 5) {
             cards.push({
@@ -229,8 +229,8 @@ const HeaderSection = memo<HeaderSectionProps>(({
                 icon: Award,
                 color: '#10B981',
                 bgColor: '#D1FAE5',
-                title: 'יום מזין! 🍼',
-                subtitle: `${dailyStats?.feedCount} האכלות היום`,
+                title: 'יום מזין!',
+                subtitle: `${dailyStats?.feedCount} האכלות`,
             });
         } else {
             // Default: Iron reminder or encouraging message
@@ -249,8 +249,8 @@ const HeaderSection = memo<HeaderSectionProps>(({
                     icon: Heart,
                     color: '#EC4899',
                     bgColor: '#FCE7F3',
-                    title: 'יום נהדר! 💕',
-                    subtitle: 'המשיכו ככה!',
+                    title: 'יום נהדר!',
+                    subtitle: 'המשיכו ככה',
                 });
             }
         }
@@ -258,78 +258,71 @@ const HeaderSection = memo<HeaderSectionProps>(({
         return cards;
     }, [lastFeedTime, meds, dailyStats, sleepHours]);
 
-    // 3 Card rotation states - each rotates independently at different intervals
-    const [card1Index, setCard1Index] = useState(0);
-    const [card2Index, setCard2Index] = useState(1);
-    const [card3Index, setCard3Index] = useState(2);
+    // Single toast notification - rotating index
+    const [toastIndex, setToastIndex] = useState(0);
 
-    // Fade + Scale animations for elegant transitions
-    const fade1 = useRef(new Animated.Value(1)).current;
-    const fade2 = useRef(new Animated.Value(1)).current;
-    const fade3 = useRef(new Animated.Value(1)).current;
-    const scale1 = useRef(new Animated.Value(1)).current;
-    const scale2 = useRef(new Animated.Value(1)).current;
-    const scale3 = useRef(new Animated.Value(1)).current;
+    // Animations for toast slide-up effect
+    const toastTranslateY = useRef(new Animated.Value(30)).current;
+    const toastOpacity = useRef(new Animated.Value(0)).current;
 
-    // Elegant rotation effect with scale + fade
+    // Smooth slide-up animation for toast notifications
     useEffect(() => {
-        const rotateCard = (
-            fadeAnim: Animated.Value,
-            scaleAnim: Animated.Value,
-            setIndex: React.Dispatch<React.SetStateAction<number>>
-        ) => {
-            // Fade out + Scale down
+        // Initial entry animation
+        Animated.parallel([
+            Animated.timing(toastTranslateY, {
+                toValue: 0,
+                duration: 350,
+                useNativeDriver: true,
+            }),
+            Animated.timing(toastOpacity, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+            }),
+        ]).start();
+
+        // Rotate notifications every 4 seconds
+        const rotationInterval = setInterval(() => {
+            // Slide out + fade
             Animated.parallel([
-                Animated.timing(fadeAnim, {
-                    toValue: 0,
-                    duration: 300,
+                Animated.timing(toastTranslateY, {
+                    toValue: -15,
+                    duration: 200,
                     useNativeDriver: true,
                 }),
-                Animated.timing(scaleAnim, {
-                    toValue: 0.85,
-                    duration: 300,
+                Animated.timing(toastOpacity, {
+                    toValue: 0,
+                    duration: 200,
                     useNativeDriver: true,
                 }),
             ]).start(() => {
-                setIndex((prev) => (prev + 1) % smartCards.length);
-                // Fade in + Scale up
+                // Change content
+                setToastIndex((prev) => (prev + 1) % smartCards.length);
+                // Reset position for entry
+                toastTranslateY.setValue(30);
+                // Slide in from bottom
                 Animated.parallel([
-                    Animated.timing(fadeAnim, {
-                        toValue: 1,
+                    Animated.timing(toastTranslateY, {
+                        toValue: 0,
                         duration: 350,
                         useNativeDriver: true,
                     }),
-                    Animated.spring(scaleAnim, {
+                    Animated.timing(toastOpacity, {
                         toValue: 1,
-                        friction: 8,
-                        tension: 100,
+                        duration: 300,
                         useNativeDriver: true,
                     }),
                 ]).start();
             });
-        };
+        }, 4000);
 
-        const interval1 = setInterval(() => rotateCard(fade1, scale1, setCard1Index), 3500);
-        const interval2 = setInterval(() => rotateCard(fade2, scale2, setCard2Index), 4200);
-        const interval3 = setInterval(() => rotateCard(fade3, scale3, setCard3Index), 5000);
+        return () => clearInterval(rotationInterval);
+    }, [smartCards.length, toastTranslateY, toastOpacity]);
 
-        return () => {
-            clearInterval(interval1);
-            clearInterval(interval2);
-            clearInterval(interval3);
-        };
-    }, [smartCards.length, fade1, fade2, fade3, scale1, scale2, scale3]);
+    // Get current notification
+    const currentNotification = smartCards[toastIndex];
+    const NotificationIcon = currentNotification.icon;
 
-    // Get cards - ensure no duplicates by using unique indices
-    const getUniqueIndex = (baseIndex: number, offset: number, total: number) => {
-        return (baseIndex + offset) % total;
-    };
-    const card1 = smartCards[getUniqueIndex(card1Index, 0, smartCards.length)];
-    const card2 = smartCards.length > 1 ? smartCards[getUniqueIndex(card1Index, 1, smartCards.length)] : card1;
-    const card3 = smartCards.length > 2 ? smartCards[getUniqueIndex(card1Index, 2, smartCards.length)] : card1;
-    const Card1Icon = card1.icon;
-    const Card2Icon = card2.icon;
-    const Card3Icon = card3.icon;
 
     return (
         <View style={styles.container}>
@@ -412,35 +405,36 @@ const HeaderSection = memo<HeaderSectionProps>(({
                 </TouchableOpacity>
             </View>
 
-            {/* 3 Smart Cards: Reminders & Achievements */}
-            <View style={styles.statsCardsRow}>
-                {/* Card 1 */}
-                <Animated.View style={[styles.statCard, { opacity: fade1, transform: [{ scale: scale1 }] }]}>
-                    <View style={[styles.statCardIcon, { backgroundColor: card1.bgColor }]}>
-                        <Card1Icon size={18} color={card1.color} strokeWidth={1.5} />
-                    </View>
-                    <Text style={[styles.statCardTitle, { color: theme.textPrimary }]} numberOfLines={1}>{card1.title}</Text>
-                    <Text style={[styles.statCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>{card1.subtitle}</Text>
-                </Animated.View>
+            {/* Toast-Style Notification - Single Pill */}
+            <Animated.View
+                style={[
+                    styles.toastNotification,
+                    {
+                        opacity: toastOpacity,
+                        transform: [{ translateY: toastTranslateY }],
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                    }
+                ]}
+            >
+                {/* Icon */}
+                <View style={[styles.toastIcon, { backgroundColor: currentNotification.bgColor }]}>
+                    <NotificationIcon size={16} color={currentNotification.color} strokeWidth={2} />
+                </View>
 
-                {/* Card 2 */}
-                <Animated.View style={[styles.statCard, { opacity: fade2, transform: [{ scale: scale2 }] }]}>
-                    <View style={[styles.statCardIcon, { backgroundColor: card2.bgColor }]}>
-                        <Card2Icon size={18} color={card2.color} strokeWidth={1.5} />
-                    </View>
-                    <Text style={[styles.statCardTitle, { color: theme.textPrimary }]} numberOfLines={1}>{card2.title}</Text>
-                    <Text style={[styles.statCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>{card2.subtitle}</Text>
-                </Animated.View>
+                {/* Content */}
+                <View style={styles.toastContent}>
+                    <Text style={[styles.toastTitle, { color: theme.textPrimary }]} numberOfLines={1}>
+                        {currentNotification.title}
+                    </Text>
+                </View>
 
-                {/* Card 3 */}
-                <Animated.View style={[styles.statCard, { opacity: fade3, transform: [{ scale: scale3 }] }]}>
-                    <View style={[styles.statCardIcon, { backgroundColor: card3.bgColor }]}>
-                        <Card3Icon size={18} color={card3.color} strokeWidth={1.5} />
-                    </View>
-                    <Text style={[styles.statCardTitle, { color: theme.textPrimary }]} numberOfLines={1}>{card3.title}</Text>
-                    <Text style={[styles.statCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>{card3.subtitle}</Text>
-                </Animated.View>
-            </View>
+                {/* Time Badge */}
+                <Text style={[styles.toastTime, { color: theme.textSecondary }]} numberOfLines={1}>
+                    {currentNotification.subtitle}
+                </Text>
+            </Animated.View>
+
 
             {/* Add Child Modal */}
             <Modal visible={showAddModal} transparent animationType="fade">
@@ -601,42 +595,34 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
 
-    // 3 Rotating Stat Cards
-    statsCardsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    // Toast Notification - Single Pill Style
+    toastNotification: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 24,
+        borderWidth: 1,
         gap: 10,
     },
-    statCard: {
-        flex: 1,
-        backgroundColor: '#F9FAFB',
+    toastIcon: {
+        width: 32,
+        height: 32,
         borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        paddingVertical: 12,
-        paddingHorizontal: 8,
-        alignItems: 'center',
-        minHeight: 85,
-    },
-    statCardIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 6,
     },
-    statCardTitle: {
+    toastContent: {
+        flex: 1,
+        alignItems: 'flex-end',
+    },
+    toastTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    toastTime: {
         fontSize: 12,
-        fontWeight: '700',
-        textAlign: 'center',
-        marginBottom: 2,
-    },
-    statCardSubtitle: {
-        fontSize: 10,
         fontWeight: '500',
-        textAlign: 'center',
-        opacity: 0.8,
     },
     notificationBell: {
         padding: 6,

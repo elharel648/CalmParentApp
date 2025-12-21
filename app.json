@@ -26,7 +26,19 @@
           "project": "react-native",
           "organization": "harel-ziv"
         }
-      ]
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/perf",
+      "@react-native-firebase/crashlytics",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      "expo-live-activity"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -38,6 +50,7 @@
       "bundleIdentifier": "com.harel.calmparentapp",
       "buildNumber": "1",
       "usesAppleSignIn": true,
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "האפליקציה צריכה גישה לתמונות כדי להגדיר תמונת פרופיל",
         "NSFaceIDUsageDescription": "אפשר כניסה מהירה ומאובטחת באמצעות Face ID",
@@ -52,6 +65,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.harel.calmparentapp",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",

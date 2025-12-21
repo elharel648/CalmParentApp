@@ -27,6 +27,7 @@ export type BabyData = {
     headCircumference?: string;
   };
   album?: { [key: number]: string };
+  albumNotes?: { [key: number]: string };
   milestones?: { title: string; date: any }[];
   vaccines?: { [key: string]: boolean };
   customVaccines?: { id: string; name: string; isDone: boolean }[];

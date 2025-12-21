@@ -1,11 +1,14 @@
-import React, { memo, useCallback, useRef, useEffect } from 'react';
+import React, { memo, useCallback, useRef, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
-import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer, Plus, HeartPulse, Pause, TrendingUp, Award, Sparkles } from 'lucide-react-native';
+import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer, Plus, HeartPulse, Pause, TrendingUp, Award, Sparkles, Pencil } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
 import { useSleepTimer } from '../../context/SleepTimerContext';
 import { useFoodTimer } from '../../context/FoodTimerContext';
 import { MedicationsState } from '../../types/home';
 import { useTheme } from '../../context/ThemeContext';
+import { useQuickActions, QuickActionKey } from '../../context/QuickActionsContext';
+import QuickActionsEditModal from './QuickActionsEditModal';
 
 interface QuickActionsProps {
     lastFeedTime: string;
@@ -134,6 +137,8 @@ const QuickActions = memo<QuickActionsProps>(({
     const { theme } = useTheme();
     const sleepTimer = useSleepTimer();
     const foodTimer = useFoodTimer();
+    const { actionOrder, hiddenActions } = useQuickActions();
+    const [isEditModalVisible, setEditModalVisible] = useState(false);
 
     const { isRunning: sleepIsRunning, elapsedSeconds: sleepElapsed, formatTime: sleepFormatTime } = sleepTimer;
     const { pumpingIsRunning, pumpingElapsedSeconds, breastIsRunning, breastElapsedSeconds, breastActiveSide, leftBreastTime, rightBreastTime, formatTime: foodFormatTime, stopPumping, stopBreast } = foodTimer;
@@ -203,6 +208,26 @@ const QuickActions = memo<QuickActionsProps>(({
         }, 50);
     }, []);
 
+    // Map action keys to their handlers and data
+    const actionHandlers: Record<QuickActionKey, { onPress: () => void; isActive?: boolean; activeTime?: string; lastTime?: string; badge?: string }> = useMemo(() => ({
+        food: { onPress: handleFoodPress, isActive: foodIsRunning, activeTime: foodIsRunning ? foodFormatTime(foodElapsed) : undefined, lastTime: !foodIsRunning ? lastFeedTime : undefined },
+        sleep: { onPress: handleSleepPress, isActive: sleepIsRunning, activeTime: sleepIsRunning ? sleepFormatTime(sleepElapsed) : undefined, lastTime: !sleepIsRunning ? lastSleepTime : undefined },
+        diaper: { onPress: onDiaperPress },
+        supplements: { onPress: onSupplementsPress, badge: `${takenCount}/2` },
+        whiteNoise: { onPress: onWhiteNoisePress },
+        sos: { onPress: onSOSPress },
+        health: { onPress: onHealthPress || (() => { }) },
+        growth: { onPress: onGrowthPress || (() => { }) },
+        milestones: { onPress: onMilestonesPress || (() => { }) },
+        magicMoments: { onPress: onMagicMomentsPress || (() => { }) },
+        custom: { onPress: onCustomPress || (() => { }) },
+    }), [handleFoodPress, handleSleepPress, onDiaperPress, onSupplementsPress, onWhiteNoisePress, onSOSPress, onHealthPress, onGrowthPress, onMilestonesPress, onMagicMomentsPress, onCustomPress, foodIsRunning, sleepIsRunning, foodFormatTime, sleepFormatTime, foodElapsed, sleepElapsed, lastFeedTime, lastSleepTime, takenCount]);
+
+    // Get visible actions in order
+    const visibleActions = useMemo(() =>
+        actionOrder.filter(key => !hiddenActions.includes(key)),
+        [actionOrder, hiddenActions]);
+
     // Single action button component - Circular minimalist design
     const ActionButton = ({
         config,
@@ -227,16 +252,30 @@ const QuickActions = memo<QuickActionsProps>(({
                 onPress={() => handlePress(onPress)}
                 activeOpacity={0.7}
             >
-                {/* Circular Icon */}
+                {/* Liquid Glass Circle */}
                 <View style={[
                     styles.iconCircle,
-                    { backgroundColor: isActive ? config.color : config.lightColor },
-                    (config as any).hasBorder && { borderColor: '#D1D5DB', borderWidth: 1.5, borderStyle: 'dashed' }
+                    isActive && { backgroundColor: config.color },
+                    (config as any).hasBorder && { borderColor: 'rgba(255,255,255,0.3)', borderWidth: 1.5, borderStyle: 'dashed' }
                 ]}>
+                    {!isActive && Platform.OS === 'ios' && (
+                        <BlurView
+                            intensity={40}
+                            tint="systemChromeMaterialLight"
+                            style={StyleSheet.absoluteFill}
+                        />
+                    )}
+                    {!isActive && (
+                        <View style={{
+                            ...StyleSheet.absoluteFillObject,
+                            backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                            borderRadius: 30,
+                        }} />
+                    )}
                     {isActive ? (
-                        <Pause size={18} color="#fff" strokeWidth={2.5} />
+                        <Pause size={22} color="#fff" strokeWidth={2.5} />
                     ) : (
-                        <Icon size={18} color={config.color} strokeWidth={2} />
+                        <Icon size={22} color={config.color} strokeWidth={2} />
                     )}
                 </View>
 
@@ -268,8 +307,14 @@ const QuickActions = memo<QuickActionsProps>(({
 
     return (
         <View style={styles.container}>
-            {/* Section Header */}
+            {/* Section Header with Edit Button */}
             <View style={styles.header}>
+                <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={() => { setEditModalVisible(true); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                >
+                    <Pencil size={16} color="#9CA3AF" />
+                </TouchableOpacity>
                 <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
                     פעולות מהירות
                 </Text>
@@ -282,79 +327,32 @@ const QuickActions = memo<QuickActionsProps>(({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.sliderContent}
             >
-                {/* Custom Action - Plus Button */}
-                <ActionButton
-                    config={ACTIONS.custom}
-                    onPress={onCustomPress || (() => { })}
-                />
+                {/* Render visible actions in order */}
+                {visibleActions.map((actionKey) => {
+                    const config = actionKey === 'supplements' && allTaken
+                        ? { ...ACTIONS[actionKey], icon: Check }
+                        : ACTIONS[actionKey];
+                    const handler = actionHandlers[actionKey];
 
-                {/* Health */}
-                <ActionButton
-                    config={ACTIONS.health}
-                    onPress={onHealthPress || (() => { })}
-                />
-
-                {/* Growth Tracking */}
-                <ActionButton
-                    config={ACTIONS.growth}
-                    onPress={onGrowthPress || (() => { })}
-                />
-
-                {/* Magic Moments */}
-                <ActionButton
-                    config={ACTIONS.magicMoments}
-                    onPress={onMagicMomentsPress || (() => { })}
-                />
-
-                {/* Milestones */}
-                <ActionButton
-                    config={ACTIONS.milestones}
-                    onPress={onMilestonesPress || (() => { })}
-                />
-
-                {/* SOS */}
-                <ActionButton
-                    config={ACTIONS.sos}
-                    onPress={onSOSPress}
-                />
-
-                {/* White Noise */}
-                <ActionButton
-                    config={ACTIONS.whiteNoise}
-                    onPress={onWhiteNoisePress}
-                />
-
-                {/* Supplements */}
-                <ActionButton
-                    config={allTaken ? { ...ACTIONS.supplements, icon: Check } : ACTIONS.supplements}
-                    onPress={onSupplementsPress}
-                    badge={`${takenCount}/2`}
-                />
-
-                {/* Diaper */}
-                <ActionButton
-                    config={ACTIONS.diaper}
-                    onPress={onDiaperPress}
-                />
-
-                {/* Sleep */}
-                <ActionButton
-                    config={ACTIONS.sleep}
-                    onPress={handleSleepPress}
-                    isActive={sleepIsRunning}
-                    activeTime={sleepIsRunning ? sleepFormatTime(sleepElapsed) : undefined}
-                    lastTime={!sleepIsRunning ? lastSleepTime : undefined}
-                />
-
-                {/* Food */}
-                <ActionButton
-                    config={ACTIONS.food}
-                    onPress={handleFoodPress}
-                    isActive={foodIsRunning}
-                    activeTime={foodIsRunning ? foodFormatTime(foodElapsed) : undefined}
-                    lastTime={!foodIsRunning ? lastFeedTime : undefined}
-                />
+                    return (
+                        <ActionButton
+                            key={actionKey}
+                            config={config}
+                            onPress={handler.onPress}
+                            isActive={handler.isActive}
+                            activeTime={handler.activeTime}
+                            lastTime={handler.lastTime}
+                            badge={handler.badge}
+                        />
+                    );
+                })}
             </ScrollView>
+
+            {/* Edit Modal */}
+            <QuickActionsEditModal
+                visible={isEditModalVisible}
+                onClose={() => setEditModalVisible(false)}
+            />
         </View>
     );
 });
@@ -387,33 +385,37 @@ const styles = StyleSheet.create({
     // Action Item - Compact circular design
     actionItem: {
         alignItems: 'center',
-        width: 56,
+        width: 70,
     },
 
     iconCircle: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 6,
         position: 'relative',
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.6)',
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
     },
 
     actionLabel: {
-        fontSize: 10,
+        fontSize: 14,
         fontWeight: '500',
         textAlign: 'center',
         marginBottom: 2,
     },
 
     subText: {
-        fontSize: 9,
+        fontSize: 12,
         fontWeight: '500',
     },
 
     subTextPlaceholder: {
-        height: 12,
+        height: 16,
     },
 
     timerBadge: {
@@ -440,6 +442,76 @@ const styles = StyleSheet.create({
         borderRadius: 4,
         borderWidth: 2,
         borderColor: '#fff',
+    },
+
+    // Edit Mode Styles
+    editBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 8,
+    },
+    editBtnActive: {
+        backgroundColor: '#6366F1',
+        paddingHorizontal: 12,
+        width: 'auto',
+    },
+    editBtnDoneText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    resetBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 6,
+    },
+    actionWrapper: {
+        position: 'relative',
+    },
+    editOverlay: {
+        position: 'absolute',
+        top: -8,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 4,
+    },
+    moveArrows: {
+        flexDirection: 'row',
+        gap: 2,
+    },
+    arrowBtn: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: '#EEF2FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    hideBtn: {
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: '#FEE2E2',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    hideBtnHidden: {
+        backgroundColor: '#D1FAE5',
+    },
+    hiddenAction: {
+        opacity: 0.4,
     },
 });
 

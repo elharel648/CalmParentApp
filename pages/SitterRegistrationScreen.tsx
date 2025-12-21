@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import {
     Shield, User, Camera, Clock, CreditCard,
-    ChevronLeft, Check, Plus, Minus, X
+    ChevronLeft, ChevronRight, Check, Plus, Minus, X
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -170,9 +170,8 @@ const SitterRegistrationScreen = ({ navigation }: any) => {
                 displayName: name,
             });
 
-            Alert.alert('ההרשמה הושלמה! 🎉', 'ברוכים הבאים לדשבורד שלך.', [
-                { text: 'לדשבורד', onPress: () => navigation.replace('SitterDashboard') }
-            ]);
+            // Navigate directly to dashboard
+            navigation.replace('SitterDashboard');
         } catch (error) {
             Alert.alert('שגיאה', 'לא ניתן לשמור, נסה שוב');
         } finally {
@@ -406,15 +405,126 @@ const SitterRegistrationScreen = ({ navigation }: any) => {
         </View>
     );
 
-    // Render current step
+    // Render current step - using direct JSX to avoid re-creating components
     const renderStep = () => {
-        switch (currentStep) {
-            case 1: return <VerificationStep />;
-            case 2: return <PersonalInfoStep />;
-            case 3: return <PhotoStep />;
-            case 4: return <PricingStep />;
-            default: return null;
+        if (currentStep === 1) {
+            return (
+                <View style={styles.stepContent}>
+                    <View style={styles.stepHeader}>
+                        <View style={[styles.stepIcon, { backgroundColor: theme.cardSecondary }]}>
+                            <Shield size={28} color={theme.textSecondary} strokeWidth={1.5} />
+                        </View>
+                        <Text style={[styles.stepTitle, { color: theme.textPrimary }]}>אימות חשבון</Text>
+                        <Text style={[styles.stepSubtitle, { color: theme.textSecondary }]}>
+                            חבר רשת חברתית אחת לפחות לאימות
+                        </Text>
+                    </View>
+                    <View style={styles.socialButtons}>
+                        <TouchableOpacity
+                            style={[styles.socialBtn, { backgroundColor: theme.card, borderColor: theme.border }, fbConnected && styles.socialBtnConnected]}
+                            onPress={connectFacebook}
+                            disabled={fbConnected}
+                        >
+                            <Text style={[styles.socialBtnText, { color: fbConnected ? '#fff' : theme.textPrimary }]}>
+                                {fbConnected ? '✓ פייסבוק מחובר' : 'התחבר עם פייסבוק'}
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.socialBtn, { backgroundColor: theme.card, borderColor: theme.border }, igConnected && styles.socialBtnConnectedIG]}
+                            onPress={connectInstagram}
+                            disabled={igConnected}
+                        >
+                            <Text style={[styles.socialBtnText, { color: igConnected ? '#fff' : theme.textPrimary }]}>
+                                {igConnected ? '✓ אינסטגרם מחובר' : 'התחבר עם אינסטגרם'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                    <View style={[styles.infoBox, { backgroundColor: theme.cardSecondary }]}>
+                        <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+                            החיבור מאפשר להורים לראות שאתה אדם אמיתי ומגביר את האמון בפרופיל
+                        </Text>
+                    </View>
+                </View>
+            );
         }
+
+        if (currentStep === 2) {
+            return (
+                <View style={styles.stepContent}>
+                    <View style={styles.stepHeader}>
+                        <View style={[styles.stepIcon, { backgroundColor: theme.cardSecondary }]}>
+                            <User size={28} color={theme.textSecondary} strokeWidth={1.5} />
+                        </View>
+                        <Text style={[styles.stepTitle, { color: theme.textPrimary }]}>פרטים אישיים</Text>
+                        <Text style={[styles.stepSubtitle, { color: theme.textSecondary }]}>
+                            ספר לנו קצת על עצמך
+                        </Text>
+                    </View>
+                    <View style={styles.inputsContainer}>
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>שם מלא *</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: theme.card, color: theme.textPrimary, borderColor: theme.border }]}
+                                value={name}
+                                onChangeText={setName}
+                                placeholder="השם שלך"
+                                placeholderTextColor={theme.textSecondary}
+                                textAlign="right"
+                            />
+                        </View>
+                        <View style={styles.inputRow}>
+                            <View style={[styles.inputGroup, { flex: 1 }]}>
+                                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>גיל *</Text>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: theme.card, color: theme.textPrimary, borderColor: theme.border }]}
+                                    value={age}
+                                    onChangeText={setAge}
+                                    placeholder="18+"
+                                    placeholderTextColor={theme.textSecondary}
+                                    keyboardType="numeric"
+                                    textAlign="right"
+                                />
+                            </View>
+                            <View style={[styles.inputGroup, { flex: 2 }]}>
+                                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>טלפון *</Text>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: theme.card, color: theme.textPrimary, borderColor: theme.border }]}
+                                    value={phone}
+                                    onChangeText={setPhone}
+                                    placeholder="050-1234567"
+                                    placeholderTextColor={theme.textSecondary}
+                                    keyboardType="phone-pad"
+                                    textAlign="right"
+                                />
+                            </View>
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>קצת עליך</Text>
+                            <TextInput
+                                style={[styles.input, styles.textArea, { backgroundColor: theme.card, color: theme.textPrimary, borderColor: theme.border }]}
+                                value={bio}
+                                onChangeText={setBio}
+                                placeholder="ספר על הניסיון שלך, מה אתה אוהב לעשות עם ילדים..."
+                                placeholderTextColor={theme.textSecondary}
+                                multiline
+                                numberOfLines={4}
+                                textAlign="right"
+                            />
+                        </View>
+                    </View>
+                </View>
+            );
+        }
+
+        if (currentStep === 3) {
+            return <PhotoStep />;
+        }
+
+        if (currentStep === 4) {
+            return <PricingStep />;
+        }
+
+        return null;
     };
 
     return (
@@ -463,6 +573,7 @@ const SitterRegistrationScreen = ({ navigation }: any) => {
                         style={[styles.secondaryBtn, { borderColor: theme.border }]}
                         onPress={prevStep}
                     >
+                        <ChevronRight size={18} color={theme.textSecondary} />
                         <Text style={[styles.secondaryBtnText, { color: theme.textSecondary }]}>חזרה</Text>
                     </TouchableOpacity>
                 )}
@@ -473,6 +584,7 @@ const SitterRegistrationScreen = ({ navigation }: any) => {
                         onPress={nextStep}
                     >
                         <Text style={[styles.primaryBtnText, { color: theme.card }]}>המשך</Text>
+                        <ChevronLeft size={18} color={theme.card} />
                     </TouchableOpacity>
                 ) : (
                     <TouchableOpacity
@@ -744,16 +856,19 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         paddingHorizontal: 20,
         paddingVertical: 16,
-        paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+        paddingBottom: Platform.OS === 'ios' ? 120 : 100,
         gap: 12,
         borderTopWidth: 1,
     },
     secondaryBtn: {
         flex: 1,
+        flexDirection: 'row',
         paddingVertical: 14,
         borderRadius: 12,
         borderWidth: 1,
         alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
     },
     secondaryBtnText: {
         fontSize: 15,
@@ -761,9 +876,12 @@ const styles = StyleSheet.create({
     },
     primaryBtn: {
         flex: 2,
+        flexDirection: 'row',
         paddingVertical: 14,
         borderRadius: 12,
         alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
     },
     primaryBtnText: {
         fontSize: 15,

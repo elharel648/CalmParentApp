@@ -73,14 +73,14 @@ export default function GrowthModal({ visible, onClose }: GrowthModalProps) {
                 <View style={[styles.modal, { backgroundColor: theme.card }]}>
                     {/* Header */}
                     <View style={styles.header}>
+                        <View style={{ width: 30 }} />
+                        <View style={styles.headerContent}>
+                            <Text style={[styles.title, { color: theme.textPrimary }]}>מעקב גדילה</Text>
+                            <TrendingUp size={18} color="#10B981" strokeWidth={2.5} />
+                        </View>
                         <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
                             <X size={22} color={theme.textSecondary} />
                         </TouchableOpacity>
-                        <View style={styles.headerContent}>
-                            <TrendingUp size={18} color="#10B981" strokeWidth={2.5} />
-                            <Text style={[styles.title, { color: theme.textPrimary }]}>מעקב גדילה</Text>
-                        </View>
-                        <View style={{ width: 30 }} />
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false}>

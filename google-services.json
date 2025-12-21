@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "16421819020",
+    "project_id": "baby-app-42b3b",
+    "storage_bucket": "baby-app-42b3b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:16421819020:android:20bcb67741688c2d99a1a9",
+        "android_client_info": {
+          "package_name": "com.harel.calmparentapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "16421819020-pmin47sc98p2h64a3bu1dp5k5mfj4qe9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBx1NPMwIcedexasiHfQHPdCrmzlRv33f0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "16421819020-82oc8291kgi171lnqu2cthh1kb2htkr4.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "16421819020-muvdskd7ppjnfcrnal4lsra01pqjr505.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.harel.calmparentapp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

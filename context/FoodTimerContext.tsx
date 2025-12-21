@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import * as LiveActivity from 'expo-live-activity';
 
 interface FoodTimerContextType {
     // Pumping Timer
@@ -43,6 +44,7 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
     const [pumpingIsRunning, setPumpingIsRunning] = useState(false);
     const [pumpingElapsedSeconds, setPumpingElapsedSeconds] = useState(0);
     const pumpingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pumpingActivityIdRef = useRef<string | undefined>(undefined);
 
     // Pumping timer effect
     useEffect(() => {
@@ -65,11 +67,52 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setPumpingIsRunning(true);
         setPumpingElapsedSeconds(0);
+
+        // Start iOS Live Activity
+        if (Platform.OS === 'ios') {
+            try {
+                const activityId = LiveActivity.startActivity(
+                    {
+                        title: 'שאיבה',
+                        subtitle: 'שואבת חלב',
+                        progressBar: { date: Date.now() + (2 * 60 * 60 * 1000) },
+                        imageName: 'feed',
+                        dynamicIslandImageName: 'feed',
+                    },
+                    {
+                        backgroundColor: '#F59E0B',
+                        titleColor: '#FFFFFF',
+                        subtitleColor: '#FEF3C7',
+                        progressViewTint: '#FCD34D',
+                        progressViewLabelColor: '#FFFFFF',
+                        deepLinkUrl: '/home',
+                        timerType: 'digital',
+                    }
+                );
+                if (activityId) pumpingActivityIdRef.current = activityId;
+            } catch (error) {
+                console.log('Live Activity not supported:', error);
+            }
+        }
     }, []);
 
     const stopPumping = useCallback(() => {
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setPumpingIsRunning(false);
+
+        // Stop iOS Live Activity
+        if (Platform.OS === 'ios' && pumpingActivityIdRef.current) {
+            try {
+                LiveActivity.stopActivity(pumpingActivityIdRef.current, {
+                    title: 'שאיבה הסתיימה',
+                    subtitle: '',
+                    imageName: 'feed',
+                });
+                pumpingActivityIdRef.current = undefined;
+            } catch (error) {
+                console.log('Error stopping Live Activity:', error);
+            }
+        }
     }, []);
 
     const resetPumping = useCallback(() => {

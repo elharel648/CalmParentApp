@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import * as LiveActivity from 'expo-live-activity';
 
 interface SleepTimerContextType {
     isRunning: boolean;
@@ -31,6 +32,7 @@ export const SleepTimerProvider = ({ children }: SleepTimerProviderProps) => {
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const [startTime, setStartTime] = useState<Date | null>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const activityIdRef = useRef<string | undefined>(undefined);
 
     // Timer effect
     useEffect(() => {
@@ -59,6 +61,37 @@ export const SleepTimerProvider = ({ children }: SleepTimerProviderProps) => {
         setIsRunning(true);
         setStartTime(new Date());
         setElapsedSeconds(0);
+
+        // Start iOS Live Activity for Dynamic Island
+        if (Platform.OS === 'ios') {
+            try {
+                const activityId = LiveActivity.startActivity(
+                    {
+                        title: 'שינה',
+                        subtitle: 'התינוק ישן',
+                        progressBar: {
+                            date: Date.now() + (8 * 60 * 60 * 1000), // 8 hours max
+                        },
+                        imageName: 'sleep',
+                        dynamicIslandImageName: 'sleep',
+                    },
+                    {
+                        backgroundColor: '#6366F1',
+                        titleColor: '#FFFFFF',
+                        subtitleColor: '#E0E7FF',
+                        progressViewTint: '#A5B4FC',
+                        progressViewLabelColor: '#FFFFFF',
+                        deepLinkUrl: '/home',
+                        timerType: 'digital',
+                    }
+                );
+                if (activityId) {
+                    activityIdRef.current = activityId;
+                }
+            } catch (error) {
+                console.log('Live Activity not supported:', error);
+            }
+        }
     }, []);
 
     const stop = useCallback(() => {
@@ -66,6 +99,20 @@ export const SleepTimerProvider = ({ children }: SleepTimerProviderProps) => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
         setIsRunning(false);
+
+        // Stop iOS Live Activity
+        if (Platform.OS === 'ios' && activityIdRef.current) {
+            try {
+                LiveActivity.stopActivity(activityIdRef.current, {
+                    title: 'שינה הסתיימה',
+                    subtitle: 'התינוק התעורר',
+                    imageName: 'sleep',
+                });
+                activityIdRef.current = undefined;
+            } catch (error) {
+                console.log('Error stopping Live Activity:', error);
+            }
+        }
     }, []);
 
     const reset = useCallback(() => {

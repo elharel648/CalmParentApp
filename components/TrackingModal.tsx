@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, TouchableWithoutFeedback, KeyboardAvoidingView, Platform, Animated } from 'react-native';
 import { X, Check, Droplets, Play, Pause, Baby, Moon, Utensils, Apple, Milk, Plus, Minus, Calendar, ChevronLeft, ChevronRight, Clock, Hourglass, Timer, MessageSquare } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { useSleepTimer } from '../context/SleepTimerContext';
 import { useFoodTimer } from '../context/FoodTimerContext';
@@ -44,11 +45,11 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
   const [amount, setAmount] = useState('');
   const [solidsFoodName, setSolidsFoodName] = useState('');
 
-  // Food Time States
-  const [startHour, setStartHour] = useState(() => new Date().getHours());
-  const [startMinute, setStartMinute] = useState(() => new Date().getMinutes());
-  const [endHour, setEndHour] = useState(() => new Date().getHours());
-  const [endMinute, setEndMinute] = useState(() => new Date().getMinutes());
+  // Food Time States - using Date objects for picker
+  const [startTime, setStartTime] = useState(() => new Date());
+  const [endTime, setEndTime] = useState(() => new Date());
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
   // Selected Date for logging past/future entries
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -316,27 +317,18 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
         </Text>
       </TouchableOpacity>
 
-      {/* Premium Time Picker */}
+      {/* Premium Time Picker - Scroll Wheel */}
       <View style={styles.premiumTimeRow}>
         <View style={styles.premiumTimeCard}>
           <Text style={styles.premiumTimeLabel}>סיום</Text>
-          <View style={styles.premiumTimeDisplay}>
-            <TouchableOpacity
-              style={styles.premiumTimeUnit}
-              onPress={() => { setEndMinute(m => (m + 1) % 60); if (Platform.OS !== 'web') Haptics.selectionAsync(); }}
-              onLongPress={() => { setEndMinute(m => (m + 5) % 60); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-            >
-              <Text style={styles.premiumTimeDigit}>{endMinute.toString().padStart(2, '0')}</Text>
-            </TouchableOpacity>
-            <Text style={styles.premiumTimeColon}>:</Text>
-            <TouchableOpacity
-              style={styles.premiumTimeUnit}
-              onPress={() => { setEndHour(h => (h + 1) % 24); if (Platform.OS !== 'web') Haptics.selectionAsync(); }}
-              onLongPress={() => { setEndHour(h => (h + 6) % 24); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-            >
-              <Text style={styles.premiumTimeDigit}>{endHour.toString().padStart(2, '0')}</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.premiumTimeDisplay}
+            onPress={() => { setShowEndTimePicker(true); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+          >
+            <Text style={styles.premiumTimeDigit}>
+              {endTime.getHours().toString().padStart(2, '0')}:{endTime.getMinutes().toString().padStart(2, '0')}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.premiumTimeArrowContainer}>
@@ -345,25 +337,70 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
 
         <View style={styles.premiumTimeCard}>
           <Text style={styles.premiumTimeLabel}>התחלה</Text>
-          <View style={styles.premiumTimeDisplay}>
-            <TouchableOpacity
-              style={styles.premiumTimeUnit}
-              onPress={() => { setStartMinute(m => (m + 1) % 60); if (Platform.OS !== 'web') Haptics.selectionAsync(); }}
-              onLongPress={() => { setStartMinute(m => (m + 5) % 60); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-            >
-              <Text style={styles.premiumTimeDigit}>{startMinute.toString().padStart(2, '0')}</Text>
-            </TouchableOpacity>
-            <Text style={styles.premiumTimeColon}>:</Text>
-            <TouchableOpacity
-              style={styles.premiumTimeUnit}
-              onPress={() => { setStartHour(h => (h + 1) % 24); if (Platform.OS !== 'web') Haptics.selectionAsync(); }}
-              onLongPress={() => { setStartHour(h => (h + 6) % 24); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-            >
-              <Text style={styles.premiumTimeDigit}>{startHour.toString().padStart(2, '0')}</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.premiumTimeDisplay}
+            onPress={() => { setShowStartTimePicker(true); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+          >
+            <Text style={styles.premiumTimeDigit}>
+              {startTime.getHours().toString().padStart(2, '0')}:{startTime.getMinutes().toString().padStart(2, '0')}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
+
+      {/* Start Time Picker Modal */}
+      {showStartTimePicker && (
+        <View style={styles.timePickerOverlay}>
+          <View style={styles.timePickerContainer}>
+            <DateTimePicker
+              value={startTime}
+              mode="time"
+              is24Hour={true}
+              display="spinner"
+              onChange={(event, date) => {
+                if (Platform.OS === 'android') setShowStartTimePicker(false);
+                if (date) setStartTime(date);
+              }}
+              locale="he-IL"
+            />
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={styles.timePickerDoneBtn}
+                onPress={() => setShowStartTimePicker(false)}
+              >
+                <Text style={styles.timePickerDoneBtnText}>אישור</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* End Time Picker Modal */}
+      {showEndTimePicker && (
+        <View style={styles.timePickerOverlay}>
+          <View style={styles.timePickerContainer}>
+            <DateTimePicker
+              value={endTime}
+              mode="time"
+              is24Hour={true}
+              display="spinner"
+              onChange={(event, date) => {
+                if (Platform.OS === 'android') setShowEndTimePicker(false);
+                if (date) setEndTime(date);
+              }}
+              locale="he-IL"
+            />
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={styles.timePickerDoneBtn}
+                onPress={() => setShowEndTimePicker(false)}
+              >
+                <Text style={styles.timePickerDoneBtnText}>אישור</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Bottle Content */}
       {foodType === 'bottle' && (
@@ -436,50 +473,53 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
         </View>
       )}
 
-      {/* Pumping Content */}
+      {/* Pumping Content - Timer + Amount Side by Side */}
       {foodType === 'pumping' && (
-        <View style={styles.bottleContainer}>
-          {/* Pumping Timer - Premium Card */}
+        <View style={styles.pumpingRowContainer}>
+          {/* Timer Section - Small (Left in visual, appears right in RTL) */}
           <TouchableOpacity
-            style={[styles.premiumPumpingCard, isPumpingActive && styles.premiumPumpingCardActive]}
+            style={[styles.pumpingTimerCardSmall, isPumpingActive && styles.pumpingTimerCardActive]}
             onPress={() => { togglePumpingTimer(); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }}
             activeOpacity={0.8}
           >
-            <Text style={[styles.premiumPumpingLabel, isPumpingActive && styles.premiumPumpingLabelActive]}>שאיבה</Text>
-            <Text style={[styles.premiumPumpingTime, isPumpingActive && styles.premiumPumpingTimeActive]}>
+            <Text style={[styles.pumpingTimerLabelSmall, isPumpingActive && styles.pumpingTimerLabelActive]}>שאיבה</Text>
+            <Text style={[styles.pumpingTimerValueSmall, isPumpingActive && styles.pumpingTimerValueActive]}>
               {formatTime(pumpingTimer)}
             </Text>
-            <View style={[styles.premiumPumpingIcon, isPumpingActive && styles.premiumPumpingIconActive]}>
-              {isPumpingActive ? <Pause size={16} color="#fff" /> : <Play size={16} color="#6366F1" />}
+            <View style={[styles.pumpingTimerIconSmall, isPumpingActive && styles.pumpingTimerIconActive]}>
+              {isPumpingActive ? <Pause size={12} color="#fff" /> : <Play size={12} color="#6366F1" />}
             </View>
           </TouchableOpacity>
 
-          <Text style={styles.label}>כמה נשאב?</Text>
-          <View style={styles.amountRow}>
-            <TouchableOpacity
-              style={styles.amountBtn}
-              onPress={() => {
-                const current = parseInt(amount) || 0;
-                if (current >= 5) setAmount((current - 5).toString());
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            >
-              <Minus size={20} color="#374151" strokeWidth={1.5} />
-            </TouchableOpacity>
-            <View style={styles.amountDisplay}>
-              <Text style={styles.amountValue}>{amount || '0'}</Text>
-              <Text style={styles.amountUnit}>מ"ל</Text>
+          {/* Amount Section - Large (Right in visual, appears left in RTL) */}
+          <View style={styles.pumpingAmountSectionLarge}>
+            <Text style={styles.pumpingAmountLabelLarge}>כמה נשאב?</Text>
+            <View style={styles.pumpingAmountRowLarge}>
+              <TouchableOpacity
+                style={styles.pumpingAmountBtnLarge}
+                onPress={() => {
+                  const current = parseInt(amount) || 0;
+                  if (current >= 5) setAmount((current - 5).toString());
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Minus size={22} color="#6366F1" strokeWidth={2} />
+              </TouchableOpacity>
+              <View style={styles.pumpingAmountDisplayLarge}>
+                <Text style={styles.pumpingAmountValueLarge}>{amount || '0'}</Text>
+                <Text style={styles.pumpingAmountUnitLarge}>מ"ל</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.pumpingAmountBtnLarge}
+                onPress={() => {
+                  const current = parseInt(amount) || 0;
+                  setAmount((current + 5).toString());
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Plus size={22} color="#6366F1" strokeWidth={2} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.amountBtn}
-              onPress={() => {
-                const current = parseInt(amount) || 0;
-                setAmount((current + 5).toString());
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            >
-              <Plus size={20} color="#374151" strokeWidth={1.5} />
-            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -502,8 +542,21 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
 
   // Sleep input mode: 'timer' | 'duration' | 'timerange'
   const [sleepMode, setSleepMode] = React.useState<'timer' | 'duration' | 'timerange'>('duration');
-  const [sleepStartTime, setSleepStartTime] = React.useState('');
-  const [sleepEndTime, setSleepEndTime] = React.useState('');
+  const [sleepStartTimeDate, setSleepStartTimeDate] = React.useState(() => {
+    const d = new Date();
+    d.setHours(19, 0, 0, 0);
+    return d;
+  });
+  const [sleepEndTimeDate, setSleepEndTimeDate] = React.useState(() => {
+    const d = new Date();
+    d.setHours(8, 0, 0, 0);
+    return d;
+  });
+  const [showSleepStartPicker, setShowSleepStartPicker] = React.useState(false);
+  const [showSleepEndPicker, setShowSleepEndPicker] = React.useState(false);
+  // Keep string versions for backward compatibility with save logic
+  const sleepStartTime = `${sleepStartTimeDate.getHours().toString().padStart(2, '0')}:${sleepStartTimeDate.getMinutes().toString().padStart(2, '0')}`;
+  const sleepEndTime = `${sleepEndTimeDate.getHours().toString().padStart(2, '0')}:${sleepEndTimeDate.getMinutes().toString().padStart(2, '0')}`;
 
   const renderSleepContent = () => (
     <View style={{ width: '100%' }}>
@@ -598,61 +651,89 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
         </View>
       )}
 
-      {/* Time Range Mode - Matching Breastfeeding Design */}
+      {/* Time Range Mode - DateTimePicker spinner like Food section */}
       {sleepMode === 'timerange' && (
-        <View style={styles.breastContainer}>
-          <View style={styles.breastTimeRow}>
-            {/* Start Time Card */}
-            <View style={styles.breastTimeCard}>
-              <Text style={styles.breastTimeLabel}>התחלה</Text>
-              <TextInput
-                style={styles.sleepTimeInput}
-                placeholder="19:00"
-                placeholderTextColor="#9CA3AF"
-                value={sleepStartTime}
-                onChangeText={setSleepStartTime}
-                onBlur={() => {
-                  const clean = sleepStartTime.replace(/[^\d:]/g, '');
-                  if (clean && !clean.includes(':')) {
-                    const h = Number(clean) || 0;
-                    setSleepStartTime(`${String(h).padStart(2, '0')}:00`);
-                  } else if (clean.includes(':')) {
-                    const [h, m] = clean.split(':');
-                    setSleepStartTime(`${String(Number(h) || 0).padStart(2, '0')}:${String(Number(m) || 0).padStart(2, '0')}`);
-                  }
-                }}
-                keyboardType="numbers-and-punctuation"
-                textAlign="center"
-              />
+        <>
+          <View style={styles.premiumTimeRow}>
+            <View style={styles.premiumTimeCard}>
+              <Text style={styles.premiumTimeLabel}>סיום</Text>
+              <TouchableOpacity
+                style={styles.premiumTimeDisplay}
+                onPress={() => { setShowSleepEndPicker(true); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+              >
+                <Text style={styles.premiumTimeDigit}>{sleepEndTime}</Text>
+              </TouchableOpacity>
             </View>
 
-            <Text style={styles.breastArrow}>→</Text>
+            <View style={styles.premiumTimeArrowContainer}>
+              <Text style={styles.premiumTimeArrow}>→</Text>
+            </View>
 
-            {/* End Time Card */}
-            <View style={styles.breastTimeCard}>
-              <Text style={styles.breastTimeLabel}>סיום</Text>
-              <TextInput
-                style={styles.sleepTimeInput}
-                placeholder="08:00"
-                placeholderTextColor="#9CA3AF"
-                value={sleepEndTime}
-                onChangeText={setSleepEndTime}
-                onBlur={() => {
-                  const clean = sleepEndTime.replace(/[^\d:]/g, '');
-                  if (clean && !clean.includes(':')) {
-                    const h = Number(clean) || 0;
-                    setSleepEndTime(`${String(h).padStart(2, '0')}:00`);
-                  } else if (clean.includes(':')) {
-                    const [h, m] = clean.split(':');
-                    setSleepEndTime(`${String(Number(h) || 0).padStart(2, '0')}:${String(Number(m) || 0).padStart(2, '0')}`);
-                  }
-                }}
-                keyboardType="numbers-and-punctuation"
-                textAlign="center"
-              />
+            <View style={styles.premiumTimeCard}>
+              <Text style={styles.premiumTimeLabel}>התחלה</Text>
+              <TouchableOpacity
+                style={styles.premiumTimeDisplay}
+                onPress={() => { setShowSleepStartPicker(true); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+              >
+                <Text style={styles.premiumTimeDigit}>{sleepStartTime}</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </View>
+
+          {/* Sleep Start Time Picker Modal */}
+          {showSleepStartPicker && (
+            <View style={styles.timePickerOverlay}>
+              <View style={styles.timePickerContainer}>
+                <DateTimePicker
+                  value={sleepStartTimeDate}
+                  mode="time"
+                  is24Hour={true}
+                  display="spinner"
+                  onChange={(event, date) => {
+                    if (Platform.OS === 'android') setShowSleepStartPicker(false);
+                    if (date) setSleepStartTimeDate(date);
+                  }}
+                  locale="he-IL"
+                />
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={styles.timePickerDoneBtn}
+                    onPress={() => setShowSleepStartPicker(false)}
+                  >
+                    <Text style={styles.timePickerDoneBtnText}>אישור</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Sleep End Time Picker Modal */}
+          {showSleepEndPicker && (
+            <View style={styles.timePickerOverlay}>
+              <View style={styles.timePickerContainer}>
+                <DateTimePicker
+                  value={sleepEndTimeDate}
+                  mode="time"
+                  is24Hour={true}
+                  display="spinner"
+                  onChange={(event, date) => {
+                    if (Platform.OS === 'android') setShowSleepEndPicker(false);
+                    if (date) setSleepEndTimeDate(date);
+                  }}
+                  locale="he-IL"
+                />
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={styles.timePickerDoneBtn}
+                    onPress={() => setShowSleepEndPicker(false)}
+                  >
+                    <Text style={styles.timePickerDoneBtnText}>אישור</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+        </>
       )}
 
       {/* Free Text Note */}
@@ -1154,4 +1235,43 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#374151', fontSize: 15, fontWeight: '600' },
   saveBtnSuccess: { backgroundColor: '#D1FAE5', borderColor: '#10B981' },
   saveBtnTextSuccess: { color: '#10B981' },
+
+  // Time Picker Overlay - Premium Design
+  timePickerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
+  timePickerContainer: { backgroundColor: '#fff', borderRadius: 24, paddingVertical: 24, paddingHorizontal: 20, width: '90%', maxWidth: 340, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 15 },
+  timePickerDoneBtn: { marginTop: 20, paddingHorizontal: 48, paddingVertical: 14, backgroundColor: '#6366F1', borderRadius: 14, width: '100%', alignItems: 'center' },
+  timePickerDoneBtnText: { color: '#fff', fontSize: 17, fontWeight: '600' },
+
+  // Pumping Row Layout (Timer + Amount side by side)
+  pumpingRowContainer: { flexDirection: 'row', gap: 12, marginTop: 16, paddingHorizontal: 8, alignItems: 'stretch' },
+  pumpingTimerCard: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 16, padding: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  pumpingTimerCardActive: { backgroundColor: '#EEF2FF', borderColor: '#6366F1' },
+  pumpingTimerLabel: { fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginBottom: 4 },
+  pumpingTimerLabelActive: { color: '#6366F1' },
+  pumpingTimerValue: { fontSize: 26, fontWeight: '700', color: '#1F2937', marginBottom: 6 },
+  pumpingTimerValueActive: { color: '#6366F1' },
+  pumpingTimerIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' },
+  pumpingTimerIconActive: { backgroundColor: '#6366F1' },
+  pumpingAmountSection: { flex: 1, alignItems: 'center' },
+  pumpingAmountLabel: { fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginBottom: 8 },
+  pumpingAmountRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pumpingAmountBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  pumpingAmountDisplay: { alignItems: 'center' },
+  pumpingAmountValue: { fontSize: 28, fontWeight: '700', color: '#1F2937' },
+  pumpingAmountUnit: { fontSize: 11, color: '#9CA3AF', fontWeight: '600' },
+
+  // Pumping - Small Timer (left side)
+  pumpingTimerCardSmall: { flex: 0.35, backgroundColor: '#F3F4F6', borderRadius: 14, padding: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  pumpingTimerLabelSmall: { fontSize: 10, color: '#9CA3AF', fontWeight: '600', marginBottom: 2 },
+  pumpingTimerValueSmall: { fontSize: 20, fontWeight: '700', color: '#1F2937', marginBottom: 4 },
+  pumpingTimerIconSmall: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' },
+
+  // Pumping - Large Amount (right side)
+  pumpingAmountSectionLarge: { flex: 0.65, alignItems: 'center', justifyContent: 'center' },
+  pumpingAmountLabelLarge: { fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginBottom: 10 },
+  pumpingAmountRowLarge: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  pumpingAmountBtnLarge: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  pumpingAmountDisplayLarge: { alignItems: 'center', minWidth: 60 },
+  pumpingAmountValueLarge: { fontSize: 36, fontWeight: '700', color: '#1F2937' },
+  pumpingAmountUnitLarge: { fontSize: 12, color: '#9CA3AF', fontWeight: '600' },
 });

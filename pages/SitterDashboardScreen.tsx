@@ -11,11 +11,15 @@ import {
     RefreshControl,
     ActivityIndicator,
     Platform,
+    Modal,
+    TextInput,
+    Switch,
+    Alert,
 } from 'react-native';
 import {
     Calendar, Clock, Users, DollarSign, CheckCircle,
     XCircle, ChevronLeft, Star, MessageSquare, Settings,
-    User, Baby
+    User, Baby, MapPin, Phone, Mail, Bell, X, Trash2, Edit3
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../context/ThemeContext';
@@ -65,6 +69,13 @@ const SitterDashboardScreen = ({ navigation }: any) => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
+    const [settingsVisible, setSettingsVisible] = useState(false);
+
+    // Settings state
+    const [preferredLocation, setPreferredLocation] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+    const [availableForBookings, setAvailableForBookings] = useState(true);
 
     const [sitterProfile, setSitterProfile] = useState<SitterProfile | null>(null);
     const [bookings, setBookings] = useState<Booking[]>([]);
@@ -353,7 +364,7 @@ const SitterDashboardScreen = ({ navigation }: any) => {
                             <ChevronLeft size={24} color={theme.textSecondary} />
                         </TouchableOpacity>
                         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>מצב סיטר</Text>
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={() => setSettingsVisible(true)}>
                             <Settings size={22} color={theme.textSecondary} strokeWidth={1.5} />
                         </TouchableOpacity>
                     </View>
@@ -448,6 +459,157 @@ const SitterDashboardScreen = ({ navigation }: any) => {
 
                 <View style={{ height: 100 }} />
             </ScrollView>
+
+            {/* Settings Modal */}
+            <Modal
+                visible={settingsVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setSettingsVisible(false)}
+            >
+                <View style={styles.settingsOverlay}>
+                    <View style={[styles.settingsModal, { backgroundColor: theme.card }]}>
+                        {/* Header */}
+                        <View style={styles.settingsHeader}>
+                            <View style={{ width: 24 }} />
+                            <Text style={[styles.settingsTitle, { color: theme.textPrimary }]}>הגדרות סיטר</Text>
+                            <TouchableOpacity onPress={() => setSettingsVisible(false)}>
+                                <X size={22} color={theme.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} style={styles.settingsContent}>
+                            {/* Location */}
+                            <View style={styles.settingsSection}>
+                                <View style={styles.settingRow}>
+                                    <MapPin size={18} color={theme.textSecondary} />
+                                    <Text style={[styles.settingLabel, { color: theme.textPrimary }]}>מיקום מועדף</Text>
+                                </View>
+                                <TextInput
+                                    style={[styles.settingsInput, { backgroundColor: theme.cardSecondary, color: theme.textPrimary }]}
+                                    value={preferredLocation}
+                                    onChangeText={setPreferredLocation}
+                                    placeholder="עיר או שכונה..."
+                                    placeholderTextColor={theme.textSecondary}
+                                    textAlign="right"
+                                />
+                            </View>
+
+                            {/* Phone */}
+                            <View style={styles.settingsSection}>
+                                <View style={styles.settingRow}>
+                                    <Phone size={18} color={theme.textSecondary} />
+                                    <Text style={[styles.settingLabel, { color: theme.textPrimary }]}>טלפון ליצירת קשר</Text>
+                                </View>
+                                <TextInput
+                                    style={[styles.settingsInput, { backgroundColor: theme.cardSecondary, color: theme.textPrimary }]}
+                                    value={phoneNumber}
+                                    onChangeText={setPhoneNumber}
+                                    placeholder="050-0000000"
+                                    placeholderTextColor={theme.textSecondary}
+                                    keyboardType="phone-pad"
+                                    textAlign="right"
+                                />
+                            </View>
+
+                            {/* Toggle Settings */}
+                            <View style={styles.settingsSection}>
+                                <View style={styles.settingToggleRow}>
+                                    <View style={styles.settingRow}>
+                                        <Bell size={18} color={theme.textSecondary} />
+                                        <Text style={[styles.settingLabel, { color: theme.textPrimary }]}>התראות</Text>
+                                    </View>
+                                    <Switch
+                                        value={notificationsEnabled}
+                                        onValueChange={setNotificationsEnabled}
+                                        trackColor={{ false: '#D1D5DB', true: '#A5B4FC' }}
+                                        thumbColor={notificationsEnabled ? '#6366F1' : '#9CA3AF'}
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={styles.settingsSection}>
+                                <View style={styles.settingToggleRow}>
+                                    <View style={styles.settingRow}>
+                                        <Calendar size={18} color={theme.textSecondary} />
+                                        <Text style={[styles.settingLabel, { color: theme.textPrimary }]}>זמין להזמנות</Text>
+                                    </View>
+                                    <Switch
+                                        value={availableForBookings}
+                                        onValueChange={setAvailableForBookings}
+                                        trackColor={{ false: '#D1D5DB', true: '#86EFAC' }}
+                                        thumbColor={availableForBookings ? '#10B981' : '#9CA3AF'}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Save Button */}
+                            <TouchableOpacity
+                                style={styles.saveSettingsBtn}
+                                onPress={() => {
+                                    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                    setSettingsVisible(false);
+                                    Alert.alert('נשמר!', 'ההגדרות נשמרו בהצלחה');
+                                }}
+                            >
+                                <Text style={styles.saveSettingsBtnText}>שמור הגדרות</Text>
+                            </TouchableOpacity>
+
+                            {/* Edit Profile */}
+                            <TouchableOpacity
+                                style={styles.editProfileBtn}
+                                onPress={() => {
+                                    setSettingsVisible(false);
+                                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    navigation.navigate('SitterRegistration');
+                                }}
+                            >
+                                <Edit3 size={16} color="#6366F1" strokeWidth={1.5} />
+                                <Text style={styles.editProfileBtnText}>ערוך פרופיל סיטר</Text>
+                            </TouchableOpacity>
+
+                            {/* Delete Account */}
+                            <TouchableOpacity
+                                style={styles.deleteAccountBtn}
+                                onPress={() => {
+                                    Alert.alert(
+                                        'מחיקת חשבון סיטר',
+                                        'האם אתה בטוח שברצונך למחוק את חשבון הסיטר שלך? לא ניתן לשחזר פעולה זו.',
+                                        [
+                                            { text: 'ביטול', style: 'cancel' },
+                                            {
+                                                text: 'מחק',
+                                                style: 'destructive',
+                                                onPress: async () => {
+                                                    const userId = auth.currentUser?.uid;
+                                                    if (userId) {
+                                                        try {
+                                                            await updateDoc(doc(db, 'users', userId), {
+                                                                isSitter: false,
+                                                                sitterActive: false,
+                                                                sitterVerified: false,
+                                                            });
+                                                            setSettingsVisible(false);
+                                                            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                                            Alert.alert('נמחק', 'חשבון הסיטר נמחק. תוכל להירשם מחדש בכל עת.');
+                                                            navigation.replace('BabySitter');
+                                                        } catch {
+                                                            Alert.alert('שגיאה', 'לא ניתן למחוק, נסה שוב');
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    );
+                                }}
+                            >
+                                <Trash2 size={16} color="#EF4444" strokeWidth={1.5} />
+                                <Text style={styles.deleteAccountBtnText}>מחק חשבון סיטר</Text>
+                            </TouchableOpacity>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -703,6 +865,103 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: 14,
         fontWeight: '500',
+    },
+
+    // Settings Modal
+    settingsOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'flex-end',
+    },
+    settingsModal: {
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        maxHeight: '75%',
+        paddingBottom: 40,
+    },
+    settingsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
+    },
+    settingsTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    settingsContent: {
+        paddingHorizontal: 20,
+        paddingTop: 16,
+    },
+    settingsSection: {
+        marginBottom: 20,
+    },
+    settingRow: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 10,
+    },
+    settingLabel: {
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    settingsInput: {
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 15,
+    },
+    settingToggleRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    saveSettingsBtn: {
+        backgroundColor: '#374151',
+        borderRadius: 12,
+        paddingVertical: 14,
+        alignItems: 'center',
+        marginTop: 10,
+        marginBottom: 20,
+    },
+    saveSettingsBtnText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    editProfileBtn: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#6366F1',
+        marginBottom: 12,
+    },
+    editProfileBtnText: {
+        color: '#6366F1',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    deleteAccountBtn: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: '#FEE2E2',
+        marginBottom: 20,
+    },
+    deleteAccountBtnText: {
+        color: '#EF4444',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });
 

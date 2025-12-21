@@ -1,3 +1,4 @@
+import 'react-native-gesture-handler';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -8,6 +9,8 @@ import { Home, BarChart2, User, Settings, Lock, Baby } from 'lucide-react-native
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { BlurView } from 'expo-blur';
+import { Canvas, LinearGradient, Rect, vec } from '@shopify/react-native-skia';
 import { auth, db } from './services/firebaseConfig';
 
 // ייבוא המסכים הקיימים
@@ -31,6 +34,7 @@ import { SleepTimerProvider } from './context/SleepTimerContext';
 import { FoodTimerProvider } from './context/FoodTimerContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { ActiveChildProvider, useActiveChild } from './context/ActiveChildContext';
+import { QuickActionsProvider } from './context/QuickActionsContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import * as Sentry from '@sentry/react-native';
 
@@ -115,22 +119,64 @@ function MainAppNavigator() {
         tabBarShowLabel: false,
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSecondary,
+        tabBarBackground: () => (
+          <View style={[StyleSheet.absoluteFill, { borderRadius: 32, overflow: 'hidden' }]}>
+            {/* Dark translucent glass background - Apple style */}
+            <BlurView
+              intensity={isDarkMode ? 80 : 60}
+              tint={isDarkMode ? 'systemChromeMaterialDark' : 'systemChromeMaterial'}
+              style={StyleSheet.absoluteFill}
+            />
+            {/* Semi-transparent overlay for depth */}
+            <View style={{
+              ...StyleSheet.absoluteFillObject,
+              backgroundColor: isDarkMode
+                ? 'rgba(0, 0, 0, 0.35)'
+                : 'rgba(255, 255, 255, 0.45)',
+            }} />
+            {/* Top edge glow - glass reflection */}
+            <View style={{
+              position: 'absolute',
+              top: 0,
+              left: 16,
+              right: 16,
+              height: 0.5,
+              backgroundColor: isDarkMode
+                ? 'rgba(255, 255, 255, 0.15)'
+                : 'rgba(255, 255, 255, 0.95)',
+            }} />
+            {/* Inner glow for premium feel */}
+            <View style={{
+              position: 'absolute',
+              top: 1,
+              left: 0,
+              right: 0,
+              height: 24,
+              backgroundColor: isDarkMode
+                ? 'rgba(255, 255, 255, 0.03)'
+                : 'rgba(255, 255, 255, 0.25)',
+            }} />
+          </View>
+        ),
         tabBarStyle: {
           position: 'absolute',
-          bottom: 25,
-          left: 20,
-          right: 20,
+          bottom: 28,
+          left: 16,
+          right: 16,
           elevation: 0,
-          backgroundColor: theme.tabBar,
-          borderRadius: 25,
-          height: 80,
-          shadowColor: theme.shadow,
-          shadowOffset: { width: 0, height: 5 },
-          shadowOpacity: isDarkMode ? 0.3 : 0.1,
-          shadowRadius: 10,
+          backgroundColor: 'transparent',
+          borderRadius: 32,
+          height: 72,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 12 },
+          shadowOpacity: isDarkMode ? 0.5 : 0.25,
+          shadowRadius: 24,
           borderTopWidth: 0,
-          borderWidth: isDarkMode ? 1 : 0,
-          borderColor: theme.tabBarBorder,
+          borderWidth: isDarkMode ? 0.5 : 1,
+          borderColor: isDarkMode
+            ? 'rgba(255, 255, 255, 0.1)'
+            : 'rgba(255, 255, 255, 0.5)',
+          overflow: 'hidden',
         }
       }}
     >
@@ -304,15 +350,17 @@ export default Sentry.wrap(function App() {
     <ErrorBoundary>
       <SleepTimerProvider>
         <FoodTimerProvider>
-          <ThemeProvider>
-            <ActiveChildProvider>
-              <SafeAreaProvider>
-                <NavigationContainer>
-                  <MainAppNavigator />
-                </NavigationContainer>
-              </SafeAreaProvider>
-            </ActiveChildProvider>
-          </ThemeProvider>
+          <QuickActionsProvider>
+            <ThemeProvider>
+              <ActiveChildProvider>
+                <SafeAreaProvider>
+                  <NavigationContainer>
+                    <MainAppNavigator />
+                  </NavigationContainer>
+                </SafeAreaProvider>
+              </ActiveChildProvider>
+            </ThemeProvider>
+          </QuickActionsProvider>
         </FoodTimerProvider>
       </SleepTimerProvider>
     </ErrorBoundary>

@@ -18,7 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import {
   Moon, Droplets, Calendar, ChevronRight, ChevronLeft,
   Utensils, Baby, Pill, TrendingUp, TrendingDown, Download,
-  Clock, Award, BarChart2, Activity, Thermometer, X, Check
+  Clock, Award, BarChart2, Activity, Thermometer, X, Check, Trophy, Timer
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { db } from '../services/firebaseConfig';
@@ -484,30 +484,47 @@ export default function ReportsScreen() {
     </Modal>
   );
 
-  // Pie Chart for Feeding Types
+  // Minimalistic Donut Chart for Feeding Types
   const FeedingPieChart = () => {
     const total = dailyStats.feedingTypes.bottle + dailyStats.feedingTypes.breast + dailyStats.feedingTypes.solids;
     if (total === 0) return null;
 
-    const pieData = [
-      { name: 'בקבוק', population: dailyStats.feedingTypes.bottle, color: '#374151', legendFontColor: theme.textSecondary, legendFontSize: 12 },
-      { name: 'הנקה', population: dailyStats.feedingTypes.breast, color: '#6B7280', legendFontColor: theme.textSecondary, legendFontSize: 12 },
-      { name: 'מוצקים', population: dailyStats.feedingTypes.solids, color: '#9CA3AF', legendFontColor: theme.textSecondary, legendFontSize: 12 }
-    ].filter(item => item.population > 0);
+    const items = [
+      { name: 'בקבוק', value: dailyStats.feedingTypes.bottle, color: '#818CF8' },
+      { name: 'הנקה', value: dailyStats.feedingTypes.breast, color: '#A78BFA' },
+      { name: 'מוצקים', value: dailyStats.feedingTypes.solids, color: '#C4B5FD' }
+    ].filter(item => item.value > 0);
+
+    // Calculate percentages for the progress bars
+    const getPercentage = (value: number) => Math.round((value / total) * 100);
 
     return (
       <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
         <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>התפלגות האכלות</Text>
-        <PieChart
-          data={pieData}
-          width={SCREEN_WIDTH - 64}
-          height={140}
-          chartConfig={{ color: () => theme.textPrimary }}
-          accessor="population"
-          backgroundColor="transparent"
-          paddingLeft="15"
-          absolute
-        />
+
+        <View style={styles.donutContainer}>
+          {/* Simple circular indicator */}
+          <View style={[styles.donutRing, { borderColor: theme.cardSecondary }]}>
+            <Text style={[styles.donutTotal, { color: theme.textPrimary }]}>{total}</Text>
+            <Text style={[styles.donutLabel, { color: theme.textSecondary }]}>סה״כ</Text>
+          </View>
+
+          {/* Legend with progress bars */}
+          <View style={styles.donutLegend}>
+            {items.map((item, index) => (
+              <View key={index} style={styles.legendItem}>
+                <View style={styles.legendHeader}>
+                  <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                  <Text style={[styles.legendName, { color: theme.textSecondary }]}>{item.name}</Text>
+                  <Text style={[styles.legendValue, { color: theme.textPrimary }]}>{item.value}</Text>
+                </View>
+                <View style={[styles.legendBar, { backgroundColor: theme.cardSecondary }]}>
+                  <View style={[styles.legendBarFill, { width: `${getPercentage(item.value)}%`, backgroundColor: item.color }]} />
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
       </View>
     );
   };
@@ -559,7 +576,10 @@ export default function ReportsScreen() {
   const InsightsTab = () => (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
       {/* Achievements */}
-      <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>🏆 הישגים</Text>
+      <View style={styles.sectionTitleRow}>
+        <Trophy size={16} color="#6366F1" strokeWidth={1.5} />
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>הישגים</Text>
+      </View>
       <View style={styles.insightsList}>
         <InsightCard icon={Moon} title="שינה ארוכה ביותר" value={`${timeInsights?.longestSleep || 0} שעות`} />
         <InsightCard icon={Utensils} title="האכלה גדולה ביותר" value={`${timeInsights?.biggestFeeding || 0} מ"ל`} />
@@ -567,7 +587,10 @@ export default function ReportsScreen() {
       </View>
 
       {/* Time Insights */}
-      <Text style={[styles.sectionTitle, { color: theme.textPrimary, marginTop: 20 }]}>⏰ זמנים</Text>
+      <View style={[styles.sectionTitleRow, { marginTop: 20 }]}>
+        <Timer size={16} color="#6366F1" strokeWidth={1.5} />
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>זמנים</Text>
+      </View>
       <View style={styles.insightsList}>
         <InsightCard icon={Clock} title="זמן ממוצע בין האכלות" value={`${timeInsights?.avgFeedingInterval || 0} שעות`} />
         <InsightCard icon={Moon} title="שעת שינה ממוצעת" value={timeInsights?.avgSleepTime || '--:--'} />
@@ -576,13 +599,16 @@ export default function ReportsScreen() {
       {/* Comparison */}
       {comparison && (
         <>
-          <Text style={[styles.sectionTitle, { color: theme.textPrimary, marginTop: 20 }]}>📈 השוואה לתקופה קודמת</Text>
+          <View style={[styles.sectionTitleRow, { marginTop: 20 }]}>
+            <TrendingUp size={16} color="#6366F1" strokeWidth={1.5} />
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>השוואה לתקופה קודמת</Text>
+          </View>
           <View style={styles.insightsList}>
             <InsightCard
               icon={comparison.sleepChange >= 0 ? TrendingUp : TrendingDown}
               title="שינה"
               value={`${comparison.sleepChange >= 0 ? '+' : ''}${comparison.sleepChange}%`}
-              subtitle={comparison.sleepChange >= 0 ? 'יותר שינה 💜' : 'פחות שינה'}
+              subtitle={comparison.sleepChange >= 0 ? 'יותר שינה' : 'פחות שינה'}
             />
             <InsightCard
               icon={comparison.feedingChange >= 0 ? TrendingUp : TrendingDown}
@@ -834,4 +860,19 @@ const styles = StyleSheet.create({
   datePickerLabel: { fontSize: 12, marginBottom: 8, textAlign: 'right' },
   datePickerBtn: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
   datePickerValue: { fontSize: 16, fontWeight: '600' },
+
+  // Donut Chart
+  donutContainer: { flexDirection: 'row-reverse', alignItems: 'center', gap: 20, paddingVertical: 8 },
+  donutRing: { width: 80, height: 80, borderRadius: 40, borderWidth: 4, alignItems: 'center', justifyContent: 'center' },
+  donutTotal: { fontSize: 22, fontWeight: '700' },
+  donutLabel: { fontSize: 11 },
+  donutLegend: { flex: 1, gap: 12 },
+  legendItem: { gap: 6 },
+  legendHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendName: { fontSize: 13, flex: 1 },
+  legendValue: { fontSize: 14, fontWeight: '600' },
+  legendBar: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  legendBarFill: { height: '100%', borderRadius: 2 },
+  sectionTitleRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 },
 });

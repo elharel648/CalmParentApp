@@ -1,5 +1,6 @@
 // pages/BabySitterScreen.tsx - Minimalist Parent Sitter Search
 import React, { useState, useCallback, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
     View,
     Text,
@@ -61,11 +62,14 @@ const BabySitterScreen = ({ navigation }: any) => {
         }
     };
 
-    useEffect(() => {
-        if (userMode === 'sitter' && isSitterRegistered === null) {
-            checkSitterStatus();
-        }
-    }, [userMode]);
+    // Check sitter status on every screen focus
+    useFocusEffect(
+        useCallback(() => {
+            if (userMode === 'sitter') {
+                checkSitterStatus();
+            }
+        }, [userMode])
+    );
 
     // Refresh handler
     const onRefresh = useCallback(async () => {
@@ -478,7 +482,9 @@ const styles = StyleSheet.create({
     registrationContainer: {
         flex: 1,
         paddingHorizontal: 20,
+        paddingBottom: 120,
         justifyContent: 'center',
+        alignItems: 'center',
     },
     registrationCard: {
         alignItems: 'center',

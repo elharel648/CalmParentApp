@@ -6,9 +6,11 @@ import {
     Modal,
     TouchableOpacity,
     Platform,
+    Alert,
 } from 'react-native';
-import { X, Sparkles } from 'lucide-react-native';
+import { X, Sparkles, Camera } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../context/ThemeContext';
 import { useBabyProfile } from '../../hooks/useBabyProfile';
 import { useActiveChild } from '../../context/ActiveChildContext';
@@ -22,7 +24,7 @@ interface MagicMomentsModalProps {
 export default function MagicMomentsModal({ visible, onClose }: MagicMomentsModalProps) {
     const { theme } = useTheme();
     const { activeChild } = useActiveChild();
-    const { baby, updatePhoto } = useBabyProfile(activeChild?.childId);
+    const { baby, updatePhoto, updateAlbumNote } = useBabyProfile(activeChild?.childId);
 
     const handleClose = () => {
         if (Platform.OS !== 'web') {
@@ -38,6 +40,15 @@ export default function MagicMomentsModal({ visible, onClose }: MagicMomentsModa
         await updatePhoto('album', month);
     };
 
+    const handleAddCustomPhoto = async (month: number) => {
+        // Month picker is now in AlbumCarousel - just handle the photo upload
+        await updatePhoto('album', month);
+    };
+
+    const handleNoteUpdate = async (month: number, note: string) => {
+        await updateAlbumNote(month, note);
+    };
+
     return (
         <Modal
             visible={visible}
@@ -49,14 +60,14 @@ export default function MagicMomentsModal({ visible, onClose }: MagicMomentsModa
                 <View style={[styles.modal, { backgroundColor: theme.card }]}>
                     {/* Header */}
                     <View style={styles.header}>
+                        <View style={{ width: 30 }} />
+                        <View style={styles.headerContent}>
+                            <Text style={[styles.title, { color: theme.textPrimary }]}>רגעים קסומים</Text>
+                            <Sparkles size={18} color="#A78BFA" strokeWidth={2.5} />
+                        </View>
                         <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
                             <X size={22} color={theme.textSecondary} />
                         </TouchableOpacity>
-                        <View style={styles.headerContent}>
-                            <Sparkles size={18} color="#A78BFA" strokeWidth={2.5} />
-                            <Text style={[styles.title, { color: theme.textPrimary }]}>רגעים קסומים</Text>
-                        </View>
-                        <View style={{ width: 30 }} />
                     </View>
 
                     {/* Description */}
@@ -68,15 +79,21 @@ export default function MagicMomentsModal({ visible, onClose }: MagicMomentsModa
                     <View style={styles.carouselContainer}>
                         <AlbumCarousel
                             album={baby?.album}
+                            albumNotes={baby?.albumNotes}
                             onMonthPress={handleMonthPress}
+                            onAddCustomPhoto={handleAddCustomPhoto}
+                            onNoteUpdate={handleNoteUpdate}
                         />
                     </View>
 
-                    {/* Baby Name */}
+                    {/* Baby Name with Camera Icon */}
                     {baby?.name && (
-                        <Text style={[styles.babyName, { color: theme.textPrimary }]}>
-                            📸 האלבום של {baby.name}
-                        </Text>
+                        <View style={styles.babyNameRow}>
+                            <Camera size={16} color={theme.textSecondary} strokeWidth={2} />
+                            <Text style={[styles.babyName, { color: theme.textPrimary }]}>
+                                האלבום של {baby.name}
+                            </Text>
+                        </View>
                     )}
                 </View>
             </View>
@@ -124,10 +141,16 @@ const styles = StyleSheet.create({
     carouselContainer: {
         marginBottom: 16,
     },
+    babyNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        marginTop: 8,
+    },
     babyName: {
         fontSize: 14,
         fontWeight: '500',
         textAlign: 'center',
-        marginTop: 8,
     },
 });
