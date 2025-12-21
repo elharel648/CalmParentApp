@@ -52,19 +52,16 @@ export const getBabyData = async (): Promise<BabyData | null> => {
     const familyId = userDoc.data()?.familyId;
 
     if (familyId) {
-      console.log('🔍 [babyService] User has familyId:', familyId);
       // Get the family to find the baby ID
       const familyDoc = await getDoc(doc(db, 'families', familyId));
       if (familyDoc.exists()) {
         const familyData = familyDoc.data();
         const babyId = familyData?.babyId;
-        console.log('🔍 [babyService] Family babyId:', babyId);
 
         if (babyId) {
           // Fetch baby directly by ID
           const babyDoc = await getDoc(doc(db, 'babies', babyId));
           if (babyDoc.exists()) {
-            console.log('✅ [babyService] Found baby via family:', babyDoc.id);
             return { id: babyDoc.id, ...babyDoc.data() } as BabyData;
           }
         }
@@ -81,8 +78,7 @@ export const getBabyData = async (): Promise<BabyData | null> => {
         }
       }
     }
-  } catch (error) {
-    if (__DEV__) console.log('Error checking family for baby:', error);
+  } catch {
   }
 
   return null;
@@ -96,8 +92,7 @@ export const getBabyDataById = async (childId: string): Promise<BabyData | null>
       return { id: babyDoc.id, ...babyDoc.data() } as BabyData;
     }
     return null;
-  } catch (error) {
-    console.error('Error loading baby by ID:', error);
+  } catch {
     return null;
   }
 };
@@ -316,10 +311,7 @@ export const deleteChild = async (childId: string): Promise<void> => {
     // Delete the baby document
     const babyRef = doc(db, 'babies', childId);
     await deleteDoc(babyRef);
-
-    console.log('✅ Child deleted:', childId);
   } catch (error) {
-    console.error('Error deleting child:', error);
     throw error;
   }
 };

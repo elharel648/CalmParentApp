@@ -33,15 +33,12 @@ interface ChildProfile {
 // ----------------------------------------------------
 
 export const getChildProfile = async (userId: string): Promise<ChildProfile | null> => {
-  console.log('🔍 getChildProfile START for userId:', userId);
-
   try {
     // First try to find baby by user's UID
     let q = query(collection(db, PROFILES_COLLECTION), where('parentId', '==', userId), limit(1));
     let querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
-      console.log('🔍 Found baby by parentId (own baby)');
       const docSnap = querySnapshot.docs[0];
       const data = docSnap.data();
 
@@ -54,12 +51,9 @@ export const getChildProfile = async (userId: string): Promise<ChildProfile | nu
       };
     }
 
-    console.log('🔍 No own baby found, checking family...');
-
     // If not found, check if user belongs to a family
     const userDoc = await getDoc(doc(db, 'users', userId));
     const familyId = userDoc.data()?.familyId;
-    console.log('🔍 User familyId:', familyId);
 
     if (familyId) {
       const familyDoc = await getDoc(doc(db, 'families', familyId));
@@ -67,14 +61,11 @@ export const getChildProfile = async (userId: string): Promise<ChildProfile | nu
         const familyData = familyDoc.data();
         const babyId = familyData?.babyId;
         const creatorId = familyData?.createdBy;
-        console.log('🔍 Family found! babyId:', babyId, 'creatorId:', creatorId);
 
         // Try to get baby directly by ID
         if (babyId) {
-          console.log('🔍 Trying to get baby by babyId:', babyId);
           const babyDoc = await getDoc(doc(db, PROFILES_COLLECTION, babyId));
           if (babyDoc.exists()) {
-            console.log('🔍 SUCCESS! Found baby by babyId');
             const data = babyDoc.data();
             return {
               name: data.name || 'תינוק',
@@ -83,18 +74,14 @@ export const getChildProfile = async (userId: string): Promise<ChildProfile | nu
               childId: babyDoc.id,
               photoUrl: data.photoUrl || undefined,
             };
-          } else {
-            console.log('🔍 Baby doc not found by babyId');
           }
         }
 
         // Fallback: find baby by family creator
         if (creatorId && creatorId !== userId) {
-          console.log('🔍 Fallback: searching by creatorId:', creatorId);
           q = query(collection(db, PROFILES_COLLECTION), where('parentId', '==', creatorId), limit(1));
           querySnapshot = await getDocs(q);
           if (!querySnapshot.empty) {
-            console.log('🔍 SUCCESS! Found baby by creator parentId');
             const docSnap = querySnapshot.docs[0];
             const data = docSnap.data();
             return {
@@ -104,21 +91,12 @@ export const getChildProfile = async (userId: string): Promise<ChildProfile | nu
               childId: docSnap.id,
               photoUrl: data.photoUrl || undefined,
             };
-          } else {
-            console.log('🔍 No baby found by creator parentId');
           }
         }
-      } else {
-        console.log('🔍 Family doc not found');
       }
-    } else {
-      console.log('🔍 No familyId on user');
     }
-
-    console.log('🔍 getChildProfile returning NULL');
     return null;
-  } catch (e) {
-    console.log('🔍 ERROR in getChildProfile:', e);
+  } catch {
     return null;
   }
 };
@@ -129,9 +107,6 @@ export const getChildProfile = async (userId: string): Promise<ChildProfile | nu
 
 // 💡 נוסף childId
 export const saveEventToFirebase = async (userId: string, childId: string, data: any) => {
-  console.log('💾 saveEventToFirebase: saving with childId =', childId);
-  console.log('💾 saveEventToFirebase: data =', JSON.stringify(data));
-
   try {
     const eventsRef = collection(db, EVENTS_COLLECTION);
     const timestamp = data.timestamp ? (data.timestamp instanceof Date ? Timestamp.fromDate(data.timestamp) : data.timestamp) : new Date();
@@ -150,10 +125,8 @@ export const saveEventToFirebase = async (userId: string, childId: string, data:
       ...data,
       timestamp
     });
-    console.log('💾 saveEventToFirebase: SUCCESS! docId =', docRef.id);
     return true;
   } catch (error) {
-    console.error("Error adding document: ", error);
     throw error;
   }
 };
@@ -200,18 +173,14 @@ export const getLastEvent = async (childId: string, eventType: 'food' | 'sleep' 
     }
 
     return null;
-  } catch (error) {
-    console.error("Error getting last event: ", error);
+  } catch {
     return null;
   }
 };
 
 // 💡 Query ONLY by childId - this is the correct behavior for per-child data
-export const getRecentHistory = async (childId: string, creatorId?: string) => {
-  console.log('🔎 getRecentHistory: Querying for childId =', childId);
-
+export const getRecentHistory = async (childId: string, _creatorId?: string) => {
   if (!childId) {
-    console.log('🔎 getRecentHistory: No childId provided, returning empty');
     return [];
   }
 
@@ -227,8 +196,6 @@ export const getRecentHistory = async (childId: string, creatorId?: string) => {
     );
 
     const snapshot = await getDocs(q);
-    console.log('🔎 getRecentHistory: Found', snapshot.docs.length, 'events for childId =', childId);
-
     const events = snapshot.docs.map(doc => {
       const data = doc.data();
       return {
@@ -243,8 +210,7 @@ export const getRecentHistory = async (childId: string, creatorId?: string) => {
 
     // Return top 30
     return events.slice(0, 30);
-  } catch (error) {
-    console.error('🔎 getRecentHistory ERROR:', error);
+  } catch {
     return [];
   }
 };
@@ -254,10 +220,8 @@ export const deleteEvent = async (eventId: string) => {
   try {
     const eventRef = doc(db, EVENTS_COLLECTION, eventId);
     await deleteDoc(eventRef);
-    console.log('🗑️ deleteEvent: Successfully deleted event', eventId);
     return true;
   } catch (error) {
-    console.error('🗑️ deleteEvent ERROR:', error);
     throw error;
   }
 };

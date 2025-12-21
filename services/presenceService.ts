@@ -29,8 +29,8 @@ export const setUserOnline = async (familyId: string): Promise<void> => {
             userId,
             name: auth.currentUser?.displayName || 'משתמש',
         }, { merge: true });
-    } catch (error) {
-        console.error('Error setting online:', error);
+    } catch {
+        // Silently fail
     }
 };
 
@@ -45,8 +45,8 @@ export const setUserOffline = async (familyId: string): Promise<void> => {
             isOnline: false,
             lastSeen: serverTimestamp(),
         });
-    } catch (error) {
-        console.error('Error setting offline:', error);
+    } catch {
+        // Silently fail
     }
 };
 

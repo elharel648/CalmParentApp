@@ -654,8 +654,8 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                 onPress={() => saveEntry('doctor', {
                     reason: doctorReason,
                     note: doctorNote,
-                    hasPhoto: !!doctorPhoto,
-                    hasDocument: !!doctorDocument
+                    photoUri: doctorPhoto || null,
+                    documentName: doctorDocument || null
                 })}
                 disabled={saveSuccess}
             >
@@ -918,6 +918,29 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                                         )}
                                         {item.note && (
                                             <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4, textAlign: 'right' }}>{item.note}</Text>
+                                        )}
+                                        {/* Show photo/document attachments */}
+                                        {(item.photoUri || item.documentName) && (
+                                            <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 8 }}>
+                                                {item.photoUri && (
+                                                    <TouchableOpacity
+                                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+                                                        onPress={() => {
+                                                            // Open photo in a lightbox or share
+                                                            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                        }}
+                                                    >
+                                                        <Camera size={14} color="#10B981" />
+                                                        <Text style={{ fontSize: 12, color: '#10B981', fontWeight: '500' }}>תמונה</Text>
+                                                    </TouchableOpacity>
+                                                )}
+                                                {item.documentName && (
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
+                                                        <FileText size={14} color="#3B82F6" />
+                                                        <Text style={{ fontSize: 12, color: '#3B82F6', fontWeight: '500' }} numberOfLines={1}>{item.documentName}</Text>
+                                                    </View>
+                                                )}
+                                            </View>
                                         )}
                                         <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>
                                             {formatDate(item.timestamp)}
