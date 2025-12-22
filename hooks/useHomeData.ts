@@ -39,8 +39,6 @@ export const useHomeData = (
         diaperCount: 0,
     });
 
-    // Track last childId to prevent stale data
-    const lastChildIdRef = useRef<string | undefined>(undefined);
 
     const user = auth.currentUser;
 
@@ -149,7 +147,7 @@ export const useHomeData = (
                 return;
             }
 
-            console.log('🔄 useHomeData: Fetching data for childId =', childId);
+            if (__DEV__) console.log('🔄 useHomeData: Fetching data for childId =', childId);
 
             try {
                 // Fetch last events
@@ -173,10 +171,10 @@ export const useHomeData = (
                 const stats = calculateDailyStats(history);
                 setDailyStats(stats);
 
-                console.log('✅ useHomeData: Data fetched for childId =', childId, 'stats =', stats);
+                if (__DEV__) console.log('✅ useHomeData: Data fetched for childId =', childId, 'stats =', stats);
 
             } catch (e) {
-                console.error('Home data refresh error:', e);
+                if (__DEV__) console.log('Home data refresh error:', e);
             }
         };
 

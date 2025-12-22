@@ -86,7 +86,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
                 }
             }
         } catch (error) {
-            console.log('Error loading theme preference:', error);
+            if (__DEV__) console.log('Error loading theme preference:', error);
         }
     };
 
@@ -98,7 +98,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
                 await setDoc(userRef, { settings: { isDarkMode: value } }, { merge: true });
             }
         } catch (error) {
-            console.log('Error saving theme preference:', error);
+            if (__DEV__) console.log('Error saving theme preference:', error);
         }
     };
 

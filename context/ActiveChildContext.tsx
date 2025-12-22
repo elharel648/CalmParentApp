@@ -153,7 +153,7 @@ export const ActiveChildProvider: React.FC<ActiveChildProviderProps> = ({ childr
                             });
                         }
                     } catch (err) {
-                        console.warn('Error loading guest family:', familyId, err);
+                        if (__DEV__) console.warn('Error loading guest family:', familyId, err);
                         // Continue to next family, don't crash
                     }
                 }
@@ -167,7 +167,7 @@ export const ActiveChildProvider: React.FC<ActiveChildProviderProps> = ({ childr
             }
 
         } catch (error) {
-            console.error('Error loading children:', error);
+            if (__DEV__) console.log('Error loading children:', error);
         } finally {
             setIsLoading(false);
         }

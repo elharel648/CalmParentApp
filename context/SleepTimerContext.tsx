@@ -89,7 +89,7 @@ export const SleepTimerProvider = ({ children }: SleepTimerProviderProps) => {
                     activityIdRef.current = activityId;
                 }
             } catch (error) {
-                console.log('Live Activity not supported:', error);
+                if (__DEV__) console.log('Live Activity not supported:', error);
             }
         }
     }, []);
@@ -110,7 +110,7 @@ export const SleepTimerProvider = ({ children }: SleepTimerProviderProps) => {
                 });
                 activityIdRef.current = undefined;
             } catch (error) {
-                console.log('Error stopping Live Activity:', error);
+                if (__DEV__) console.log('Error stopping Live Activity:', error);
             }
         }
     }, []);

@@ -42,11 +42,11 @@ export const useNotifications = (): UseNotificationsReturn => {
 
         // Listeners for when app is open
         notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-            console.log('🔔 Notification received:', notification);
+            if (__DEV__) console.log('🔔 Notification received:', notification);
         });
 
         responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-            console.log('🔔 Notification tapped:', response);
+            if (__DEV__) console.log('🔔 Notification tapped:', response);
             // Handle navigation based on notification type
             const type = response.notification.request.content.data?.type;
             // You can add navigation logic here

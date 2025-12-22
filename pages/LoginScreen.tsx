@@ -222,7 +222,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         if (pendingInviteCode.trim().length === 6) {
           const result = await joinFamily(pendingInviteCode.trim());
           if (result.success) {
-            console.log('✅ Joined family:', result.family?.babyName);
+            if (__DEV__) console.log('✅ Joined family:', result.family?.babyName);
           }
         }
 

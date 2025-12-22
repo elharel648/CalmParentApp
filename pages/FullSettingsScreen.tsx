@@ -152,7 +152,7 @@ export default function SettingsScreen() {
         });
       }
     } catch (error) {
-      console.log('Error fetching settings:', error);
+      if (__DEV__) console.log('Error fetching settings:', error);
     } finally {
       setInitialLoading(false);
     }
@@ -170,7 +170,7 @@ export default function SettingsScreen() {
         }, { merge: true });
       }
     } catch (error) {
-      console.error("Failed to save setting:", key);
+      if (__DEV__) console.log('Failed to save setting:', key);
     }
   };
 
@@ -258,7 +258,7 @@ export default function SettingsScreen() {
         if (user) {
           const userRef = doc(db, 'users', user.uid);
           await updateDoc(userRef, { photoURL: newImageUri });
-          await updateProfile(user, { photoURL: newImageUri }).catch((e) => console.log('Auth profile update error', e));
+          await updateProfile(user, { photoURL: newImageUri }).catch((e) => { if (__DEV__) console.log('Auth profile update error', e); });
 
           setUserData(prev => ({ ...prev, photoURL: newImageUri }));
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

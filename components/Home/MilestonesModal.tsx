@@ -79,7 +79,7 @@ export default function MilestonesModal({ visible, onClose }: MilestonesModalPro
             setDate(new Date());
             setActiveTab('history');
         } catch (error) {
-            console.error('Error saving milestone:', error);
+            if (__DEV__) console.log('Error saving milestone:', error);
             Alert.alert('שגיאה', 'לא הצלחנו לשמור את אבן הדרך');
         } finally {
             setLoading(false);
@@ -97,7 +97,7 @@ export default function MilestonesModal({ visible, onClose }: MilestonesModalPro
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
         } catch (error) {
-            console.error('Error deleting milestone:', error);
+            if (__DEV__) console.log('Error deleting milestone:', error);
         }
     };
 

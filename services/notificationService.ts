@@ -94,13 +94,13 @@ class NotificationService {
             // Request permissions
             const hasPermission = await this.requestPermissions();
             if (!hasPermission) {
-                console.log('Notification permissions not granted');
+                if (__DEV__) console.log('Notification permissions not granted');
                 return false;
             }
 
             return true;
         } catch (error) {
-            console.error('Failed to initialize notifications:', error);
+            if (__DEV__) console.log('Failed to initialize notifications:', error);
             return false;
         }
     }
@@ -108,7 +108,7 @@ class NotificationService {
     // Request permissions
     async requestPermissions(): Promise<boolean> {
         if (!Device.isDevice) {
-            console.log('Notifications only work on physical devices');
+            if (__DEV__) console.log('Notifications only work on physical devices');
             return false;
         }
 
@@ -145,7 +145,7 @@ class NotificationService {
                 this.settings = { ...DEFAULT_NOTIFICATION_SETTINGS, ...JSON.parse(saved) };
             }
         } catch (error) {
-            console.error('Failed to load notification settings:', error);
+            if (__DEV__) console.log('Failed to load notification settings:', error);
         }
         return this.settings;
     }
@@ -156,7 +156,7 @@ class NotificationService {
             this.settings = { ...this.settings, ...settings };
             await AsyncStorage.setItem('notification_settings', JSON.stringify(this.settings));
         } catch (error) {
-            console.error('Failed to save notification settings:', error);
+            if (__DEV__) console.log('Failed to save notification settings:', error);
         }
     }
 

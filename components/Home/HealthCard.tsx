@@ -116,7 +116,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                 setCustomVaccines(data.customVaccines || []);
             }
         } catch (error) {
-            console.error('Error loading vaccines:', error);
+            if (__DEV__) console.log('Error loading vaccines:', error);
         }
     };
 
@@ -141,7 +141,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                 setHealthLog(log);
             }
         } catch (error) {
-            console.error('Error loading health log:', error);
+            if (__DEV__) console.log('Error loading health log:', error);
         }
         setLoadingHistory(false);
     };
@@ -160,7 +160,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
         try {
             await updateDoc(doc(db, 'babies', babyId), { vaccines: updated });
         } catch (error) {
-            console.error('Error updating vaccine:', error);
+            if (__DEV__) console.log('Error updating vaccine:', error);
         }
     };
 
@@ -185,7 +185,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
         try {
             await updateDoc(doc(db, 'babies', babyId), { customVaccines: updated });
         } catch (error) {
-            console.error('Error adding custom vaccine:', error);
+            if (__DEV__) console.log('Error adding custom vaccine:', error);
         }
     };
 
@@ -202,7 +202,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
         try {
             await updateDoc(doc(db, 'babies', babyId), { customVaccines: updated });
         } catch (error) {
-            console.error('Error deleting custom vaccine:', error);
+            if (__DEV__) console.log('Error deleting custom vaccine:', error);
         }
     };
 
@@ -229,7 +229,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                 }
             }
         } catch (error) {
-            console.error('Photo pick error:', error);
+            if (__DEV__) console.log('Photo pick error:', error);
         } finally {
             setUploadingPhoto(false);
         }
@@ -250,7 +250,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                 }
             }
         } catch (error) {
-            console.error('Document pick error:', error);
+            if (__DEV__) console.log('Document pick error:', error);
         } finally {
             setUploadingDoc(false);
         }
@@ -322,7 +322,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                     await updateDoc(doc(db, 'babies', docId), { healthLog: arrayUnion(entry) });
                 }
             } catch (error) {
-                console.error('Error saving entry:', error);
+                if (__DEV__) console.log('Error saving entry:', error);
                 Alert.alert('שגיאה', 'לא ניתן לשמור');
                 return;
             }
@@ -331,7 +331,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                 const entry = { ...data, timestamp: new Date().toISOString(), type };
                 await updateDoc(doc(db, 'babies', babyId), { healthLog: arrayUnion(entry) });
             } catch (error) {
-                console.error('Error saving entry:', error);
+                if (__DEV__) console.log('Error saving entry:', error);
                 Alert.alert('שגיאה', 'לא ניתן לשמור');
                 return;
             }
@@ -362,7 +362,7 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
         } catch (error) {
-            console.error('Error deleting entry:', error);
+            if (__DEV__) console.log('Error deleting entry:', error);
             Alert.alert('שגיאה', 'לא ניתן למחוק');
         }
     };

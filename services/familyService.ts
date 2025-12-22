@@ -422,7 +422,7 @@ export const createGuestInvite = async (
         // SECURITY CHECK: Verify user is admin/member of this family
         const familyDoc = await getDoc(doc(db, 'families', familyId));
         if (!familyDoc.exists()) {
-            console.error('Family not found');
+            if (__DEV__) console.log('Family not found');
             return null;
         }
 
@@ -431,7 +431,7 @@ export const createGuestInvite = async (
 
         // Only admin or member can create invites (not guest or viewer)
         if (memberRole !== 'admin' && memberRole !== 'member') {
-            console.error('User not authorized to create invites');
+            if (__DEV__) console.log('User not authorized to create invites');
             return null;
         }
 
@@ -448,7 +448,7 @@ export const createGuestInvite = async (
         }
 
         if (attempts >= maxAttempts) {
-            console.error('Failed to generate unique invite code');
+            if (__DEV__) console.log('Failed to generate unique invite code');
             return null;
         }
 
@@ -468,7 +468,7 @@ export const createGuestInvite = async (
 
         return { code, expiresAt };
     } catch (error) {
-        console.error('Error creating guest invite:', error);
+        if (__DEV__) console.log('Error creating guest invite:', error);
         return null;
     }
 };
@@ -490,16 +490,16 @@ export const joinAsGuest = async (
     try {
         // Find the invite
         const trimmedCode = inviteCode.trim();
-        console.log('🔍 joinAsGuest: Looking for invite code:', trimmedCode);
+        if (__DEV__) console.log('🔍 joinAsGuest: Looking for invite code:', trimmedCode);
 
         const inviteDoc = await getDoc(doc(db, 'invites', trimmedCode));
 
         if (!inviteDoc.exists()) {
-            console.log('❌ joinAsGuest: Invite not found in Firestore');
+            if (__DEV__) console.log('❌ joinAsGuest: Invite not found in Firestore');
             return { success: false, message: 'קוד הזמנה לא תקין' };
         }
 
-        console.log('✅ joinAsGuest: Found invite:', inviteDoc.data());
+        if (__DEV__) console.log('✅ joinAsGuest: Found invite:', inviteDoc.data());
 
         const inviteData = inviteDoc.data();
 
@@ -576,7 +576,7 @@ export const joinAsGuest = async (
             familyId,
         };
     } catch (error) {
-        console.error('Error joining as guest:', error);
+        if (__DEV__) console.log('Error joining as guest:', error);
         return { success: false, message: 'שגיאה בהצטרפות' };
     }
 };
@@ -607,7 +607,7 @@ export const revokeGuestAccess = async (guestUserId: string, familyId: string): 
 
         return true;
     } catch (error) {
-        console.error('Error revoking guest access:', error);
+        if (__DEV__) console.log('Error revoking guest access:', error);
         return false;
     }
 };

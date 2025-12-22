@@ -304,7 +304,7 @@ export default Sentry.wrap(function App() {
       if (needsUnlock) setTimeout(() => authenticateUser(), 100);
 
     } catch (error) {
-      console.log('Error during startup checks:', error);
+      if (__DEV__) console.log('Error during startup checks:', error);
       setIsAppLoading(false);
     }
   };
@@ -321,7 +321,7 @@ export default Sentry.wrap(function App() {
       });
 
       if (result.success) setIsLocked(false);
-    } catch (e) { console.log('Authentication error:', e); }
+    } catch (e) { if (__DEV__) console.log('Authentication error:', e); }
   };
 
   if (isAppLoading) return <LoaderScreen />;

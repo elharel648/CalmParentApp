@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import {
     Calendar, Clock, Users, DollarSign, CheckCircle,
-    XCircle, ChevronLeft, Star, MessageSquare, Settings,
+    XCircle, ChevronRight, Star, MessageSquare, Settings,
     User, Baby, MapPin, Phone, Mail, Bell, X, Trash2, Edit3
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -361,7 +361,7 @@ const SitterDashboardScreen = ({ navigation }: any) => {
                 <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
                     <View style={styles.headerTop}>
                         <TouchableOpacity onPress={() => navigation.goBack()}>
-                            <ChevronLeft size={24} color={theme.textSecondary} />
+                            <ChevronRight size={24} color={theme.textSecondary} />
                         </TouchableOpacity>
                         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>מצב סיטר</Text>
                         <TouchableOpacity onPress={() => setSettingsVisible(true)}>
@@ -515,31 +515,31 @@ const SitterDashboardScreen = ({ navigation }: any) => {
                             {/* Toggle Settings */}
                             <View style={styles.settingsSection}>
                                 <View style={styles.settingToggleRow}>
-                                    <View style={styles.settingRow}>
-                                        <Bell size={18} color={theme.textSecondary} />
-                                        <Text style={[styles.settingLabel, { color: theme.textPrimary }]}>התראות</Text>
-                                    </View>
                                     <Switch
                                         value={notificationsEnabled}
                                         onValueChange={setNotificationsEnabled}
                                         trackColor={{ false: '#D1D5DB', true: '#A5B4FC' }}
                                         thumbColor={notificationsEnabled ? '#6366F1' : '#9CA3AF'}
                                     />
+                                    <View style={styles.settingRow}>
+                                        <Text style={[styles.settingLabel, { color: theme.textPrimary }]}>התראות</Text>
+                                        <Bell size={18} color={theme.textSecondary} />
+                                    </View>
                                 </View>
                             </View>
 
                             <View style={styles.settingsSection}>
                                 <View style={styles.settingToggleRow}>
-                                    <View style={styles.settingRow}>
-                                        <Calendar size={18} color={theme.textSecondary} />
-                                        <Text style={[styles.settingLabel, { color: theme.textPrimary }]}>זמין להזמנות</Text>
-                                    </View>
                                     <Switch
                                         value={availableForBookings}
                                         onValueChange={setAvailableForBookings}
                                         trackColor={{ false: '#D1D5DB', true: '#86EFAC' }}
                                         thumbColor={availableForBookings ? '#10B981' : '#9CA3AF'}
                                     />
+                                    <View style={styles.settingRow}>
+                                        <Text style={[styles.settingLabel, { color: theme.textPrimary }]}>זמין להזמנות</Text>
+                                        <Calendar size={18} color={theme.textSecondary} />
+                                    </View>
                                 </View>
                             </View>
 
@@ -592,7 +592,7 @@ const SitterDashboardScreen = ({ navigation }: any) => {
                                                             setSettingsVisible(false);
                                                             if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                                             Alert.alert('נמחק', 'חשבון הסיטר נמחק. תוכל להירשם מחדש בכל עת.');
-                                                            navigation.replace('BabySitter');
+                                                            navigation.replace('SitterList');
                                                         } catch {
                                                             Alert.alert('שגיאה', 'לא ניתן למחוק, נסה שוב');
                                                         }

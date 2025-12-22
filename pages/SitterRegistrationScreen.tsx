@@ -17,7 +17,8 @@ import {
 } from 'react-native';
 import {
     Shield, User, Camera, Clock, CreditCard,
-    ChevronLeft, ChevronRight, Check, Plus, Minus, X
+    ChevronLeft, ChevronRight, Check, Plus, Minus, X,
+    Facebook, Instagram
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -425,18 +426,26 @@ const SitterRegistrationScreen = ({ navigation }: any) => {
                             onPress={connectFacebook}
                             disabled={fbConnected}
                         >
-                            <Text style={[styles.socialBtnText, { color: fbConnected ? '#fff' : theme.textPrimary }]}>
-                                {fbConnected ? '✓ פייסבוק מחובר' : 'התחבר עם פייסבוק'}
-                            </Text>
+                            <View style={styles.socialBtnContent}>
+                                <Facebook size={20} color={fbConnected ? '#fff' : '#1877F2'} />
+                                <Text style={[styles.socialBtnText, { color: fbConnected ? '#fff' : theme.textPrimary }]}>
+                                    {fbConnected ? 'פייסבוק מחובר' : 'התחבר עם פייסבוק'}
+                                </Text>
+                                {fbConnected && <Check size={18} color="#10B981" />}
+                            </View>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.socialBtn, { backgroundColor: theme.card, borderColor: theme.border }, igConnected && styles.socialBtnConnectedIG]}
                             onPress={connectInstagram}
                             disabled={igConnected}
                         >
-                            <Text style={[styles.socialBtnText, { color: igConnected ? '#fff' : theme.textPrimary }]}>
-                                {igConnected ? '✓ אינסטגרם מחובר' : 'התחבר עם אינסטגרם'}
-                            </Text>
+                            <View style={styles.socialBtnContent}>
+                                <Instagram size={20} color={igConnected ? '#fff' : '#E4405F'} />
+                                <Text style={[styles.socialBtnText, { color: igConnected ? '#fff' : theme.textPrimary }]}>
+                                    {igConnected ? 'אינסטגרם מחובר' : 'התחבר עם אינסטגרם'}
+                                </Text>
+                                {igConnected && <Check size={18} color="#10B981" />}
+                            </View>
                         </TouchableOpacity>
                     </View>
                     <View style={[styles.infoBox, { backgroundColor: theme.cardSecondary }]}>
@@ -531,8 +540,8 @@ const SitterRegistrationScreen = ({ navigation }: any) => {
         <View style={[styles.container, { backgroundColor: theme.background }]}>
             {/* Header */}
             <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-                    <ChevronLeft size={24} color={theme.textSecondary} />
+                <TouchableOpacity onPress={() => navigation.goBack()}>
+                    <ChevronRight size={24} color={theme.textSecondary} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>הרשמה כסיטר</Text>
                 <View style={{ width: 40 }} />
@@ -683,9 +692,15 @@ const styles = StyleSheet.create({
     },
     socialBtn: {
         paddingVertical: 14,
+        paddingHorizontal: 16,
         borderRadius: 12,
         borderWidth: 1,
+    },
+    socialBtnContent: {
+        flexDirection: 'row-reverse',
         alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
     },
     socialBtnText: {
         fontSize: 15,

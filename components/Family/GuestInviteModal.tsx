@@ -65,7 +65,7 @@ const GuestInviteModal: React.FC<Props> = ({ visible, onClose, childId, childNam
                 message: `הוזמנת לצפות ב${childName}! 👶\n\nקוד ההזמנה שלך: ${inviteCode}\n\nהורד את האפליקציה והזן את הקוד.`,
             });
         } catch (error) {
-            console.error('Share error:', error);
+            if (__DEV__) console.log('Share error:', error);
         }
     };
 

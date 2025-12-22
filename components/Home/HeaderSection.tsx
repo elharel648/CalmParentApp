@@ -101,7 +101,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
                 setUploading(false);
             }
         } catch (e) {
-            console.error(e);
+            if (__DEV__) console.error(e);
             setUploading(false);
         }
     };

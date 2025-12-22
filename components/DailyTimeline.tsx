@@ -76,7 +76,7 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
       }));
       setEvents(mapped);
     } catch (error) {
-      console.error('Timeline load error:', error);
+      if (__DEV__) console.log('Timeline load error:', error);
     } finally {
       setLoading(false);
     }

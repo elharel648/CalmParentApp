@@ -31,7 +31,7 @@ export const useGuardian = (): UseGuardianReturn => {
             const maxUsers = await getMaxSharedUsers(user.uid);
             setMaxSharedUsers(maxUsers);
         } catch (e) {
-            console.error('Subscription fetch error:', e);
+            if (__DEV__) console.log('Subscription fetch error:', e);
         }
     }, [user]);
 

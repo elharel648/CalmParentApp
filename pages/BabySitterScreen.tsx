@@ -13,7 +13,7 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import {
-    Search, Briefcase, Star, ChevronLeft,
+    Search, Briefcase, Star, ChevronRight,
     User, Award, UserPlus
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -204,7 +204,7 @@ const BabySitterScreen = ({ navigation }: any) => {
                 style={[styles.dashboardBtn, { backgroundColor: theme.textPrimary }]}
                 onPress={() => navigation.navigate('SitterDashboard')}
             >
-                <Text style={[styles.dashboardBtnText, { color: theme.card }]}>עבור לדשבורד ←</Text>
+                <Text style={[styles.dashboardBtnText, { color: theme.card }]}>עבור לדשבורד →</Text>
             </TouchableOpacity>
         </View>
     );
@@ -215,7 +215,7 @@ const BabySitterScreen = ({ navigation }: any) => {
             <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
                 <View style={styles.headerTop}>
                     <TouchableOpacity onPress={() => navigation.goBack()}>
-                        <ChevronLeft size={24} color={theme.textSecondary} />
+                        <ChevronRight size={24} color={theme.textSecondary} />
                     </TouchableOpacity>
                     <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>מצא סיטר</Text>
                     {userPhoto ? (

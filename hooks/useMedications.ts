@@ -29,7 +29,7 @@ export const useMedications = (childId: string | undefined): UseMedicationsRetur
             });
             setSyncStatus('synced');
         } catch (e) {
-            console.error('Med sync error:', e);
+            if (__DEV__) console.log('Med sync error:', e);
             setSyncStatus('error');
         }
     }, [childId]);
@@ -51,9 +51,9 @@ export const useMedications = (childId: string | undefined): UseMedicationsRetur
                 timestamp: serverTimestamp(),
                 reporterName: user.displayName || 'אני',
             });
-            console.log('💊 Supplement event saved:', supplementName);
+            if (__DEV__) console.log('💊 Supplement event saved:', supplementName);
         } catch (e) {
-            console.error('Supplement event save error:', e);
+            if (__DEV__) console.log('Supplement event save error:', e);
         }
     }, [childId]);
 
@@ -90,7 +90,7 @@ export const useMedications = (childId: string | undefined): UseMedicationsRetur
                 }
             }
         } catch (e) {
-            console.error('Med refresh error:', e);
+            if (__DEV__) console.log('Med refresh error:', e);
         }
     }, [childId]);
 

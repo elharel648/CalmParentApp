@@ -37,9 +37,11 @@ class ErrorBoundary extends Component<Props, State> {
     }
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-        // Log error to console (in production, send to Sentry/Crashlytics)
-        console.error('🚨 ErrorBoundary caught an error:', error);
-        console.error('Component stack:', errorInfo.componentStack);
+        // Log error to console in DEV only (in production, send to Sentry/Crashlytics)
+        if (__DEV__) {
+            console.log('🚨 ErrorBoundary caught an error:', error);
+            console.log('Component stack:', errorInfo.componentStack);
+        }
 
         this.setState({
             error,
