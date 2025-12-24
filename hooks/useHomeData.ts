@@ -48,7 +48,7 @@ export const useHomeData = (
             const childRef = doc(db, 'babies', childId);
             await updateDoc(childRef, { status });
         } catch (e) {
-            console.error('Status update error:', e);
+            if (__DEV__) console.error('Status update error:', e);
         }
     }, [childId]);
 
@@ -132,7 +132,7 @@ export const useHomeData = (
             setDailyStats(stats);
 
         } catch (e) {
-            console.error('Home data refresh error:', e);
+            if (__DEV__) console.error('Home data refresh error:', e);
         }
     }, [childId, creatorId, calculateDailyStats]);
 

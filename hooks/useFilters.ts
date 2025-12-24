@@ -1,12 +1,35 @@
 import { useState, useMemo } from 'react';
 
+export type SortOption = 'recommended' | 'rating' | 'price' | 'distance' | 'superSitter';
+
+interface SitterData {
+    id: string;
+    name: string;
+    rating: number;
+    price: number;
+    distance: number;
+    isSuperSitter: boolean;
+    [key: string]: any; // Allow extra fields
+}
+
+interface FilterOption {
+    id: string;
+    label: string;
+    value: SortOption;
+}
+
+interface UseFiltersReturn {
+    sortBy: SortOption;
+    setSortBy: (option: SortOption) => void;
+    sortedData: SitterData[];
+    availableFilters: FilterOption[];
+}
+
 /**
  * Custom Hook לניהול פילטרים ומיון
- * @param {Array} data - המידע למיון
- * @returns {Object} { sortBy, setSortBy, sortedData, availableFilters }
  */
-const useFilters = (data = []) => {
-    const [sortBy, setSortBy] = useState('recommended');
+const useFilters = (data: SitterData[] = []): UseFiltersReturn => {
+    const [sortBy, setSortBy] = useState<SortOption>('recommended');
 
     // מיון הנתונים בהתאם לפילטר הנבחר
     const sortedData = useMemo(() => {
@@ -16,13 +39,13 @@ const useFilters = (data = []) => {
 
         switch (sortBy) {
             case 'rating':
-                return sorted.sort((a, b) => b.rating - a.rating);
+                return sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
 
             case 'price':
-                return sorted.sort((a, b) => a.price - b.price);
+                return sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
 
             case 'distance':
-                return sorted.sort((a, b) => a.distance - b.distance);
+                return sorted.sort((a, b) => (a.distance || 0) - (b.distance || 0));
 
             case 'superSitter':
                 return sorted.sort((a, b) => {
@@ -37,7 +60,7 @@ const useFilters = (data = []) => {
     }, [data, sortBy]);
 
     // פילטרים זמינים
-    const availableFilters = useMemo(() => [
+    const availableFilters: FilterOption[] = useMemo(() => [
         { id: 'recommended', label: '⭐ מומלץ', value: 'recommended' },
         { id: 'rating', label: '⭐ דירוג', value: 'rating' },
         { id: 'distance', label: '📍 קרוב', value: 'distance' },

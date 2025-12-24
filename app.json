@@ -56,7 +56,17 @@
         "NSFaceIDUsageDescription": "אפשר כניסה מהירה ומאובטחת באמצעות Face ID",
         "NSLocationWhenInUseUsageDescription": "האפליקציה צריכה גישה למיקום כדי למצוא בייביסיטרים באזור שלך",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "האפליקציה צריכה גישה למיקום כדי למצוא בייביסיטרים באזור שלך",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "fb1567376814402845"
+            ]
+          }
+        ],
+        "FacebookAppID": "1567376814402845",
+        "FacebookClientToken": "c2be86c713add9c46c10f5b716deb396",
+        "FacebookDisplayName": "CalmParent"
       }
     },
     "android": {

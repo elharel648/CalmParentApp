@@ -1,17 +1,21 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Image, Alert, Linking, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Users, Settings, Edit2, Camera, Baby, User, Mail } from 'lucide-react-native';
+import { Users, Settings, Camera, User, Pencil, Crown, Sparkles, Check, Star, ChevronLeft, UserPlus, Link as LinkIcon } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
+import { updateProfile } from 'firebase/auth';
+import { doc, updateDoc } from 'firebase/firestore';
 
 // Hooks
 import { useTheme } from '../context/ThemeContext';
 import { useFamily } from '../hooks/useFamily';
 import { useActiveChild } from '../context/ActiveChildContext';
 import { useBabyProfile } from '../hooks/useBabyProfile';
-import { auth } from '../services/firebaseConfig';
+import { auth, db } from '../services/firebaseConfig';
 
 // Components
 import { FamilyMembersCard } from '../components/Family/FamilyMembersCard';
@@ -25,13 +29,17 @@ export default function SettingsScreen() {
   const navigation = useNavigation<any>();
   const { activeChild, refreshChildren } = useActiveChild();
   const { baby, updateBasicInfo, updatePhoto, refresh } = useBabyProfile(activeChild?.childId);
-  const { family } = useFamily();
+  const { family, members, rename: renameFamily, isAdmin } = useFamily();
   const user = auth.currentUser;
 
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [joinModalVisible, setJoinModalVisible] = useState(false);
   const [isGuestInviteOpen, setIsGuestInviteOpen] = useState(false);
   const [isEditBasicInfoOpen, setIsEditBasicInfoOpen] = useState(false);
+  const [userPhotoURL, setUserPhotoURL] = useState<string | null>(user?.photoURL || null);
+  const [userName, setUserName] = useState<string>(user?.displayName || '');
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
 
   const handleSettingsPress = () => {
     if (Platform.OS !== 'web') {
@@ -55,18 +63,11 @@ export default function SettingsScreen() {
     return months > 0 ? `${years} שנה ו-${months} חודשים` : `${years} שנה`;
   };
 
-  // Get gender icon instead of emoji
-  const getGenderIcon = () => {
-    const color = baby?.gender === 'girl' ? '#EC4899' : '#60A5FA';
-    return <User size={28} color={color} strokeWidth={1.5} />;
-  };
-
   const handleEditPhoto = useCallback(async () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     await updatePhoto('profile');
-    // Refresh the global context so photo updates everywhere
     await refreshChildren();
   }, [updatePhoto, refreshChildren]);
 
@@ -76,101 +77,319 @@ export default function SettingsScreen() {
     refresh();
   }, [updateBasicInfo, refresh]);
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar style={isDarkMode ? 'light' : 'light'} />
+  const handleEditFamilyName = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'ערוך שם משפחה',
+        'הזן שם חדש למשפחה',
+        [
+          { text: 'ביטול', style: 'cancel' },
+          {
+            text: 'שמור',
+            onPress: async (newName) => {
+              if (newName && newName.trim()) {
+                const success = await renameFamily(newName.trim());
+                if (success && Platform.OS !== 'web') {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+              }
+            },
+          },
+        ],
+        'plain-text',
+        family?.babyName || ''
+      );
+    } else {
+      Alert.alert('ערוך שם משפחה', 'הפונקציה זמינה רק ב-iOS');
+    }
+  }, [family?.babyName, renameFamily]);
 
-      {/* Header with Settings Button on RIGHT side */}
-      <LinearGradient
-        colors={['#6366F1', '#8B5CF6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.header}
-      >
+  const openSettings = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      Linking.openURL('app-settings:');
+    } else {
+      Linking.openSettings();
+    }
+  }, []);
+
+  const handleEditUserPhoto = useCallback(async () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'חובה לאשר הרשאות',
+        'נדרשת הרשאת גלריה כדי לבחור תמונה',
+        [
+          { text: 'ביטול', style: 'cancel' },
+          { text: 'פתח הגדרות', onPress: openSettings }
+        ]
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled && user) {
+      const newImageUri = result.assets[0].uri;
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, { photoURL: newImageUri });
+        await updateProfile(user, { photoURL: newImageUri }).catch((e) => { if (__DEV__) console.log('Auth profile update error', e); });
+        setUserPhotoURL(newImageUri);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (error) {
+        Alert.alert('שגיאה', 'לא הצלחנו לשמור את התמונה');
+      }
+    }
+  }, [user, openSettings]);
+
+  const handleEditUserName = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'ערוך שם',
+        'הזן שם חדש',
+        [
+          { text: 'ביטול', style: 'cancel' },
+          {
+            text: 'שמור',
+            onPress: async (newName) => {
+              if (newName && newName.trim() && user) {
+                try {
+                  await updateProfile(user, { displayName: newName.trim() });
+                  const userRef = doc(db, 'users', user.uid);
+                  await updateDoc(userRef, { displayName: newName.trim() });
+                  setUserName(newName.trim());
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (error) {
+                  Alert.alert('שגיאה', 'לא הצלחנו לשמור את השם');
+                }
+              }
+            },
+          },
+        ],
+        'plain-text',
+        userName || ''
+      );
+    } else {
+      Alert.alert('ערוך שם', 'הפונקציה זמינה רק ב-iOS');
+    }
+  }, [user, userName]);
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+
+      {/* Minimal Header - Apple Style */}
+      <View style={styles.header}>
         <View style={styles.headerContent}>
-          <View style={{ width: 40 }} />
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>חשבון</Text>
-          </View>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>חשבון</Text>
           <TouchableOpacity
             onPress={handleSettingsPress}
-            style={styles.settingsBtn}
-            activeOpacity={0.7}
+            style={styles.settingsButton}
+            activeOpacity={0.6}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Settings size={20} color="#8B5CF6" strokeWidth={2} />
+            <Settings size={22} color={theme.textSecondary} strokeWidth={1.5} />
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
-        {/* Minimalist Profile Section - Centered */}
-        <View style={styles.minimalProfileSection}>
-          {/* Edit Button - Top Left */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+      >
+        {/* Profile Section - Centered, Minimal */}
+        <View style={styles.profileSection}>
           <TouchableOpacity
-            style={styles.minimalEditBtn}
-            onPress={() => {
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }
-              setIsEditBasicInfoOpen(true);
-            }}
+            onPress={handleEditUserPhoto}
+            style={styles.avatarContainer}
+            activeOpacity={0.8}
           >
-            <Edit2 size={18} color="#9CA3AF" strokeWidth={2} />
-          </TouchableOpacity>
-
-          {/* Avatar - Centered */}
-          <TouchableOpacity onPress={handleEditPhoto} style={styles.minimalAvatarContainer}>
-            {baby?.photoUrl ? (
-              <Image source={{ uri: baby.photoUrl }} style={styles.minimalAvatar} />
+            {userPhotoURL ? (
+              <Image source={{ uri: userPhotoURL }} style={styles.avatar} />
             ) : (
-              <View style={styles.minimalAvatarPlaceholder}>
-                <User size={44} color="#9CA3AF" strokeWidth={1.5} />
+              <View style={[styles.avatarPlaceholder, { backgroundColor: theme.divider }]}>
+                <User size={48} color={theme.textTertiary} strokeWidth={1.5} />
               </View>
             )}
-            {/* Camera Badge */}
-            <View style={styles.minimalCameraBadge}>
-              <Camera size={14} color="#fff" strokeWidth={2} />
+            <View style={[styles.cameraBadge, { backgroundColor: theme.primary }]}>
+              <Camera size={12} color="#fff" strokeWidth={2.5} />
             </View>
           </TouchableOpacity>
 
-          {/* Name - Below Avatar */}
-          <Text style={[styles.minimalName, { color: theme.textPrimary }]}>
-            {baby?.name || 'הילד שלי'}
-          </Text>
+          <TouchableOpacity
+            onPress={handleEditUserName}
+            style={styles.nameRow}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.userName, { color: theme.textPrimary }]}>
+              {userName || 'המשתמש שלי'}
+            </Text>
+            <Pencil size={13} color={theme.textTertiary} strokeWidth={2} />
+          </TouchableOpacity>
 
-          {/* Email */}
           {user?.email && (
-            <Text style={styles.minimalEmail}>{user.email}</Text>
+            <Text style={[styles.userEmail, { color: theme.textSecondary }]}>{user.email}</Text>
           )}
         </View>
+        {/* Premium Card - Apple Style with Subtle Gradient */}
+        <TouchableOpacity
+          style={styles.premiumCard}
+          onPress={() => {
+            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setIsPremiumModalOpen(true);
+          }}
+          activeOpacity={0.92}
+        >
+          <LinearGradient
+            colors={['#FF6B35', '#F7931E']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.premiumGradient}
+          >
+            <View style={styles.premiumContent}>
+              <View style={styles.premiumIconContainer}>
+                <Crown size={22} color="#fff" strokeWidth={2} />
+              </View>
+              <View style={styles.premiumTextContainer}>
+                <Text style={styles.premiumTitle}>שדרג ל-Premium</Text>
+                <Text style={styles.premiumSubtitle}>גישה לכל התכונות ודוחות</Text>
+              </View>
+            </View>
+            <Sparkles size={18} color="rgba(255,255,255,0.5)" />
+          </LinearGradient>
+        </TouchableOpacity>
 
-        {/* Family Sharing Section */}
+        {/* Family Sharing Section - Clean, Minimal */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Users size={18} color="#8B5CF6" />
-            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>שיתוף משפחתי</Text>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>שיתוף משפחתי</Text>
+
+          {/* Family Card - No Borders, Just Shadow */}
+          {family && (
+            <View style={[styles.familyCard, { backgroundColor: theme.card }]}>
+              <View style={styles.familyCardHeader}>
+                <View style={styles.familyCardHeaderLeft}>
+                  <Text style={[styles.familyName, { color: theme.textPrimary }]}>
+                    משפחת {family.babyName}
+                  </Text>
+                  <Text style={[styles.familyMembersCount, { color: theme.textSecondary }]}>
+                    {members.length || 1} חברים
+                  </Text>
           </View>
-          <FamilyMembersCard
-            onInvitePress={() => setInviteModalVisible(true)}
-            onJoinPress={() => setJoinModalVisible(true)}
-            onGuestInvitePress={family ? () => {
+                {isAdmin && (
+                  <TouchableOpacity
+                    onPress={handleEditFamilyName}
+                    style={styles.editFamilyButton}
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Pencil size={13} color={theme.textTertiary} strokeWidth={2} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Current User Status - Minimal */}
+              <View style={[styles.userStatusRow, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' }]}>
+                <View style={styles.userStatusLeft}>
+                  <View style={[styles.userStatusBadge, { backgroundColor: '#FF6B35' }]}>
+                    <Text style={styles.userStatusBadgeText}>
+                      {(userName || 'מ').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.userStatusInfo}>
+                    <Text style={[styles.userStatusName, { color: theme.textPrimary }]}>
+                      {userName || 'אני'} (Admin)
+                    </Text>
+                    <Text style={[styles.userStatusRole, { color: '#FF6B35' }]}>מנהל</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Family Actions - Pure iOS List Style, RTL */}
+          <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
+            {isAdmin && (
+              <TouchableOpacity
+                style={[styles.listItem, styles.listItemFirst]}
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setInviteModalVisible(true);
+                }}
+                activeOpacity={0.6}
+              >
+                <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
+                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>הזמנה למשפחה</Text>
+                <View style={[styles.listItemIcon, { backgroundColor: '#EEF2FF' }]}>
+                  <UserPlus size={16} color="#6366F1" strokeWidth={2} />
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {isAdmin && (
+              <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+            )}
+
+            {isAdmin && (
+              <TouchableOpacity
+                style={styles.listItem}
+                onPress={() => {
               if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setIsGuestInviteOpen(true);
-            } : undefined}
-          />
+                }}
+                activeOpacity={0.6}
+              >
+                <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
+                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>הזמן אורח</Text>
+                <View style={[styles.listItemIcon, { backgroundColor: '#ECFDF5' }]}>
+                  <Users size={16} color="#10B981" strokeWidth={2} />
+        </View>
+              </TouchableOpacity>
+            )}
+
+            {isAdmin && (
+              <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+            )}
+
+            <TouchableOpacity
+              style={[styles.listItem, styles.listItemLast]}
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setJoinModalVisible(true);
+              }}
+              activeOpacity={0.6}
+            >
+              <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
+              <Text style={[styles.listItemText, { color: theme.textPrimary }]}>הצטרף עם קוד</Text>
+              <View style={[styles.listItemIcon, { backgroundColor: '#FFF7ED' }]}>
+                <LinkIcon size={16} color="#F59E0B" strokeWidth={2} />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
+        {/* Bottom Spacing */}
+        <View style={{ height: 40 }} />
       </ScrollView>
 
-
       {/* Guest Invite Modal */}
-      {baby?.id && family && (
+      {family && (
         <GuestInviteModal
           visible={isGuestInviteOpen}
           onClose={() => setIsGuestInviteOpen(false)}
-          childId={baby.id}
-          childName={baby.name || 'הילד'}
           familyId={family.id}
         />
       )}
@@ -201,330 +420,526 @@ export default function SettingsScreen() {
         onSave={handleSaveBasicInfo}
         onClose={() => setIsEditBasicInfoOpen(false)}
       />
-    </View>
+
+      {/* Premium Modal - Apple Style */}
+      <Modal
+        visible={isPremiumModalOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsPremiumModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: theme.card }]}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <LinearGradient
+                colors={['#FF6B35', '#F7931E']}
+                style={styles.modalIconContainer}
+              >
+                <Crown size={28} color="#fff" strokeWidth={2} />
+              </LinearGradient>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>
+                CalmParent Premium
+              </Text>
+              <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+                גישה מלאה לכל התכונות המתקדמות
+              </Text>
+            </View>
+
+            {/* Plans */}
+            <View style={styles.plansContainer}>
+              {/* Monthly */}
+              <TouchableOpacity
+                style={[
+                  styles.planCard,
+                  {
+                    borderColor: selectedPlan === 'monthly' ? theme.primary : theme.divider,
+                    backgroundColor: selectedPlan === 'monthly' ? theme.primaryLight : theme.background,
+                  },
+                ]}
+                onPress={() => {
+                  setSelectedPlan('monthly');
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.planDuration, { color: theme.textPrimary }]}>חודשי</Text>
+                <Text style={[styles.planPrice, { color: theme.textPrimary }]}>₪19.90</Text>
+                <Text style={[styles.planPer, { color: theme.textSecondary }]}>לחודש</Text>
+              </TouchableOpacity>
+
+              {/* Yearly */}
+              <TouchableOpacity
+                style={[
+                  styles.planCard,
+                  {
+                    borderColor: selectedPlan === 'yearly' ? theme.primary : theme.divider,
+                    backgroundColor: selectedPlan === 'yearly' ? theme.primaryLight : theme.background,
+                  },
+                ]}
+                onPress={() => {
+                  setSelectedPlan('yearly');
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.planBadge}>
+                  <Text style={styles.planBadgeText}>חסכון 40%</Text>
+                </View>
+                <Text style={[styles.planDuration, { color: theme.textPrimary }]}>שנתי</Text>
+                <Text style={[styles.planPrice, { color: theme.textPrimary }]}>₪139</Text>
+                <Text style={[styles.planPer, { color: theme.textSecondary }]}>לשנה (₪11.60/חודש)</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Features */}
+            <View style={styles.featuresContainer}>
+              <View style={styles.featureRow}>
+                <Check size={18} color="#10B981" strokeWidth={2.5} />
+                <Text style={[styles.featureText, { color: theme.textPrimary }]}>
+                  דוחות מפורטים ותובנות חכמות
+                </Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Check size={18} color="#10B981" strokeWidth={2.5} />
+                <Text style={[styles.featureText, { color: theme.textPrimary }]}>
+                  ייצוא נתונים ל-PDF ואקסל
+                </Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Check size={18} color="#10B981" strokeWidth={2.5} />
+                <Text style={[styles.featureText, { color: theme.textPrimary }]}>
+                  שיתוף ללא הגבלה למשפחה ובייביסיטר
+                </Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Check size={18} color="#10B981" strokeWidth={2.5} />
+                <Text style={[styles.featureText, { color: theme.textPrimary }]}>
+                  גיבוי אוטומטי ותמיכה VIP
+                </Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Star size={18} color="#FF6B35" strokeWidth={2.5} />
+                <Text style={[styles.featureText, { color: theme.textPrimary }]}>
+                  ללא פרסומות לעולם
+                </Text>
+              </View>
+            </View>
+
+            {/* Subscribe Button */}
+            <TouchableOpacity
+              style={styles.subscribeButton}
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert('בקרוב!', 'רכישת Premium תתאפשר בקרוב 🎉');
+                setIsPremiumModalOpen(false);
+              }}
+              activeOpacity={0.9}
+            >
+              <LinearGradient
+                colors={['#6366F1', '#8B5CF6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.subscribeButtonGradient}
+              >
+                <Text style={styles.subscribeButtonText}>
+                  {selectedPlan === 'yearly' ? 'הירשם ל-Premium שנתי' : 'הירשם ל-Premium חודשי'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Close */}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setIsPremiumModalOpen(false)}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.closeButtonText, { color: theme.textSecondary }]}>אולי אחר כך</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
   },
   header: {
-    paddingTop: 56,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 12 : 20,
+    paddingBottom: 8,
+    paddingHorizontal: 20,
   },
   headerContent: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  settingsBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  headerTextContainer: {
-    alignItems: 'center',
-  },
   headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#fff',
+    fontSize: 34,
+    fontWeight: '700',
+    letterSpacing: 0.37,
   },
-  headerSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 2,
+  settingsButton: {
+    padding: 4,
   },
   scrollContent: {
-    padding: 16,
+    paddingTop: 8,
+    paddingHorizontal: 20,
     paddingBottom: 100,
   },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row-reverse',
+  profileSection: {
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#374151',
-    textAlign: 'right',
-  },
-  // Profile Card Styles
-  profileCard: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 20,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    paddingVertical: 24,
+    marginBottom: 0,
   },
   avatarContainer: {
     position: 'relative',
+    marginBottom: 20,
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#F3F4F6',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
   },
   avatarPlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#EEF2FF',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarEmoji: {
-    fontSize: 28,
   },
   cameraBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#6366F1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  profileInfo: {
-    flex: 1,
-    marginRight: 14,
-    alignItems: 'flex-end',
-  },
-  profileName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  profileAge: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6366F1',
-    marginBottom: 2,
-  },
-  profileDate: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  editProfileBtn: {
-    padding: 10,
-    backgroundColor: '#EEF2FF',
-    borderRadius: 10,
-  },
-  // Premium Account Card Styles
-  premiumAccountCard: {
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 20,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  premiumAvatarContainer: {
-    position: 'relative' as const,
-  },
-  premiumAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 3,
-    borderColor: '#E5E7EB',
-  },
-  premiumAvatarGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  editBadge: {
-    position: 'absolute' as const,
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#6366F1',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  premiumInfoSection: {
-    flex: 1,
-    marginRight: 16,
-    alignItems: 'flex-end' as const,
-  },
-  premiumChildName: {
-    fontSize: 22,
-    fontWeight: '700' as const,
-    color: '#111827',
-    marginBottom: 6,
-  },
-  ageBadge: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
-    marginBottom: 6,
-  },
-  ageBadgeText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: '#6366F1',
-  },
-  birthDateText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    fontWeight: '500' as const,
-  },
-  editDetailsBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  // Email Card Styles
-  emailCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row-reverse' as const,
-    alignItems: 'center' as const,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  emailIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#F3E8FF',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  emailInfo: {
-    flex: 1,
-    marginRight: 14,
-    alignItems: 'flex-end' as const,
-  },
-  emailLabel: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    fontWeight: '500' as const,
-    marginBottom: 2,
-  },
-  emailText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#374151',
-  },
-  // Minimalist Profile Styles
-  minimalProfileSection: {
-    alignItems: 'center' as const,
-    paddingVertical: 20,
-    marginBottom: 24,
-    position: 'relative' as const,
-  },
-  minimalEditBtn: {
-    position: 'absolute' as const,
-    top: 20,
-    left: 0,
-    padding: 8,
-  },
-  minimalAvatarContainer: {
-    position: 'relative' as const,
-    marginBottom: 16,
-  },
-  minimalAvatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  minimalAvatarGradient: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  minimalAvatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  minimalCameraBadge: {
-    position: 'absolute' as const,
-    bottom: 0,
-    right: 0,
+    bottom: 2,
+    right: 2,
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#6366F1',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    borderWidth: 3,
-    borderColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  minimalName: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    marginBottom: 4,
-    textAlign: 'center' as const,
-  },
-  minimalAge: {
-    fontSize: 15,
-    fontWeight: '500' as const,
-    color: '#6366F1',
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 8,
   },
-  minimalEmail: {
+  userName: {
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 0.36,
+  },
+  userEmail: {
+    fontSize: 15,
+    fontWeight: '400',
+    letterSpacing: -0.24,
+  },
+  premiumCard: {
+    marginTop: 20,
+    marginBottom: 32,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#FF6B35',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  premiumGradient: {
+    padding: 20,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  premiumContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+  },
+  premiumIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  premiumTextContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  premiumTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 3,
+    letterSpacing: 0.38,
+  },
+  premiumSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: -0.15,
+  },
+  section: {
+    marginBottom: 40,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.08,
+    marginBottom: 12,
+    textAlign: 'right',
+    textTransform: 'uppercase',
+  },
+  familyCard: {
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  familyCardHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  familyCardHeaderLeft: {
+    alignItems: 'flex-end',
+    flex: 1,
+  },
+  familyName: {
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 3,
+    letterSpacing: -0.41,
+  },
+  familyMembersCount: {
     fontSize: 13,
-    color: '#9CA3AF',
-    fontWeight: '500' as const,
+    fontWeight: '400',
+    letterSpacing: -0.08,
+  },
+  editFamilyButton: {
+    padding: 6,
+  },
+  userStatusRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+  },
+  userStatusLeft: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  userStatusBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userStatusBadgeText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  userStatusInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  userStatusName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+    letterSpacing: -0.24,
+  },
+  userStatusRole: {
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: -0.08,
+  },
+  listContainer: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  listItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    minHeight: 56,
+  },
+  listItemFirst: {
+    paddingTop: 18,
+  },
+  listItemLast: {
+    paddingBottom: 18,
+  },
+  listDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 20,
+    marginRight: 20,
+  },
+  listItemIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  listItemText: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '400',
+    letterSpacing: -0.41,
+    textAlign: 'right',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  modalIconContainer: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#FF6B35',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 6,
+    letterSpacing: 0.36,
+  },
+  modalSubtitle: {
+    fontSize: 15,
+    fontWeight: '400',
+    letterSpacing: -0.24,
+  },
+  plansContainer: {
+    flexDirection: 'row-reverse',
+    gap: 12,
+    marginBottom: 28,
+  },
+  planCard: {
+    flex: 1,
+    padding: 18,
+    borderRadius: 18,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  planBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  planBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.07,
+  },
+  planDuration: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 6,
+    letterSpacing: -0.24,
+  },
+  planPrice: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 4,
+    letterSpacing: 0.36,
+  },
+  planPer: {
+    fontSize: 13,
+    fontWeight: '400',
+    letterSpacing: -0.08,
+  },
+  featuresContainer: {
+    gap: 14,
+    marginBottom: 28,
+  },
+  featureRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  featureText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '400',
+    letterSpacing: -0.32,
+  },
+  subscribeButton: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 12,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  subscribeButtonGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  subscribeButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: -0.41,
+  },
+  closeButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  closeButtonText: {
+    fontSize: 17,
+    fontWeight: '400',
+    letterSpacing: -0.41,
   },
 });

@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Share, Alert, ActivityIndicator, StatusBar, RefreshControl } from 'react-native';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Share, Alert, ActivityIndicator, StatusBar, RefreshControl, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -30,9 +30,11 @@ import MilestonesModal from '../components/Home/MilestonesModal';
 import AddCustomActionModal, { CustomAction } from '../components/Home/AddCustomActionModal';
 import { JoinFamilyModal } from '../components/Family/JoinFamilyModal';
 import MagicMomentsModal from '../components/Home/MagicMomentsModal';
+import { EditBasicInfoModal } from '../components/Profile';
 
 // Services
-import { auth } from '../services/firebaseConfig';
+import { auth, db } from '../services/firebaseConfig';
+import { doc, updateDoc } from 'firebase/firestore';
 import { saveEventToFirebase, formatTimeFromTimestamp } from '../services/firebaseService';
 
 // Types
@@ -97,6 +99,28 @@ export default function HomeScreen({ navigation }: any) {
     const [refreshing, setRefreshing] = useState(false);
     const [timelineRefresh, setTimelineRefresh] = useState(0);
     const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+    const [editingChild, setEditingChild] = useState<any>(null);
+    const [isEditChildModalOpen, setIsEditChildModalOpen] = useState(false);
+
+    // Staggered entrance animations
+    const headerAnim = useRef(new Animated.Value(0)).current;
+    const quickActionsAnim = useRef(new Animated.Value(0)).current;
+    const timelineAnim = useRef(new Animated.Value(0)).current;
+
+    // Trigger entrance animations on mount and when screen comes into focus
+    useEffect(() => {
+        // Reset animations
+        headerAnim.setValue(0);
+        quickActionsAnim.setValue(0);
+        timelineAnim.setValue(0);
+
+        // Run staggered animation sequence
+        Animated.stagger(150, [
+            Animated.timing(headerAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+            Animated.timing(quickActionsAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+            Animated.timing(timelineAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        ]).start();
+    }, [profile.id]);
 
     const user = auth.currentUser;
 
@@ -211,70 +235,92 @@ export default function HomeScreen({ navigation }: any) {
                 {/* When HAVE baby profile - show full home screen */}
                 {profile.id && (
                     <>
-                        <HeaderSection
-                            greeting={greeting}
-                            profile={profile}
-                            onProfileUpdate={onRefresh}
-                            dynamicStyles={dynamicStyles}
-                            dailyStats={dailyStats}
-                            lastFeedTime={lastFeedTime}
-                            lastSleepTime={lastSleepTime}
-                            meds={meds}
-                            navigation={navigation}
-                            onAddChild={() => navigation.navigate('CreateBaby')}
-                            onJoinWithCode={() => setIsJoinModalOpen(true)}
-                        />
+                        {/* Animated Header */}
+                        <Animated.View style={{
+                            opacity: headerAnim,
+                            transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }]
+                        }}>
+                            <HeaderSection
+                                greeting={greeting}
+                                profile={profile}
+                                onProfileUpdate={onRefresh}
+                                dynamicStyles={dynamicStyles}
+                                dailyStats={dailyStats}
+                                lastFeedTime={lastFeedTime}
+                                lastSleepTime={lastSleepTime}
+                                meds={meds}
+                                navigation={navigation}
+                                onAddChild={() => navigation.navigate('CreateBaby')}
+                                onJoinWithCode={() => setIsJoinModalOpen(true)}
+                                onEditChild={(child) => {
+                                    setEditingChild(child);
+                                    setIsEditChildModalOpen(true);
+                                }}
+                            />
+                        </Animated.View>
 
-                        <QuickActions
-                            lastFeedTime={lastFeedTime}
-                            lastSleepTime={lastSleepTime}
-                            onFoodPress={() => setTrackingModalType('food')}
-                            onSleepPress={() => setTrackingModalType('sleep')}
-                            onDiaperPress={() => setTrackingModalType('diaper')}
-                            onWhiteNoisePress={() => setIsWhiteNoiseOpen(true)}
-                            onSOSPress={() => setIsCalmModeOpen(true)}
-                            onSupplementsPress={() => setIsSupplementsOpen(true)}
-                            onHealthPress={() => setIsHealthOpen(true)}
-                            onGrowthPress={() => setIsGrowthOpen(true)}
-                            onMilestonesPress={() => setIsMilestonesOpen(true)}
-                            onMagicMomentsPress={() => setIsMagicMomentsOpen(true)}
-                            onCustomPress={() => setIsAddCustomOpen(true)}
-                            onFoodTimerStop={async (seconds, timerType) => {
-                                const mins = Math.floor(seconds / 60);
-                                const secs = seconds % 60;
-                                const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-                                const subTypeMap: Record<string, string> = {
-                                    'breast_left': 'breast',
-                                    'breast_right': 'breast',
-                                    'pumping': 'pumping'
-                                };
-                                const subType = subTypeMap[timerType] || 'breast';
-                                const side = timerType === 'breast_left' ? 'שמאל' : timerType === 'breast_right' ? 'ימין' : '';
-                                await handleSaveTracking({
-                                    type: 'food',
-                                    subType,
-                                    note: side ? `${side}: ${timeStr}` : `זמן: ${timeStr}`,
-                                    timestamp: new Date()
-                                });
-                            }}
-                            onSleepTimerStop={async (seconds) => {
-                                const mins = Math.floor(seconds / 60);
-                                const secs = seconds % 60;
-                                const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-                                await handleSaveTracking({
-                                    type: 'sleep',
-                                    note: `משך שינה: ${timeStr}`,
-                                    duration: seconds,
-                                    timestamp: new Date()
-                                });
-                            }}
-                            meds={meds}
-                            dynamicStyles={dynamicStyles}
-                        />
+                        {/* Animated Quick Actions */}
+                        <Animated.View style={{
+                            opacity: quickActionsAnim,
+                            transform: [{ translateY: quickActionsAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }]
+                        }}>
+                            <QuickActions
+                                lastFeedTime={lastFeedTime}
+                                lastSleepTime={lastSleepTime}
+                                onFoodPress={() => setTrackingModalType('food')}
+                                onSleepPress={() => setTrackingModalType('sleep')}
+                                onDiaperPress={() => setTrackingModalType('diaper')}
+                                onWhiteNoisePress={() => setIsWhiteNoiseOpen(true)}
+                                onSOSPress={() => setIsCalmModeOpen(true)}
+                                onSupplementsPress={() => setIsSupplementsOpen(true)}
+                                onHealthPress={() => setIsHealthOpen(true)}
+                                onGrowthPress={() => setIsGrowthOpen(true)}
+                                onMilestonesPress={() => setIsMilestonesOpen(true)}
+                                onMagicMomentsPress={() => setIsMagicMomentsOpen(true)}
+                                onCustomPress={() => setIsAddCustomOpen(true)}
+                                onFoodTimerStop={async (seconds, timerType) => {
+                                    const mins = Math.floor(seconds / 60);
+                                    const secs = seconds % 60;
+                                    const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                                    const subTypeMap: Record<string, string> = {
+                                        'breast_left': 'breast',
+                                        'breast_right': 'breast',
+                                        'pumping': 'pumping'
+                                    };
+                                    const subType = subTypeMap[timerType] || 'breast';
+                                    const side = timerType === 'breast_left' ? 'שמאל' : timerType === 'breast_right' ? 'ימין' : '';
+                                    await handleSaveTracking({
+                                        type: 'food',
+                                        subType,
+                                        note: side ? `${side}: ${timeStr}` : `זמן: ${timeStr}`,
+                                        timestamp: new Date()
+                                    });
+                                }}
+                                onSleepTimerStop={async (seconds) => {
+                                    const mins = Math.floor(seconds / 60);
+                                    const secs = seconds % 60;
+                                    const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                                    await handleSaveTracking({
+                                        type: 'sleep',
+                                        note: `משך שינה: ${timeStr}`,
+                                        duration: seconds,
+                                        timestamp: new Date()
+                                    });
+                                }}
+                                meds={meds}
+                                dynamicStyles={dynamicStyles}
+                            />
+                        </Animated.View>
 
                         <HealthCard dynamicStyles={dynamicStyles} visible={isHealthOpen} onClose={() => setIsHealthOpen(false)} />
 
-                        <DailyTimeline refreshTrigger={timelineRefresh} childId={profile.id} />
+                        {/* Animated Timeline */}
+                        <Animated.View style={{
+                            opacity: timelineAnim,
+                            transform: [{ translateY: timelineAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }]
+                        }}>
+                            <DailyTimeline refreshTrigger={timelineRefresh} childId={profile.id} />
+                        </Animated.View>
 
                         <ShareStatusButton onShare={shareStatus} message={shareMessage} />
                     </>
@@ -313,6 +359,34 @@ export default function HomeScreen({ navigation }: any) {
                     onRefresh();
                 }}
             />
+            {editingChild && (
+                <EditBasicInfoModal
+                    visible={isEditChildModalOpen}
+                    initialData={{
+                        name: editingChild.childName || '',
+                        gender: editingChild.gender || 'boy',
+                        birthDate: editingChild.birthDate ? new Date(editingChild.birthDate) : new Date(),
+                        photoUrl: editingChild.photoUrl,
+                    }}
+                    onSave={async (data) => {
+                        try {
+                            await updateDoc(doc(db, 'children', editingChild.childId), {
+                                name: data.name,
+                                gender: data.gender,
+                                birthDate: data.birthDate,
+                                photoUrl: data.photoUrl || null,
+                            });
+                            onRefresh();
+                        } catch (e) {
+                            console.error('Failed to update child:', e);
+                        }
+                    }}
+                    onClose={() => {
+                        setIsEditChildModalOpen(false);
+                        setEditingChild(null);
+                    }}
+                />
+            )}
             <MagicMomentsModal
                 visible={isMagicMomentsOpen}
                 onClose={() => setIsMagicMomentsOpen(false)}

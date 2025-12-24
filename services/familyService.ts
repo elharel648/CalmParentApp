@@ -320,6 +320,32 @@ export const regenerateInviteCode = async (): Promise<string | null> => {
 };
 
 /**
+ * Rename the family (admin only)
+ */
+export const renameFamily = async (newName: string): Promise<boolean> => {
+    const userId = getCurrentUserId();
+    if (!userId) return false;
+
+    try {
+        const family = await getMyFamily();
+        if (!family) return false;
+
+        if (family.members[userId]?.role !== 'admin') {
+            return false;
+        }
+
+        await updateDoc(doc(db, 'families', family.id), {
+            babyName: newName.trim(),
+        });
+
+        return true;
+    } catch (error) {
+        if (__DEV__) console.log('Error renaming family:', error);
+        return false;
+    }
+};
+
+/**
  * Update member role (admin only)
  */
 export const updateMemberRole = async (memberUserId: string, newRole: FamilyRole): Promise<boolean> => {
@@ -619,6 +645,7 @@ export default {
     leaveFamily,
     removeMember,
     regenerateInviteCode,
+    renameFamily,
     updateMemberRole,
     subscribeToFamily,
     getFamilyMembers,

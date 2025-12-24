@@ -29,8 +29,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>calmparentapp</string>
-          <string>com.harel.calmparentapp</string>
+          <string>fb1567376814402845</string>
         </array>
       </dict>
       <dict>
@@ -39,9 +38,21 @@
           <string>com.googleusercontent.apps.16421819020-muvdskd7ppjnfcrnal4lsra01pqjr505</string>
         </array>
       </dict>
+      <dict>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>calmparentapp</string>
+        </array>
+      </dict>
     </array>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>FacebookAppID</key>
+    <string>1567376814402845</string>
+    <key>FacebookClientToken</key>
+    <string>c2be86c713add9c46c10f5b716deb396</string>
+    <key>FacebookDisplayName</key>
+    <string>CalmParent</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>LSMinimumSystemVersion</key>

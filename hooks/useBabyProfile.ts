@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, ActionSheetIOS, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
@@ -116,10 +116,33 @@ export const useBabyProfile = (childId?: string): UseBabyProfileReturn => {
         setBaby(prev => prev ? { ...prev, ...updates } : null);
     }, [baby?.id]);
 
-    const updatePhoto = useCallback(async (type: 'profile' | 'album', monthIndex?: number) => {
+    const openSettings = useCallback(() => {
+        if (Platform.OS === 'ios') {
+            Linking.openURL('app-settings:');
+        } else {
+            Linking.openSettings();
+        }
+    }, []);
+
+    const handlePermissionDenied = useCallback((permissionType: 'camera' | 'gallery') => {
+        const message = permissionType === 'camera'
+            ? 'נדרשת הרשאת מצלמה כדי לצלם תמונה'
+            : 'נדרשת הרשאת גלריה כדי לבחור תמונה';
+
+        Alert.alert(
+            'חובה לאשר הרשאות',
+            message,
+            [
+                { text: 'ביטול', style: 'cancel' },
+                { text: 'פתח הגדרות', onPress: openSettings }
+            ]
+        );
+    }, [openSettings]);
+
+    const pickImageFromLibrary = useCallback(async (type: 'profile' | 'album', monthIndex?: number) => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('שגיאה', 'חובה אישור לגלריה');
+            handlePermissionDenied('gallery');
             return;
         }
 
@@ -131,6 +154,27 @@ export const useBabyProfile = (childId?: string): UseBabyProfileReturn => {
             base64: true,
         });
 
+        return result;
+    }, [handlePermissionDenied]);
+
+    const takePhotoWithCamera = useCallback(async (type: 'profile' | 'album') => {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+            handlePermissionDenied('camera');
+            return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: type === 'profile' ? [1, 1] : [3, 4],
+            quality: 0.3,
+            base64: true,
+        });
+
+        return result;
+    }, [handlePermissionDenied]);
+
+    const processImage = useCallback(async (result: ImagePicker.ImagePickerResult, type: 'profile' | 'album', monthIndex?: number) => {
         if (!result.canceled && result.assets[0].base64 && baby?.id) {
             setSavingImage(true);
             const base64Img = `data:image/jpeg;base64,${result.assets[0].base64}`;
@@ -157,6 +201,52 @@ export const useBabyProfile = (childId?: string): UseBabyProfileReturn => {
             }
         }
     }, [baby?.id]);
+
+    const updatePhoto = useCallback(async (type: 'profile' | 'album', monthIndex?: number) => {
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    options: ['ביטול', 'צלם תמונה', 'בחר מהגלריה'],
+                    cancelButtonIndex: 0,
+                    title: 'בחר מקור תמונה',
+                },
+                async (buttonIndex) => {
+                    if (buttonIndex === 1) {
+                        // Camera
+                        const result = await takePhotoWithCamera(type);
+                        if (result) await processImage(result, type, monthIndex);
+                    } else if (buttonIndex === 2) {
+                        // Gallery
+                        const result = await pickImageFromLibrary(type, monthIndex);
+                        if (result) await processImage(result, type, monthIndex);
+                    }
+                }
+            );
+        } else {
+            // Android - use Alert for action sheet
+            Alert.alert(
+                'בחר מקור תמונה',
+                '',
+                [
+                    { text: 'ביטול', style: 'cancel' },
+                    {
+                        text: 'צלם תמונה',
+                        onPress: async () => {
+                            const result = await takePhotoWithCamera(type);
+                            if (result) await processImage(result, type, monthIndex);
+                        }
+                    },
+                    {
+                        text: 'בחר מהגלריה',
+                        onPress: async () => {
+                            const result = await pickImageFromLibrary(type, monthIndex);
+                            if (result) await processImage(result, type, monthIndex);
+                        }
+                    },
+                ]
+            );
+        }
+    }, [takePhotoWithCamera, pickImageFromLibrary, processImage]);
 
     const updateAlbumNote = useCallback(async (month: number, note: string) => {
         if (!baby?.id) return;

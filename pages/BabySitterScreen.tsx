@@ -71,6 +71,15 @@ const BabySitterScreen = ({ navigation }: any) => {
         }, [userMode])
     );
 
+    // Navigate directly to dashboard when sitter mode selected and user is registered
+    useEffect(() => {
+        if (userMode === 'sitter' && isSitterRegistered === true && !checkingStatus) {
+            navigation.navigate('SitterDashboard');
+            // Reset to parent mode so when they come back, they see parent view
+            setUserMode('parent');
+        }
+    }, [userMode, isSitterRegistered, checkingStatus]);
+
     // Refresh handler
     const onRefresh = useCallback(async () => {
         setRefreshing(true);

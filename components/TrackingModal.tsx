@@ -417,10 +417,35 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
             >
               <Minus size={20} color="#374151" strokeWidth={1.5} />
             </TouchableOpacity>
-            <View style={styles.amountDisplay}>
+            <TouchableOpacity
+              style={styles.amountDisplay}
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                if (Platform.OS === 'ios') {
+                  const Alert = require('react-native').Alert;
+                  Alert.prompt(
+                    'הזן כמות',
+                    'כמה מ"ל אכלנו?',
+                    [
+                      { text: 'ביטול', style: 'cancel' },
+                      {
+                        text: 'אישור', onPress: (value: string) => {
+                          const num = parseInt(value);
+                          if (!isNaN(num) && num >= 0) setAmount(num.toString());
+                        }
+                      },
+                    ],
+                    'plain-text',
+                    amount || '0',
+                    'number-pad'
+                  );
+                }
+              }}
+              activeOpacity={0.7}
+            >
               <Text style={styles.amountValue}>{amount || '0'}</Text>
               <Text style={styles.amountUnit}>מ"ל</Text>
-            </View>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.amountBtn}
               onPress={() => {
@@ -505,10 +530,35 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
               >
                 <Minus size={22} color="#6366F1" strokeWidth={2} />
               </TouchableOpacity>
-              <View style={styles.pumpingAmountDisplayLarge}>
+              <TouchableOpacity
+                style={styles.pumpingAmountDisplayLarge}
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  if (Platform.OS === 'ios') {
+                    const Alert = require('react-native').Alert;
+                    Alert.prompt(
+                      'הזן כמות',
+                      'כמה מ"ל נשאב?',
+                      [
+                        { text: 'ביטול', style: 'cancel' },
+                        {
+                          text: 'אישור', onPress: (value: string) => {
+                            const num = parseInt(value);
+                            if (!isNaN(num) && num >= 0) setAmount(num.toString());
+                          }
+                        },
+                      ],
+                      'plain-text',
+                      amount || '0',
+                      'number-pad'
+                    );
+                  }
+                }}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.pumpingAmountValueLarge}>{amount || '0'}</Text>
                 <Text style={styles.pumpingAmountUnitLarge}>מ"ל</Text>
-              </View>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.pumpingAmountBtnLarge}
                 onPress={() => {

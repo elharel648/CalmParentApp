@@ -18,13 +18,14 @@ import {
 import {
     Shield, User, Camera, Clock, CreditCard,
     ChevronLeft, ChevronRight, Check, Plus, Minus, X,
-    Facebook, Instagram
+    Facebook, Instagram, Loader
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../context/ThemeContext';
 import { auth, db } from '../services/firebaseConfig';
 import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { loginWithFacebook } from '../services/facebookService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -104,19 +105,42 @@ const SitterRegistrationScreen = ({ navigation }: any) => {
     };
 
     // Social connect handlers
+    const [fbLoading, setFbLoading] = useState(false);
+    const [igLoading, setIgLoading] = useState(false);
+
     const connectFacebook = async () => {
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        // TODO: Implement Facebook OAuth
-        Alert.alert('חיבור פייסבוק', 'כאן תהיה התחברות לפייסבוק', [
-            { text: 'סימולציה - מחובר', onPress: () => setFbConnected(true) }
-        ]);
+        setFbLoading(true);
+
+        try {
+            const result = await loginWithFacebook();
+
+            if (result.success) {
+                setFbConnected(true);
+                if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert('מחובר!', `שלום ${result.user?.name || 'משתמש'}! פייסבוק מחובר בהצלחה`);
+            } else {
+                Alert.alert('שגיאה', result.error || 'התחברות נכשלה');
+            }
+        } catch (error) {
+            Alert.alert('שגיאה', 'לא ניתן להתחבר לפייסבוק');
+        } finally {
+            setFbLoading(false);
+        }
     };
 
     const connectInstagram = async () => {
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        Alert.alert('חיבור אינסטגרם', 'כאן תהיה התחברות לאינסטגרם', [
-            { text: 'סימולציה - מחובר', onPress: () => setIgConnected(true) }
-        ]);
+        // Instagram Basic Display API requires same Facebook App
+        // For now, we'll show that FB connection also verifies identity
+        Alert.alert(
+            'אימות אינסטגרם',
+            'כרגע אנחנו משתמשים בפייסבוק לאימות. רוצה להתחבר עם פייסבוק?',
+            [
+                { text: 'לא', style: 'cancel' },
+                { text: 'התחבר עם פייסבוק', onPress: connectFacebook }
+            ]
+        );
     };
 
     // Media handlers

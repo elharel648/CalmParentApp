@@ -21,6 +21,7 @@ import SettingsScreen from './pages/SettingsScreen';
 import FullSettingsScreen from './pages/FullSettingsScreen';
 import LoginScreen from './pages/LoginScreen';
 import BabyProfileScreen from './pages/BabyProfileScreen';
+import NotificationsScreen from './pages/NotificationsScreen';
 
 // מסכי הבייביסיטר
 import BabySitterScreen from './pages/BabySitterScreen';
@@ -121,40 +122,40 @@ function MainAppNavigator() {
         tabBarInactiveTintColor: theme.textSecondary,
         tabBarBackground: () => (
           <View style={[StyleSheet.absoluteFill, { borderRadius: 32, overflow: 'hidden' }]}>
-            {/* Dark translucent glass background - Apple style */}
+            {/* Apple-style liquid glass background */}
             <BlurView
-              intensity={isDarkMode ? 80 : 60}
-              tint={isDarkMode ? 'systemChromeMaterialDark' : 'systemChromeMaterial'}
+              intensity={isDarkMode ? 100 : 80}
+              tint={isDarkMode ? 'systemUltraThinMaterialDark' : 'systemUltraThinMaterial'}
               style={StyleSheet.absoluteFill}
             />
-            {/* Semi-transparent overlay for depth */}
+            {/* Frosted glass overlay for depth */}
             <View style={{
               ...StyleSheet.absoluteFillObject,
               backgroundColor: isDarkMode
-                ? 'rgba(0, 0, 0, 0.35)'
-                : 'rgba(255, 255, 255, 0.45)',
+                ? 'rgba(30, 30, 30, 0.55)'
+                : 'rgba(255, 255, 255, 0.65)',
             }} />
-            {/* Top edge glow - glass reflection */}
+            {/* Top edge highlight - glass reflection */}
             <View style={{
               position: 'absolute',
               top: 0,
-              left: 16,
-              right: 16,
-              height: 0.5,
+              left: 20,
+              right: 20,
+              height: 1,
               backgroundColor: isDarkMode
-                ? 'rgba(255, 255, 255, 0.15)'
-                : 'rgba(255, 255, 255, 0.95)',
+                ? 'rgba(255, 255, 255, 0.20)'
+                : 'rgba(255, 255, 255, 0.98)',
             }} />
-            {/* Inner glow for premium feel */}
+            {/* Subtle gradient glow */}
             <View style={{
               position: 'absolute',
-              top: 1,
+              top: 0,
               left: 0,
               right: 0,
-              height: 24,
+              height: 28,
               backgroundColor: isDarkMode
-                ? 'rgba(255, 255, 255, 0.03)'
-                : 'rgba(255, 255, 255, 0.25)',
+                ? 'rgba(255, 255, 255, 0.04)'
+                : 'rgba(255, 255, 255, 0.35)',
             }} />
           </View>
         ),
@@ -189,8 +190,8 @@ function MainAppNavigator() {
 
       {/* Reports - only for parents */}
       {canAccessReports && (
-        <Tab.Screen name="דוחות" component={ReportsScreen} options={{
-          tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={BarChart2} label="דוחות" />
+        <Tab.Screen name="סטטיסטיקות" component={ReportsScreen} options={{
+          tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={BarChart2} label="סטטיסטיקות" />
         }} />
       )}
 
@@ -217,6 +218,7 @@ function HomeStackScreen() {
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="Home" component={HomeScreen} />
       <HomeStack.Screen name="CreateBaby" component={CreateBabyScreen} />
+      <HomeStack.Screen name="Notifications" component={NotificationsScreen} />
     </HomeStack.Navigator>
   );
 }

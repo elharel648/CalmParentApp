@@ -17,7 +17,6 @@ service cloud.firestore {
     // USERS COLLECTION
     // ===================
     match /users/{userId} {
-      // Users can only read/write their own document
       allow read, write: if isOwner(userId);
     }
 
@@ -25,10 +24,23 @@ service cloud.firestore {
     // FAMILIES COLLECTION
     // ===================
     match /families/{familyId} {
-      // Authenticated users can read/create/update families
-      allow read, create, update: if isAuthenticated();
-      // Only delete if you're a member (basic protection)
-      allow delete: if isAuthenticated();
+      // Read: creator or member
+      allow read: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.members[request.auth.uid] != null
+      );
+      
+      // Create: any authenticated
+      allow create: if isAuthenticated();
+      
+      // Update: creator or member
+      allow update: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.members[request.auth.uid] != null
+      );
+      
+      // Delete: only creator
+      allow delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
       
       // Presence subcollection
       match /presence/{memberId} {
@@ -40,28 +52,46 @@ service cloud.firestore {
     // BABIES COLLECTION
     // ===================
     match /babies/{babyId} {
-      // Authenticated users can read babies
+      // Read: parent OR any authenticated user who might be in family
+      // (Simplified to avoid blocking access)
       allow read: if isAuthenticated();
-      // Only parent or authenticated user can write
-      allow write: if isAuthenticated();
-      allow create: if isAuthenticated();
+      
+      // Create: authenticated with parentId matching
+      allow create: if isAuthenticated() && request.resource.data.parentId == request.auth.uid;
+      
+      // Update: parent
+      allow update: if isAuthenticated() && (
+        resource.data.parentId == request.auth.uid
+      );
+      
+      // Delete: only parent
+      allow delete: if isAuthenticated() && resource.data.parentId == request.auth.uid;
     }
 
     // ===================
     // EVENTS COLLECTION
     // ===================
     match /events/{eventId} {
-      // Authenticated users can read/create events
-      allow read, create: if isAuthenticated();
-      // Only creator can update/delete (if creatorId exists)
-      allow update, delete: if isAuthenticated();
+      // Read: any authenticated (filtering done client-side by childId)
+      allow read: if isAuthenticated();
+      
+      // Create: any authenticated
+      allow create: if isAuthenticated();
+      
+      // Update/Delete: creator
+      allow update, delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.creatorId == request.auth.uid
+      );
     }
 
     // ===================
     // INVITES COLLECTION
     // ===================
     match /invites/{inviteCode} {
-      allow read, create, update: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
       allow delete: if false;
     }
 
@@ -69,8 +99,33 @@ service cloud.firestore {
     // PRESENCE COLLECTION
     // ===================
     match /presence/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == docId;
+    }
+
+    // ===================
+    // SITTERS COLLECTION
+    // ===================
+    match /sitters/{sitterId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == sitterId;
+      allow update, delete: if isAuthenticated() && request.auth.uid == sitterId;
+    }
+
+    // ===================
+    // BOOKINGS COLLECTION
+    // ===================
+    match /bookings/{bookingId} {
+      allow read: if isAuthenticated() && (
+        resource.data.parentId == request.auth.uid ||
+        resource.data.sitterId == request.auth.uid
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.parentId == request.auth.uid ||
+        resource.data.sitterId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && resource.data.parentId == request.auth.uid;
     }
   }
 }
-

@@ -8,9 +8,11 @@ import {
     TextInput,
     Platform,
     Alert,
+    Image,
 } from 'react-native';
-import { X, Check, Calendar } from 'lucide-react-native';
+import { X, Check, Calendar, Camera, User } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
 
 interface EditBasicInfoModalProps {
     visible: boolean;
@@ -18,8 +20,9 @@ interface EditBasicInfoModalProps {
         name: string;
         gender: 'boy' | 'girl' | 'other';
         birthDate: Date;
+        photoUrl?: string;
     };
-    onSave: (data: { name: string; gender: 'boy' | 'girl' | 'other'; birthDate: Date }) => void;
+    onSave: (data: { name: string; gender: 'boy' | 'girl' | 'other'; birthDate: Date; photoUrl?: string }) => void;
     onClose: () => void;
 }
 
@@ -37,6 +40,7 @@ export default function EditBasicInfoModal({
 }: EditBasicInfoModalProps) {
     const [name, setName] = useState(initialData.name);
     const [gender, setGender] = useState<'boy' | 'girl' | 'other'>(initialData.gender);
+    const [photoUrl, setPhotoUrl] = useState<string | undefined>(initialData.photoUrl);
     const [birthDate, setBirthDate] = useState(() => {
         // Ensure valid initial date
         const date = initialData.birthDate;
@@ -62,6 +66,7 @@ export default function EditBasicInfoModal({
         if (visible) {
             setName(initialData.name);
             setGender(initialData.gender);
+            setPhotoUrl(initialData.photoUrl);
             setBirthDate(ensureValidDate(initialData.birthDate));
         }
     }, [visible, initialData]);
@@ -71,8 +76,25 @@ export default function EditBasicInfoModal({
             Alert.alert('שגיאה', 'יש להזין שם');
             return;
         }
-        onSave({ name: name.trim(), gender, birthDate });
+        onSave({ name: name.trim(), gender, birthDate, photoUrl });
         onClose();
+    };
+
+    const handlePickPhoto = async () => {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+            Alert.alert('שגיאה', 'נדרשת הרשאה לגלריה');
+            return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+        if (!result.canceled && result.assets[0].uri) {
+            setPhotoUrl(result.assets[0].uri);
+        }
     };
 
     const handleDateChange = (event: any, selectedDate?: Date) => {
@@ -101,6 +123,23 @@ export default function EditBasicInfoModal({
 
                     {/* Content */}
                     <View style={styles.content}>
+                        {/* Photo */}
+                        <View style={styles.photoSection}>
+                            <TouchableOpacity style={styles.photoContainer} onPress={handlePickPhoto}>
+                                {photoUrl ? (
+                                    <Image source={{ uri: photoUrl }} style={styles.photo} />
+                                ) : (
+                                    <View style={styles.photoPlaceholder}>
+                                        <User size={40} color="#9CA3AF" />
+                                    </View>
+                                )}
+                                <View style={styles.cameraBadge}>
+                                    <Camera size={14} color="#fff" />
+                                </View>
+                            </TouchableOpacity>
+                            <Text style={styles.photoHint}>לחץ לשינוי תמונה</Text>
+                        </View>
+
                         {/* Name */}
                         <View style={styles.field}>
                             <Text style={styles.label}>שם הילד</Text>
@@ -281,5 +320,51 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '700',
+    },
+    photoSection: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 24,
+        paddingTop: 8,
+    },
+    photoContainer: {
+        position: 'relative',
+        width: 120,
+        height: 120,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    photo: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+    },
+    photoPlaceholder: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: '#F3F4F6',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: '#E5E7EB',
+    },
+    cameraBadge: {
+        position: 'absolute',
+        bottom: 4,
+        right: 4,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#6366F1',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 3,
+        borderColor: '#fff',
+    },
+    photoHint: {
+        marginTop: 12,
+        fontSize: 13,
+        color: '#6B7280',
     },
 });

@@ -178,7 +178,8 @@ export const getLastEvent = async (childId: string, eventType: 'food' | 'sleep' 
   }
 };
 
-// 💡 Query ONLY by childId - this is the correct behavior for per-child data
+// 💡 Query ONLY by childId - shows TODAY's events only for daily timeline
+// ⚡ OPTIMIZED: Server-side ordering and date filter
 export const getRecentHistory = async (childId: string, _creatorId?: string) => {
   if (!childId) {
     return [];
@@ -187,12 +188,18 @@ export const getRecentHistory = async (childId: string, _creatorId?: string) => 
   try {
     const eventsRef = collection(db, EVENTS_COLLECTION);
 
-    // Query ONLY by childId - each child has their own events
-    // Note: No orderBy to avoid composite index requirement
+    // Get start of today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfToday = Timestamp.fromDate(today);
+
+    // Query only today's events
     const q = query(
       eventsRef,
       where('childId', '==', childId),
-      limit(50)
+      where('timestamp', '>=', startOfToday),
+      orderBy('timestamp', 'desc'),
+      limit(50) // Allow more events for a single day
     );
 
     const snapshot = await getDocs(q);
@@ -205,11 +212,8 @@ export const getRecentHistory = async (childId: string, _creatorId?: string) => 
       };
     });
 
-    // Sort client-side (newest first)
-    events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
-    // Return top 30
-    return events.slice(0, 30);
+    // Already sorted by server, return directly
+    return events;
   } catch {
     return [];
   }

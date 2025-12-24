@@ -1,15 +1,27 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as Location from 'expo-location';
 
+interface Coordinates {
+    latitude: number;
+    longitude: number;
+}
+
+interface UseLocationReturn {
+    address: string;
+    coordinates: Coordinates | null;
+    isLoading: boolean;
+    error: string | null;
+    refetch: () => Promise<void>;
+}
+
 /**
  * Custom Hook לניהול מיקום משתמש
- * @returns {Object} { address, coordinates, isLoading, error, refetch }
  */
-const useLocation = () => {
+const useLocation = (): UseLocationReturn => {
     const [address, setAddress] = useState('מאתר מיקום...');
-    const [coordinates, setCoordinates] = useState(null);
+    const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     const fetchLocation = useCallback(async () => {
         setIsLoading(true);
@@ -52,7 +64,7 @@ const useLocation = () => {
                 setAddress('מיקום נוכחי');
             }
         } catch (err) {
-            console.error('Location error:', err);
+            if (__DEV__) console.error('Location error:', err);
             setError('שגיאה באיתור מיקום');
             setAddress('לא ניתן לאתר מיקום');
         } finally {

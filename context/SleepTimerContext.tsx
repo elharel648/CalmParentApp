@@ -67,13 +67,11 @@ export const SleepTimerProvider = ({ children }: SleepTimerProviderProps) => {
             try {
                 const activityId = LiveActivity.startActivity(
                     {
-                        title: 'שינה',
-                        subtitle: 'התינוק ישן',
+                        title: '😴 שינה',
+                        subtitle: '',
                         progressBar: {
-                            date: Date.now() + (8 * 60 * 60 * 1000), // 8 hours max
+                            date: Date.now(), // Start time for count-up
                         },
-                        imageName: 'sleep',
-                        dynamicIslandImageName: 'sleep',
                     },
                     {
                         backgroundColor: '#6366F1',

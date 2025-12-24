@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useRef, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Animated } from 'react-native';
 import { Utensils, Moon, Droplets, Music, Heart, Pill, Check, Timer, Plus, HeartPulse, Pause, TrendingUp, Award, Sparkles, Pencil } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
@@ -228,7 +228,7 @@ const QuickActions = memo<QuickActionsProps>(({
         actionOrder.filter(key => !hiddenActions.includes(key)),
         [actionOrder, hiddenActions]);
 
-    // Single action button component - Circular minimalist design
+    // Single action button component - Circular minimalist design with Scale & Bounce
     const ActionButton = ({
         config,
         onPress,
@@ -245,63 +245,86 @@ const QuickActions = memo<QuickActionsProps>(({
         badge?: string;
     }) => {
         const Icon = config.icon;
+        const scaleAnim = useRef(new Animated.Value(1)).current;
+
+        const handlePressIn = () => {
+            Animated.spring(scaleAnim, {
+                toValue: 0.92,
+                friction: 4,
+                tension: 200,
+                useNativeDriver: true,
+            }).start();
+        };
+
+        const handlePressOut = () => {
+            Animated.spring(scaleAnim, {
+                toValue: 1,
+                friction: 3,
+                tension: 100,
+                useNativeDriver: true,
+            }).start();
+        };
 
         return (
-            <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => handlePress(onPress)}
-                activeOpacity={0.7}
-            >
-                {/* Liquid Glass Circle */}
-                <View style={[
-                    styles.iconCircle,
-                    isActive && { backgroundColor: config.color },
-                    (config as any).hasBorder && { borderColor: 'rgba(255,255,255,0.3)', borderWidth: 1.5, borderStyle: 'dashed' }
-                ]}>
-                    {!isActive && Platform.OS === 'ios' && (
-                        <BlurView
-                            intensity={40}
-                            tint="systemChromeMaterialLight"
-                            style={StyleSheet.absoluteFill}
-                        />
-                    )}
-                    {!isActive && (
-                        <View style={{
-                            ...StyleSheet.absoluteFillObject,
-                            backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                            borderRadius: 30,
-                        }} />
-                    )}
-                    {isActive ? (
-                        <Pause size={22} color="#fff" strokeWidth={2.5} />
-                    ) : (
-                        <Icon size={22} color={config.color} strokeWidth={2} />
-                    )}
-                </View>
-
-                {/* Label */}
-                <Text style={[styles.actionLabel, { color: theme.textPrimary }]} numberOfLines={2}>
-                    {isActive ? config.activeLabel : config.label}
-                </Text>
-
-                {/* Time or Badge */}
-                {activeTime && isActive ? (
-                    <View style={[styles.timerBadge, { backgroundColor: config.color }]}>
-                        <Timer size={8} color="#fff" />
-                        <Text style={styles.timerText}>{activeTime}</Text>
+            <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                <TouchableOpacity
+                    style={styles.actionItem}
+                    onPress={() => handlePress(onPress)}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                    activeOpacity={1}
+                >
+                    {/* Liquid Glass Circle */}
+                    <View style={[
+                        styles.iconCircle,
+                        isActive && { backgroundColor: config.color },
+                        (config as any).hasBorder && { borderColor: 'rgba(255,255,255,0.3)', borderWidth: 1.5, borderStyle: 'dashed' }
+                    ]}>
+                        {!isActive && Platform.OS === 'ios' && (
+                            <BlurView
+                                intensity={40}
+                                tint="systemChromeMaterialLight"
+                                style={StyleSheet.absoluteFill}
+                            />
+                        )}
+                        {!isActive && (
+                            <View style={{
+                                ...StyleSheet.absoluteFillObject,
+                                backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                                borderRadius: 30,
+                            }} />
+                        )}
+                        {isActive ? (
+                            <Pause size={22} color="#fff" strokeWidth={2.5} />
+                        ) : (
+                            <Icon size={22} color={config.color} strokeWidth={2} />
+                        )}
                     </View>
-                ) : lastTime ? (
-                    <Text style={[styles.subText, { color: theme.textSecondary }]}>
-                        {lastTime}
+
+                    {/* Label */}
+                    <Text style={[styles.actionLabel, { color: theme.textPrimary }]} numberOfLines={2}>
+                        {isActive ? config.activeLabel : config.label}
                     </Text>
-                ) : badge ? (
-                    <Text style={[styles.subText, { color: config.color }]}>
-                        {badge}
-                    </Text>
-                ) : (
-                    <View style={styles.subTextPlaceholder} />
-                )}
-            </TouchableOpacity>
+
+                    {/* Time or Badge */}
+                    {activeTime && isActive ? (
+                        <View style={[styles.timerBadge, { backgroundColor: config.color }]}>
+                            <Timer size={8} color="#fff" />
+                            <Text style={styles.timerText}>{activeTime}</Text>
+                        </View>
+                    ) : lastTime ? (
+                        <Text style={[styles.subText, { color: theme.textSecondary }]}>
+                            {lastTime}
+                        </Text>
+                    ) : badge ? (
+                        <Text style={[styles.subText, { color: config.color }]}>
+                            {badge}
+                        </Text>
+                    ) : (
+                        <View style={styles.subTextPlaceholder} />
+                    )}
+                </TouchableOpacity>
+            </Animated.View>
         );
     };
 
@@ -452,7 +475,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255, 255, 255, 0.5)',
         alignItems: 'center',
         justifyContent: 'center',
-        marginLeft: 8,
+        marginLeft: 16,
     },
     editBtnActive: {
         backgroundColor: '#6366F1',

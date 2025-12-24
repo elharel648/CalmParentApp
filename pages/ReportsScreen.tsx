@@ -22,7 +22,7 @@ import {
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { db } from '../services/firebaseConfig';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, orderBy, limit } from 'firebase/firestore';
 import { format, addDays, subDays, isSameDay, startOfDay, endOfDay, subWeeks, subMonths, differenceInDays, differenceInHours } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { BarChart, LineChart, PieChart } from 'react-native-chart-kit';
@@ -30,6 +30,18 @@ import { useActiveChild } from '../context/ActiveChildContext';
 import { useTheme } from '../context/ThemeContext';
 import * as Haptics from 'expo-haptics';
 import ChildPicker from '../components/Home/ChildPicker';
+import { LiquidGlassBackground } from '../components/LiquidGlass';
+import { AIInsightHeader, PremiumStatCard, SkiaBezierChart, MilestoneBadge } from '../components/Reports/PremiumReportComponents';
+import { LiquidGlassLineChart, LiquidGlassBarChart } from '../components/Reports/LiquidGlassCharts';
+import GlassBarChartPerfect from '../components/Reports/GlassBarChart';
+import DetailedStatsScreen from '../components/Reports/DetailedStatsScreen';
+import {
+  PremiumInsightCard,
+  AITipCard,
+  MilestoneCard,
+  ShareSummaryButton,
+  generateAIInsights,
+} from '../components/Reports/PremiumInsights';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -68,7 +80,8 @@ interface WeeklyData {
 }
 
 type TimeRange = 'day' | 'week' | 'month' | 'custom';
-type TabName = 'summary' | 'insights' | 'charts';
+type TabName = 'summary';
+type MetricType = 'sleep' | 'food' | 'diapers' | 'supplements' | null;
 
 export default function ReportsScreen() {
   const { theme, isDarkMode } = useTheme();
@@ -86,6 +99,7 @@ export default function ReportsScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [showRangeModal, setShowRangeModal] = useState(false);
+  const [selectedMetric, setSelectedMetric] = useState<MetricType>(null);
 
   const [dailyStats, setDailyStats] = useState<DailyStats>({
     food: 0, foodCount: 0,
@@ -135,12 +149,14 @@ export default function ReportsScreen() {
       const { start, end } = getDateRange();
       const daysInRange = differenceInDays(end, start) + 1;
 
-      // Main query
+      // Main query - optimized with order and limit
       const q = query(
         collection(db, 'events'),
         where('childId', '==', activeChild.childId),
         where('timestamp', '>=', Timestamp.fromDate(start)),
-        where('timestamp', '<=', Timestamp.fromDate(end))
+        where('timestamp', '<=', Timestamp.fromDate(end)),
+        orderBy('timestamp', 'desc'),
+        limit(500) // Safety limit for very active users
       );
 
       const querySnapshot = await getDocs(q);
@@ -182,12 +198,21 @@ export default function ReportsScreen() {
         const dayKey = format(dateObj, 'dd/MM');
 
         if (data.type === 'feeding' || data.type === 'food') {
-          const amount = parseInt(data.amount) || 0;
+          // Parse amount - handle string formats like "120 מ"ל" or just numbers
+          let amount = 0;
+          if (data.amount) {
+            const parsed = parseInt(String(data.amount).replace(/[^\d]/g, ''));
+            amount = isNaN(parsed) ? 0 : parsed;
+          }
+
           stats.food += amount;
           stats.foodCount += 1;
+
+          // Count by subType
           if (data.subType === 'bottle') stats.feedingTypes.bottle += 1;
           else if (data.subType === 'breast') stats.feedingTypes.breast += 1;
           else if (data.subType === 'solids') stats.feedingTypes.solids += 1;
+          else if (data.subType === 'pumping') stats.feedingTypes.bottle += 1; // Count pumping as bottle
 
           if (dayMap[dayKey]) {
             dayMap[dayKey].food += amount;
@@ -297,7 +322,13 @@ export default function ReportsScreen() {
         prevSnapshot.forEach((doc) => {
           const data = doc.data();
           if (data.type === 'feeding' || data.type === 'food') {
-            prevStats.food += (parseInt(data.amount) || 0);
+            // Parse amount - same logic as main stats
+            let amount = 0;
+            if (data.amount) {
+              const parsed = parseInt(String(data.amount).replace(/[^\d]/g, ''));
+              amount = isNaN(parsed) ? 0 : parsed;
+            }
+            prevStats.food += amount;
             prevStats.foodCount += 1;
           }
           if (data.type === 'diaper') prevStats.diapers += 1;
@@ -378,13 +409,46 @@ export default function ReportsScreen() {
     };
   }, [dailyStats, prevWeekStats]);
 
+  // Generate AI Insight
+  const aiInsight = useMemo(() => {
+    if (!activeChild?.childName || dailyStats.foodCount === 0) return null;
+
+    const avgSleepPerFeeding = dailyStats.sleepCount > 0 && dailyStats.foodCount > 0
+      ? (dailyStats.sleep / dailyStats.foodCount).toFixed(1)
+      : null;
+
+    const insights = [
+      comparison?.sleepChange && comparison.sleepChange > 10
+        ? `${activeChild.childName} ישן/ה ${comparison.sleepChange}% יותר השבוע! `
+        : null,
+      avgSleepPerFeeding && parseFloat(avgSleepPerFeeding) > 0.5
+        ? `בממוצע, ${activeChild.childName} ישן/ה ${avgSleepPerFeeding} שעות אחרי כל האכלה`
+        : null,
+      dailyStats.feedingTypes.solids > dailyStats.feedingTypes.bottle
+        ? `${activeChild.childName} אוכל/ת יותר מוצקים מבקבוקים - התקדמות יפה!`
+        : null,
+      timeInsights?.biggestFeeding && timeInsights.biggestFeeding > 150
+        ? `האכלה גדולה של ${timeInsights.biggestFeeding} מ"ל - תיאבון בריא!`
+        : null,
+    ].filter(Boolean);
+
+    return insights[0] || `${activeChild.childName} ביום טוב! המשיכו כך `;
+  }, [activeChild, dailyStats, comparison, timeInsights]);
+
   // ========== COMPONENTS ==========
 
-  // Minimalist Stat Card with Trend
-  const StatCard = ({ icon: Icon, value, label, subValue, change }: any) => (
-    <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-      <View style={[styles.statIconWrap, { backgroundColor: theme.cardSecondary }]}>
-        <Icon size={20} color={theme.textSecondary} strokeWidth={1.5} />
+  // Minimalist Stat Card with Trend - Colored Icons (Now Clickable!)
+  const StatCard = ({ icon: Icon, value, label, subValue, change, iconColor, iconBg, onPress }: any) => (
+    <TouchableOpacity
+      style={[styles.statCard, { backgroundColor: theme.card }]}
+      onPress={() => {
+        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress?.();
+      }}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.statIconWrap, { backgroundColor: iconBg || theme.cardSecondary }]}>
+        <Icon size={20} color={iconColor || theme.textSecondary} strokeWidth={1.5} />
       </View>
       <View style={styles.statValueRow}>
         <Text style={[styles.statValue, { color: theme.textPrimary }]}>{value}</Text>
@@ -403,7 +467,8 @@ export default function ReportsScreen() {
       </View>
       <Text style={[styles.statLabel, { color: theme.textSecondary }]}>{label}</Text>
       {subValue && <Text style={[styles.statSubValue, { color: theme.textSecondary }]}>{subValue}</Text>}
-    </View>
+      <ChevronRight size={16} color={theme.textSecondary} style={styles.cardChevron} />
+    </TouchableOpacity>
   );
 
   // Insight Card
@@ -423,7 +488,7 @@ export default function ReportsScreen() {
   // Tabs
   const TabBar = () => (
     <View style={[styles.tabBar, { backgroundColor: theme.cardSecondary }]}>
-      {(['summary', 'insights', 'charts'] as TabName[]).map((tab) => (
+      {(['summary', 'insights'] as TabName[]).map((tab) => (
         <TouchableOpacity
           key={tab}
           style={[styles.tab, activeTab === tab && [styles.tabActive, { backgroundColor: theme.card }]]}
@@ -542,139 +607,353 @@ export default function ReportsScreen() {
   // Summary Tab
   const SummaryTab = () => (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
-      <View style={styles.statsGrid}>
-        <StatCard icon={Utensils} value={dailyStats.foodCount} label="האכלות" subValue={`${dailyStats.food} מ"ל`} change={comparison?.feedingChange} />
-        <StatCard icon={Moon} value={`${dailyStats.sleep.toFixed(1)}`} label="שעות שינה" change={comparison?.sleepChange} />
-        <StatCard icon={Droplets} value={dailyStats.diapers} label="חיתולים" change={comparison?.diaperChange} />
-        <StatCard icon={Pill} value={dailyStats.supplements} label="תוספים" />
-      </View>
-      <FeedingPieChart />
 
-      {/* Quick Stats */}
-      <View style={[styles.quickStatsCard, { backgroundColor: theme.card }]}>
-        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>ממוצעים</Text>
-        <View style={styles.quickStatsRow}>
-          <View style={styles.quickStatItem}>
-            <Text style={[styles.quickStatValue, { color: theme.textPrimary }]}>
-              {dailyStats.foodCount > 0 ? Math.round(dailyStats.food / dailyStats.foodCount) : 0}
+      <View style={styles.statsGrid}>
+        <StatCard
+          icon={Utensils}
+          value={dailyStats.foodCount}
+          label="האכלות"
+          subValue={`${dailyStats.food} מ"ל`}
+          change={comparison?.feedingChange}
+          iconColor="#F59E0B"
+          iconBg="#FEF3C7"
+          onPress={() => setSelectedMetric('food')}
+        />
+        <StatCard
+          icon={Moon}
+          value={`${dailyStats.sleep.toFixed(1)}`}
+          label="שעות שינה"
+          change={comparison?.sleepChange}
+          iconColor="#8B5CF6"
+          iconBg="#EDE9FE"
+          onPress={() => setSelectedMetric('sleep')}
+        />
+        <StatCard
+          icon={Droplets}
+          value={dailyStats.diapers}
+          label="חיתולים"
+          change={comparison?.diaperChange}
+          iconColor="#14B8A6"
+          iconBg="#CCFBF1"
+          onPress={() => setSelectedMetric('diapers')}
+        />
+        <StatCard
+          icon={Pill}
+          value={dailyStats.supplements}
+          label="תוספים"
+          iconColor="#EC4899"
+          iconBg="#FCE7F3"
+          onPress={() => setSelectedMetric('supplements')}
+        />
+      </View>
+
+      {/* Weekly Goals & Streaks */}
+      <View style={[styles.goalsSection, { backgroundColor: theme.card }]}>
+        <View style={styles.goalsSectionHeader}>
+          <Trophy size={18} color="#F59E0B" strokeWidth={1.5} />
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>יעדים שבועיים</Text>
+        </View>
+
+        {/* Sleep Goal */}
+        <View style={styles.goalItem}>
+          <View style={styles.goalItemHeader}>
+            <View style={[styles.goalIconWrap, { backgroundColor: '#EDE9FE' }]}>
+              <Moon size={14} color="#8B5CF6" />
+            </View>
+            <Text style={[styles.goalItemTitle, { color: theme.textPrimary }]}>שינה של 8+ שעות</Text>
+            <Text style={[styles.goalItemProgress, { color: theme.textSecondary }]}>
+              {Math.min(7, Math.floor(dailyStats.sleep >= 8 ? 7 : dailyStats.sleep / 8 * 7))}/7 ימים
             </Text>
-            <Text style={[styles.quickStatLabel, { color: theme.textSecondary }]}>מ"ל להאכלה</Text>
           </View>
-          <View style={[styles.quickStatDivider, { backgroundColor: theme.border }]} />
-          <View style={styles.quickStatItem}>
-            <Text style={[styles.quickStatValue, { color: theme.textPrimary }]}>
-              {dailyStats.sleepCount > 0 ? (dailyStats.sleep / dailyStats.sleepCount).toFixed(1) : 0}
+          <View style={[styles.goalProgressBar, { backgroundColor: theme.cardSecondary }]}>
+            <View
+              style={[
+                styles.goalProgressFill,
+                {
+                  width: `${Math.min(100, (dailyStats.sleep >= 8 ? 100 : dailyStats.sleep / 8 * 100))}%`,
+                  backgroundColor: '#8B5CF6'
+                }
+              ]}
+            />
+          </View>
+        </View>
+
+        {/* Feeding Goal */}
+        <View style={styles.goalItem}>
+          <View style={styles.goalItemHeader}>
+            <View style={[styles.goalIconWrap, { backgroundColor: '#FEF3C7' }]}>
+              <Utensils size={14} color="#F59E0B" />
+            </View>
+            <Text style={[styles.goalItemTitle, { color: theme.textPrimary }]}>תיעוד עקבי</Text>
+            <Text style={[styles.goalItemProgress, { color: theme.textSecondary }]}>
+              {dailyStats.foodCount > 0 ? 7 : 0}/7 ימים
             </Text>
-            <Text style={[styles.quickStatLabel, { color: theme.textSecondary }]}>שעות לשינה</Text>
+          </View>
+          <View style={[styles.goalProgressBar, { backgroundColor: theme.cardSecondary }]}>
+            <View
+              style={[
+                styles.goalProgressFill,
+                {
+                  width: `${dailyStats.foodCount > 0 ? 100 : 0}%`,
+                  backgroundColor: '#F59E0B'
+                }
+              ]}
+            />
+          </View>
+        </View>
+
+        {/* Streak Badge */}
+        {dailyStats.foodCount > 0 && (
+          <View style={[styles.streakBadge, { backgroundColor: '#FEF3C7' }]}>
+            <Text style={styles.streakEmoji}>🔥</Text>
+            <Text style={[styles.streakText, { color: '#92400E' }]}>7 ימים רצופים של תיעוד!</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Weekly Comparison */}
+      <View style={[styles.comparisonSection, { backgroundColor: theme.card }]}>
+        <View style={styles.goalsSectionHeader}>
+          <TrendingUp size={18} color="#6366F1" strokeWidth={1.5} />
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>השוואה שבועית</Text>
+        </View>
+
+        <View style={styles.comparisonGrid}>
+          {/* Sleep Comparison */}
+          <View style={styles.comparisonItem}>
+            <View style={[styles.comparisonIconWrap, { backgroundColor: '#EDE9FE' }]}>
+              <Moon size={16} color="#8B5CF6" />
+            </View>
+            <Text style={[styles.comparisonLabel, { color: theme.textSecondary }]}>שינה</Text>
+            <View style={styles.comparisonValueRow}>
+              <Text style={[styles.comparisonValue, { color: comparison?.sleepChange && comparison.sleepChange >= 0 ? '#10B981' : '#EF4444' }]}>
+                {comparison?.sleepChange !== undefined ? (comparison.sleepChange >= 0 ? '+' : '') + comparison.sleepChange + '%' : '--'}
+              </Text>
+              {comparison?.sleepChange !== undefined && (
+                comparison.sleepChange >= 0
+                  ? <TrendingUp size={14} color="#10B981" />
+                  : <TrendingDown size={14} color="#EF4444" />
+              )}
+            </View>
+          </View>
+
+          {/* Food Comparison */}
+          <View style={styles.comparisonItem}>
+            <View style={[styles.comparisonIconWrap, { backgroundColor: '#FEF3C7' }]}>
+              <Utensils size={16} color="#F59E0B" />
+            </View>
+            <Text style={[styles.comparisonLabel, { color: theme.textSecondary }]}>האכלות</Text>
+            <View style={styles.comparisonValueRow}>
+              <Text style={[styles.comparisonValue, { color: comparison?.feedingChange && comparison.feedingChange >= 0 ? '#10B981' : '#EF4444' }]}>
+                {comparison?.feedingChange !== undefined ? (comparison.feedingChange >= 0 ? '+' : '') + comparison.feedingChange + '%' : '--'}
+              </Text>
+              {comparison?.feedingChange !== undefined && (
+                comparison.feedingChange >= 0
+                  ? <TrendingUp size={14} color="#10B981" />
+                  : <TrendingDown size={14} color="#EF4444" />
+              )}
+            </View>
+          </View>
+
+          {/* Diapers Comparison */}
+          <View style={styles.comparisonItem}>
+            <View style={[styles.comparisonIconWrap, { backgroundColor: '#CCFBF1' }]}>
+              <Droplets size={16} color="#14B8A6" />
+            </View>
+            <Text style={[styles.comparisonLabel, { color: theme.textSecondary }]}>חיתולים</Text>
+            <View style={styles.comparisonValueRow}>
+              <Text style={[styles.comparisonValue, { color: comparison?.diaperChange && comparison.diaperChange >= 0 ? '#10B981' : '#EF4444' }]}>
+                {comparison?.diaperChange !== undefined ? (comparison.diaperChange >= 0 ? '+' : '') + comparison.diaperChange + '%' : '--'}
+              </Text>
+              {comparison?.diaperChange !== undefined && (
+                comparison.diaperChange >= 0
+                  ? <TrendingUp size={14} color="#10B981" />
+                  : <TrendingDown size={14} color="#EF4444" />
+              )}
+            </View>
           </View>
         </View>
       </View>
     </ScrollView>
   );
 
-  // Insights Tab
+
+  // Generate AI Insights
+  const aiInsights = useMemo(() => {
+    return generateAIInsights({
+      dailyStats,
+      timeInsights,
+      weeklyData,
+      prevWeekStats,
+      childName: activeChild?.childName,
+    });
+  }, [dailyStats, timeInsights, weeklyData, prevWeekStats, activeChild?.childName]);
+
+  // Premium Insights Tab
   const InsightsTab = () => (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
-      {/* Achievements */}
+      {/* Insights Section */}
       <View style={styles.sectionTitleRow}>
         <Trophy size={16} color="#6366F1" strokeWidth={1.5} />
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>תובנות</Text>
+      </View>
+      {aiInsights.tips.slice(0, 2).map((tipData, index) => (
+        <AITipCard
+          key={index}
+          tip={tipData.tip}
+          category={tipData.category}
+          delay={index * 100}
+        />
+      ))}
+
+      {/* Achievements Section */}
+      <View style={[styles.sectionTitleRow, { marginTop: 20 }]}>
+        <Award size={16} color="#6366F1" strokeWidth={1.5} />
         <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>הישגים</Text>
       </View>
       <View style={styles.insightsList}>
-        <InsightCard icon={Moon} title="שינה ארוכה ביותר" value={`${timeInsights?.longestSleep || 0} שעות`} />
-        <InsightCard icon={Utensils} title="האכלה גדולה ביותר" value={`${timeInsights?.biggestFeeding || 0} מ"ל`} />
-        <InsightCard icon={Award} title="יום שינה הכי טוב" value={timeInsights?.bestSleepDay || 'לא ידוע'} />
+        <PremiumInsightCard
+          icon={Moon}
+          title="שינה ארוכה ביותר"
+          value={`${timeInsights?.longestSleep || 0} שעות`}
+          color="#8B5CF6"
+          delay={0}
+        />
+        <PremiumInsightCard
+          icon={Utensils}
+          title="האכלה גדולה ביותר"
+          value={`${timeInsights?.biggestFeeding || 0} מ"ל`}
+          color="#F59E0B"
+          delay={50}
+        />
+        <PremiumInsightCard
+          icon={Clock}
+          title="זמן ממוצע בין האכלות"
+          value={`${timeInsights?.avgFeedingInterval || 0} שעות`}
+          color="#10B981"
+          delay={100}
+        />
       </View>
 
-      {/* Time Insights */}
+      {/* Patterns Section */}
+      {aiInsights.patterns.length > 0 && (
+        <>
+          <View style={[styles.sectionTitleRow, { marginTop: 20 }]}>
+            <Activity size={16} color="#6366F1" strokeWidth={1.5} />
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>דפוסים</Text>
+          </View>
+          <View style={styles.insightsList}>
+            {aiInsights.patterns.map((pattern, index) => (
+              <PremiumInsightCard
+                key={index}
+                icon={pattern.icon}
+                title={pattern.label}
+                value={pattern.value}
+                color={pattern.color}
+                delay={index * 50}
+              />
+            ))}
+          </View>
+        </>
+      )}
+
+      {/* Milestones Section */}
       <View style={[styles.sectionTitleRow, { marginTop: 20 }]}>
-        <Timer size={16} color="#6366F1" strokeWidth={1.5} />
-        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>זמנים</Text>
+        <TrendingUp size={16} color="#6366F1" strokeWidth={1.5} />
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>יעדים</Text>
       </View>
-      <View style={styles.insightsList}>
-        <InsightCard icon={Clock} title="זמן ממוצע בין האכלות" value={`${timeInsights?.avgFeedingInterval || 0} שעות`} />
-        <InsightCard icon={Moon} title="שעת שינה ממוצעת" value={timeInsights?.avgSleepTime || '--:--'} />
-      </View>
+      {aiInsights.milestones.map((milestone, index) => (
+        <MilestoneCard
+          key={index}
+          title={milestone.title}
+          current={milestone.current}
+          target={milestone.target}
+          unit={milestone.unit}
+          delay={index * 100}
+        />
+      ))}
 
-      {/* Comparison */}
+      {/* Comparison Section */}
       {comparison && (
         <>
           <View style={[styles.sectionTitleRow, { marginTop: 20 }]}>
-            <TrendingUp size={16} color="#6366F1" strokeWidth={1.5} />
+            <BarChart2 size={16} color="#6366F1" strokeWidth={1.5} />
             <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>השוואה לתקופה קודמת</Text>
           </View>
           <View style={styles.insightsList}>
-            <InsightCard
-              icon={comparison.sleepChange >= 0 ? TrendingUp : TrendingDown}
+            <PremiumInsightCard
+              icon={Moon}
               title="שינה"
               value={`${comparison.sleepChange >= 0 ? '+' : ''}${comparison.sleepChange}%`}
               subtitle={comparison.sleepChange >= 0 ? 'יותר שינה' : 'פחות שינה'}
+              trend={comparison.sleepChange >= 0 ? 'up' : 'down'}
+              color="#8B5CF6"
+              delay={0}
             />
-            <InsightCard
-              icon={comparison.feedingChange >= 0 ? TrendingUp : TrendingDown}
+            <PremiumInsightCard
+              icon={Utensils}
               title="האכלות"
               value={`${comparison.feedingChange >= 0 ? '+' : ''}${comparison.feedingChange}%`}
+              trend={comparison.feedingChange >= 0 ? 'up' : 'down'}
+              color="#F59E0B"
+              delay={50}
             />
           </View>
         </>
       )}
+
+      {/* Share Button */}
+      <ShareSummaryButton
+        dailyStats={dailyStats}
+        childName={activeChild?.childName}
+      />
     </ScrollView>
   );
 
-  // Charts Tab
+  // Charts Tab - Premium Glass Bar Charts
   const ChartsTab = () => (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
       {weeklyData.sleep.some(v => v > 0) && (
-        <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
-          <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>שינה</Text>
-          <LineChart
-            data={{ labels: weeklyData.labels, datasets: [{ data: weeklyData.sleep.length > 0 ? weeklyData.sleep : [0] }] }}
-            width={SCREEN_WIDTH - 64}
-            height={160}
-            chartConfig={chartConfig}
-            style={styles.chart}
-            bezier
-            fromZero
-          />
-        </View>
+        <GlassBarChartPerfect
+          data={weeklyData.sleep}
+          labels={weeklyData.labels}
+          title="שינה (שעות)"
+          unit="ש'"
+          gradientColors={['#8B5CF6', '#8B5CF620']}
+          height={260}
+          yAxisSteps={[0, 4, 8, 12, 16]}
+        />
       )}
 
       {weeklyData.food.some(v => v > 0) && (
-        <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
-          <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>אוכל (מ"ל)</Text>
-          <BarChart
-            data={{ labels: weeklyData.labels, datasets: [{ data: weeklyData.food }] }}
-            width={SCREEN_WIDTH - 64}
-            height={160}
-            yAxisLabel="" yAxisSuffix=""
-            chartConfig={chartConfig}
-            style={styles.chart}
-            showValuesOnTopOfBars
-            fromZero
-          />
-        </View>
+        <GlassBarChartPerfect
+          data={weeklyData.food}
+          labels={weeklyData.labels}
+          title={'אוכל (מ"ל)'}
+          unit={'מ"ל'}
+          gradientColors={['#3B82F6', '#3B82F620']}
+          height={260}
+        />
       )}
 
       {weeklyData.diapers.some(v => v > 0) && (
-        <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
-          <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>חיתולים</Text>
-          <BarChart
-            data={{ labels: weeklyData.labels, datasets: [{ data: weeklyData.diapers }] }}
-            width={SCREEN_WIDTH - 64}
-            height={160}
-            yAxisLabel="" yAxisSuffix=""
-            chartConfig={chartConfig}
-            style={styles.chart}
-            showValuesOnTopOfBars
-            fromZero
-          />
-        </View>
+        <GlassBarChartPerfect
+          data={weeklyData.diapers}
+          labels={weeklyData.labels}
+          title="חיתולים"
+          gradientColors={['#10B981', '#10B98120']}
+          height={220}
+          yAxisSteps={[0, 3, 6, 9, 12]}
+        />
       )}
     </ScrollView>
   );
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+  const mainContent = (
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+      {/* Liquid Glass Background */}
+      <LiquidGlassBackground />
+
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       {/* Header */}
@@ -686,7 +965,7 @@ export default function ReportsScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>דוחות</Text>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>סטטיסטיקות</Text>
 
         {/* Time Range Pills */}
         <View style={styles.filterRow}>
@@ -746,9 +1025,6 @@ export default function ReportsScreen() {
             </Text>
           </TouchableOpacity>
         )}
-
-        {/* Tab Bar */}
-        <TabBar />
       </View>
 
       {/* Content */}
@@ -759,14 +1035,12 @@ export default function ReportsScreen() {
       ) : !activeChild?.childId ? (
         <View style={styles.emptyState}>
           <Baby size={48} color={theme.border} strokeWidth={1} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>בחר ילד לצפייה בדוחות</Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>בחר ילד לצפייה בסטטיסטיקות</Text>
         </View>
       ) : (
         <View style={{ flex: 1 }}>
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          {activeTab === 'summary' && <SummaryTab />}
-          {activeTab === 'insights' && <InsightsTab />}
-          {activeTab === 'charts' && <ChartsTab />}
+          <SummaryTab />
         </View>
       )}
 
@@ -784,6 +1058,19 @@ export default function ReportsScreen() {
       <DateRangeModal />
     </View>
   );
+
+  // If a metric is selected, show the detailed stats screen
+  if (selectedMetric) {
+    return (
+      <DetailedStatsScreen
+        onClose={() => setSelectedMetric(null)}
+        metricType={selectedMetric}
+        childId={activeChild?.childId || ''}
+      />
+    );
+  }
+
+  return mainContent;
 }
 
 const styles = StyleSheet.create({
@@ -826,6 +1113,7 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 12, fontWeight: '500', marginTop: 2 },
   statSubValue: { fontSize: 11, marginTop: 2 },
   trendBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  cardChevron: { position: 'absolute', left: 10, top: '50%', marginTop: -8 },
 
   // Insights
   sectionTitle: { fontSize: 16, fontWeight: '600', textAlign: 'right', marginBottom: 12 },
@@ -875,4 +1163,27 @@ const styles = StyleSheet.create({
   legendBar: { height: 4, borderRadius: 2, overflow: 'hidden' },
   legendBarFill: { height: '100%', borderRadius: 2 },
   sectionTitleRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 },
+
+  // Goals Section
+  goalsSection: { borderRadius: 16, padding: 16, marginTop: 16 },
+  goalsSectionHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 16 },
+  goalItem: { marginBottom: 16 },
+  goalItemHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 8 },
+  goalIconWrap: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  goalItemTitle: { flex: 1, fontSize: 14, fontWeight: '500', textAlign: 'right' },
+  goalItemProgress: { fontSize: 12 },
+  goalProgressBar: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  goalProgressFill: { height: '100%', borderRadius: 4 },
+  streakBadge: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, marginTop: 8 },
+  streakEmoji: { fontSize: 18 },
+  streakText: { fontSize: 13, fontWeight: '600' },
+
+  // Comparison Section
+  comparisonSection: { borderRadius: 16, padding: 16, marginTop: 16, marginBottom: 20 },
+  comparisonGrid: { flexDirection: 'row-reverse', justifyContent: 'space-between', gap: 8 },
+  comparisonItem: { flex: 1, alignItems: 'center', paddingVertical: 12 },
+  comparisonIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  comparisonLabel: { fontSize: 12, marginBottom: 4 },
+  comparisonValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  comparisonValue: { fontSize: 18, fontWeight: '700' },
 });

@@ -16,7 +16,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Share,
-  Image
+  SafeAreaView,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
@@ -41,8 +41,8 @@ import {
   Send,
   Utensils,
   Pill,
+  ChevronLeft,
   ChevronRight,
-  ChevronLeft
 } from 'lucide-react-native';
 import { auth, db } from '../services/firebaseConfig';
 import { deleteUser, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
@@ -55,68 +55,29 @@ import { deleteChild } from '../services/babyService';
 import { IntervalPicker } from '../components/Settings/IntervalPicker';
 import { TimePicker } from '../components/Settings/TimePicker';
 
-// --- צבעים ועיצוב ---
-const COLORS = {
-  light: {
-    background: '#F2F2F7',
-    card: '#FFFFFF',
-    textPrimary: '#000000',
-    textSecondary: '#8E8E93',
-    divider: '#E5E5EA',
-    danger: '#FF3B30',
-    primary: '#6366F1',
-    modalBg: 'rgba(0,0,0,0.5)'
-  },
-  dark: {
-    background: '#000000',
-    card: '#1C1C1E',
-    textPrimary: '#FFFFFF',
-    textSecondary: '#98989D',
-    divider: '#38383A',
-    danger: '#FF453A',
-    primary: '#818CF8',
-    modalBg: 'rgba(255,255,255,0.1)'
-  }
-};
-
 const LANGUAGES = [
   { key: 'he', label: 'עברית', flag: '🇮🇱' },
   { key: 'en', label: 'English', flag: '🇺🇸' },
 ];
 
 export default function SettingsScreen() {
-  // --- Theme (Global) ---
   const { isDarkMode, setDarkMode, theme } = useTheme();
   const navigation = useNavigation<any>();
-
-  // --- Active Child Context ---
   const { activeChild, allChildren, setActiveChild, refreshChildren } = useActiveChild();
+  const { settings: notifSettings, updateSettings: updateNotifSettings } = useNotifications();
 
-  // --- Notifications ---
-  const { settings: notifSettings, updateSettings: updateNotifSettings, hasPermission, sendTestNotification } = useNotifications();
-
-  // --- States ---
   const [userData, setUserData] = useState({ name: '', email: '', photoURL: null });
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('he');
-
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
-  // Modal States
-  const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [isLanguageModalVisible, setLanguageModalVisible] = useState(false);
   const [isContactModalVisible, setContactModalVisible] = useState(false);
-  const [newName, setNewName] = useState('');
+  const [isPrivacyModalVisible, setPrivacyModalVisible] = useState(false);
+  const [isTermsModalVisible, setTermsModalVisible] = useState(false);
   const [contactMessage, setContactMessage] = useState('');
 
-  // Baby profile for family
-  const { profile } = useChildProfile();
-
-  // Theme colors are now from context
-
-  // --- טעינת נתונים ---
   useFocusEffect(
     useCallback(() => {
       fetchUserData();
@@ -140,7 +101,6 @@ export default function SettingsScreen() {
         });
 
         if (data.settings) {
-          if (data.settings.notificationsEnabled !== undefined) setNotificationsEnabled(data.settings.notificationsEnabled);
           if (data.settings.biometricsEnabled !== undefined) setBiometricsEnabled(data.settings.biometricsEnabled);
           if (data.settings.language !== undefined) setSelectedLanguage(data.settings.language);
         }
@@ -174,7 +134,6 @@ export default function SettingsScreen() {
     }
   };
 
-  // --- לוגיקה ביומטרית ---
   const handleBiometricsToggle = async (value: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
@@ -212,16 +171,9 @@ export default function SettingsScreen() {
     }
   };
 
-  // --- שאר ההגדרות ---
   const handleDarkModeToggle = (value: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setDarkMode(value); // Uses global context
-  };
-
-  const handleNotificationsToggle = (value: boolean) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setNotificationsEnabled(value);
-    saveSettingToDB('notificationsEnabled', value);
+    setDarkMode(value);
   };
 
   const handleLanguageSelect = (langKey: string) => {
@@ -235,64 +187,6 @@ export default function SettingsScreen() {
     }
   };
 
-  // --- עדכון תמונה ---
-  const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('שגיאה', 'חובה לאשר גישה לגלריה כדי להחליף תמונה');
-      return;
-    }
-
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
-
-    if (!result.canceled) {
-      setLoading(true);
-      const newImageUri = result.assets[0].uri;
-      try {
-        const user = auth.currentUser;
-        if (user) {
-          const userRef = doc(db, 'users', user.uid);
-          await updateDoc(userRef, { photoURL: newImageUri });
-          await updateProfile(user, { photoURL: newImageUri }).catch((e) => { if (__DEV__) console.log('Auth profile update error', e); });
-
-          setUserData(prev => ({ ...prev, photoURL: newImageUri }));
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-      } catch (error) {
-        Alert.alert('שגיאה', 'לא הצלחנו לשמור את התמונה');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleSaveName = async () => {
-    if (newName.trim().length < 2) return Alert.alert('שגיאה', 'השם חייב להכיל לפחות 2 תווים');
-
-    setLoading(true);
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        await updateProfile(user, { displayName: newName });
-        await setDoc(doc(db, 'users', user.uid), { displayName: newName }, { merge: true });
-        setUserData(prev => ({ ...prev, name: newName }));
-
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setEditModalVisible(false);
-      }
-    } catch (error) {
-      Alert.alert('שגיאה', 'עדכון השם נכשל');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- פונקציות כלליות ---
   const handleShareApp = async () => {
     try {
       await Share.share({ message: 'היי! אני משתמש/ת ב-CalmParent וזה ממש עוזר לי לנהל את הטיפול בבייבי. ממליץ/ה בחום! 👶📱' });
@@ -331,7 +225,6 @@ export default function SettingsScreen() {
     try {
       const user = auth.currentUser;
       if (user) {
-        // Save contact message to Firebase
         const contactRef = doc(db, 'contactMessages', `${user.uid}_${Date.now()}`);
         await setDoc(contactRef, {
           userId: user.uid,
@@ -363,26 +256,26 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteChild = async () => {
-    if (!activeChild) return Alert.alert('Error', 'No child selected');
+    if (!activeChild) return Alert.alert('שגיאה', 'אין ילד נבחר');
 
     const childName = activeChild.childName;
 
     Alert.alert(
-      `Delete ${childName}?`,
-      'This will delete ALL child data: photos, stats, events.',
+      `מחיקת ${childName}?`,
+      'פעולה זו תמחק את כל הנתונים של הילד: תמונות, סטטיסטיקות, אירועים.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'ביטול', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'מחק',
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'Are you absolutely sure?',
-              `This is irreversible! Cannot recover ${childName}.`,
+              'אתה בטוח לחלוטין?',
+              `פעולה זו בלתי הפיכה! לא ניתן לשחזר את ${childName}.`,
               [
-                { text: 'Cancel', style: 'cancel' },
+                { text: 'ביטול', style: 'cancel' },
                 {
-                  text: 'Yes, delete everything',
+                  text: 'כן, מחק הכל',
                   style: 'destructive',
                   onPress: async () => {
                     try {
@@ -391,24 +284,20 @@ export default function SettingsScreen() {
 
                       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-                      // Refresh children list
                       await refreshChildren();
 
-                      // Find remaining children (excluding the deleted one)
                       const remainingChildren = allChildren.filter(child => child.childId !== deletedChildId);
 
                       if (remainingChildren.length === 0) {
-                        // No children left - go to CreateBaby
-                        Alert.alert('Deleted', `${childName} deleted. Add a new child.`, [
-                          { text: 'OK', onPress: () => navigation.navigate('CreateBaby') }
+                        Alert.alert('נמחק', `${childName} נמחק. הוסף ילד חדש.`, [
+                          { text: 'אישור', onPress: () => navigation.navigate('CreateBaby') }
                         ]);
                       } else {
-                        // Switch to next child (first in remaining list)
                         setActiveChild(remainingChildren[0]);
-                        Alert.alert('Deleted', `${childName} deleted. Switched to ${remainingChildren[0].childName}`);
+                        Alert.alert('נמחק', `${childName} נמחק. עבר ל-${remainingChildren[0].childName}`);
                       }
                     } catch (error) {
-                      Alert.alert('Error', 'Failed to delete child');
+                      Alert.alert('שגיאה', 'לא ניתן למחוק את הילד');
                     }
                   }
                 }
@@ -424,309 +313,625 @@ export default function SettingsScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert(
       'מחיקת חשבון לצמיתות ⚠️',
-      'פעולה זו אינה הפיכה ותמחק את כל הנתונים שלך. האם להמשיך?',
+      'פעולה זו אינה הפיכה ותמחק את כל הנתונים שלך לצמיתות. האם אתה בטוח?',
       [
         { text: 'ביטול', style: 'cancel' },
         {
-          text: 'מחק חשבון', style: 'destructive', onPress: async () => {
-            if (auth.currentUser) {
-              try {
-                await deleteUser(auth.currentUser);
-              } catch (e) {
-                Alert.alert('שגיאה', 'יש להתחבר מחדש כדי למחוק את החשבון.');
-              }
-            }
+          text: 'כן, מחק הכל',
+          style: 'destructive',
+          onPress: () => {
+            // Second confirmation
+            Alert.alert(
+              'אישור אחרון',
+              'לאחר המחיקה לא ניתן יהיה לשחזר את החשבון והנתונים. להמשיך?',
+              [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                  text: 'מחק לצמיתות',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      if (auth.currentUser) {
+                        await deleteUser(auth.currentUser);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        Alert.alert(
+                          'החשבון נמחק ✅',
+                          'כל הנתונים שלך נמחקו בהצלחה. להתראות!',
+                          [{ text: 'אישור' }]
+                        );
+                      }
+                    } catch (e: any) {
+                      if (e?.code === 'auth/requires-recent-login') {
+                        Alert.alert(
+                          'נדרשת התחברות מחדש',
+                          'מטעמי אבטחה, יש להתנתק ולהתחבר מחדש לפני מחיקת החשבון.',
+                          [{ text: 'הבנתי' }]
+                        );
+                      } else {
+                        Alert.alert('שגיאה', 'אירעה שגיאה במחיקת החשבון. נסה שוב.');
+                      }
+                    }
+                  }
+                }
+              ]
+            );
           }
         }
       ]
     );
   };
 
-  // --- רכיבים ---
-  const SectionHeader = ({ icon: Icon, title, color }: any) => (
-    <View style={styles.sectionHeader}>
-      <Text style={[styles.sectionHeaderText, { color: theme.textSecondary }]}>{title}</Text>
-      <View style={[styles.sectionIcon, { backgroundColor: color + '20' }]}>
-        <Icon size={14} color={color} strokeWidth={2.5} />
-      </View>
-    </View>
-  );
-
-  const SettingItem = ({ icon: Icon, title, type = 'arrow', value, onPress, color, isDestructive, subtitle }: any) => {
-    const iconColor = color || theme.primary;
-    const textColor = isDestructive ? theme.danger : theme.textPrimary;
-
-    return (
-      <TouchableOpacity
-        style={[styles.itemContainer, { backgroundColor: theme.card, borderBottomColor: theme.divider }]}
-        onPress={onPress}
-        disabled={type === 'switch'}
-        activeOpacity={0.7}
-      >
-        <View style={styles.itemLeft}>
-          {type === 'switch' && (
-            <Switch
-              trackColor={{ false: '#767577', true: theme.primary }}
-              thumbColor={'#fff'}
-              onValueChange={onPress}
-              value={value}
-            />
-          )}
-          {type === 'arrow' && <ChevronLeft size={20} color={theme.textSecondary} />}
-          {type === 'value' && (
-            <View style={styles.valueContainer}>
-              <ChevronLeft size={16} color={theme.textSecondary} />
-              <Text style={[styles.valueText, { color: theme.textSecondary }]}>{value}</Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.itemRight}>
-          <View style={styles.itemTextContainer}>
-            <Text style={[styles.itemText, { color: textColor }]}>{title}</Text>
-            {subtitle && <Text style={[styles.itemSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>}
-          </View>
-          <View style={[styles.iconBox, { backgroundColor: isDestructive ? theme.danger + '15' : (isDarkMode ? '#2C2C2E' : iconColor + '15') }]}>
-            <Icon size={18} color={isDestructive ? theme.danger : iconColor} strokeWidth={2} />
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
   const currentLang = LANGUAGES.find(l => l.key === selectedLanguage);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar style={isDarkMode ? "light" : "dark"} />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
 
-      {/* Header with gradient */}
-      <LinearGradient
-        colors={isDarkMode ? ['#1C1C1E', '#000000'] : ['#6366F1', '#8B5CF6']}
-        style={styles.header}
-      >
-        <View style={styles.headerTop}>
-          <View style={{ width: 36 }} />
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>הגדרות</Text>
-            <Text style={styles.headerSubtitle}>ניהול חשבון ותצוגה</Text>
-          </View>
+      {/* Minimal Header - Apple Style */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>הגדרות</Text>
           <TouchableOpacity
-            style={styles.backBtn}
-            activeOpacity={0.7}
+            style={styles.backButton}
             onPress={() => navigation.goBack()}
+            activeOpacity={0.6}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <ChevronRight size={22} color="#fff" strokeWidth={2.5} />
+            <ChevronRight size={22} color={theme.textSecondary} strokeWidth={2} />
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
-        {/* User Avatar - REMOVED - already shown in Profile/Account tab */}
-
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+      >
         {/* התראות ותזכורות */}
-        <SectionHeader icon={Bell} title="התראות ותזכורות" color="#FF9500" />
-        <View style={[styles.sectionContainer, { backgroundColor: theme.card }]}>
-          {/* Master Toggle */}
-          <SettingItem
-            icon={Bell}
-            title="התראות מופעלות"
-            type="switch"
-            value={notifSettings.enabled}
-            onPress={(val: boolean) => updateNotifSettings({ enabled: val })}
-            color="#FF9500"
-          />
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconContainer, { backgroundColor: '#FFF4E6' }]}>
+              <Bell size={18} color="#FF9500" strokeWidth={2} />
+            </View>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>התראות ותזכורות</Text>
+          </View>
 
-          {/* Food Reminder */}
-          <SettingItem
-            icon={Utensils}
-            title="תזכורת אוכל"
-            type="switch"
-            value={notifSettings.feedingReminder}
-            onPress={(val: boolean) => updateNotifSettings({ feedingReminder: val })}
-            color="#F59E0B"
-            subtitle={`כל ${notifSettings.feedingIntervalHours} שעות`}
-          />
-          {notifSettings.feedingReminder && (
-            <>
-              <IntervalPicker
-                value={notifSettings.feedingIntervalHours}
-                options={[1, 2, 3, 4]}
-                unit="שעות"
-                onChange={(val) => updateNotifSettings({ feedingIntervalHours: val as 1 | 2 | 3 | 4 })}
+          <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
+            <View style={[styles.listItem, styles.listItemFirst]}>
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#FFF4E6' }]}>
+                  <Bell size={18} color="#FF9500" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>התראות מופעלות</Text>
+                </View>
+              </View>
+              <Switch
+                trackColor={{ false: theme.divider, true: '#FF9500' }}
+                thumbColor="#fff"
+                onValueChange={(val) => updateNotifSettings({ enabled: val })}
+                value={notifSettings.enabled}
+              />
+            </View>
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <View style={styles.listItem}>
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#FEF3C7' }]}>
+                  <Utensils size={18} color="#F59E0B" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>תזכורת אוכל</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
+                    כל {notifSettings.feedingIntervalHours} שעות
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                trackColor={{ false: theme.divider, true: '#F59E0B' }}
+                thumbColor="#fff"
+                onValueChange={(val) => updateNotifSettings({ feedingReminder: val })}
+                value={notifSettings.feedingReminder}
                 disabled={!notifSettings.enabled}
               />
-              <TimePicker
-                value={notifSettings.feedingStartTime || "08:00"}
-                label="שעת התחלה"
-                onChange={(time) => updateNotifSettings({ feedingStartTime: time })}
+            </View>
+
+            {notifSettings.feedingReminder && (
+              <>
+                <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+                <View style={styles.listItem}>
+                  <IntervalPicker
+                    value={notifSettings.feedingIntervalHours}
+                    options={[1, 2, 3, 4]}
+                    unit="שעות"
+                    onChange={(val) => updateNotifSettings({ feedingIntervalHours: val as 1 | 2 | 3 | 4 })}
+                    disabled={!notifSettings.enabled}
+                  />
+                </View>
+                <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+                <View style={styles.listItem}>
+                  <TimePicker
+                    value={notifSettings.feedingStartTime || "08:00"}
+                    label="שעת התחלה"
+                    onChange={(time) => updateNotifSettings({ feedingStartTime: time })}
+                    disabled={!notifSettings.enabled}
+                  />
+                </View>
+              </>
+            )}
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <View style={styles.listItem}>
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#D1FAE5' }]}>
+                  <Pill size={18} color="#10B981" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>תזכורת תוספים</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
+                    כל יום ב-{notifSettings.supplementTime}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                trackColor={{ false: theme.divider, true: '#10B981' }}
+                thumbColor="#fff"
+                onValueChange={(val) => updateNotifSettings({ supplementReminder: val })}
+                value={notifSettings.supplementReminder}
                 disabled={!notifSettings.enabled}
               />
-            </>
-          )}
+            </View>
 
-          {/* Supplements Reminder */}
-          <SettingItem
-            icon={Pill}
-            title="תזכורת תוספים"
-            type="switch"
-            value={notifSettings.supplementReminder}
-            onPress={(val: boolean) => updateNotifSettings({ supplementReminder: val })}
-            color="#10B981"
-            subtitle={`כל יום ב-${notifSettings.supplementTime}`}
-          />
-          {notifSettings.supplementReminder && (
-            <TimePicker
-              value={notifSettings.supplementTime}
-              label="שעת נטילה"
-              onChange={(time) => updateNotifSettings({ supplementTime: time })}
-              disabled={!notifSettings.enabled}
-            />
-          )}
+            {notifSettings.supplementReminder && (
+              <>
+                <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+                <View style={styles.listItem}>
+                  <TimePicker
+                    value={notifSettings.supplementTime}
+                    label="שעת נטילה"
+                    onChange={(time) => updateNotifSettings({ supplementTime: time })}
+                    disabled={!notifSettings.enabled}
+                  />
+                </View>
+              </>
+            )}
 
-          {/* Daily Summary */}
-          <SettingItem
-            icon={FileText}
-            title="סיכום יומי"
-            type="switch"
-            value={notifSettings.dailySummary}
-            onPress={(val: boolean) => updateNotifSettings({ dailySummary: val })}
-            color="#EC4899"
-            subtitle={`כל יום ב-${notifSettings.dailySummaryTime}`}
-          />
-          {notifSettings.dailySummary && (
-            <TimePicker
-              value={notifSettings.dailySummaryTime}
-              label="שעת סיכום"
-              onChange={(time) => updateNotifSettings({ dailySummaryTime: time })}
-              disabled={!notifSettings.enabled}
-            />
-          )}
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <View style={[styles.listItem, styles.listItemLast]}>
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#FCE7F3' }]}>
+                  <FileText size={18} color="#EC4899" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>סיכום יומי</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
+                    כל יום ב-{notifSettings.dailySummaryTime}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                trackColor={{ false: theme.divider, true: '#EC4899' }}
+                thumbColor="#fff"
+                onValueChange={(val) => updateNotifSettings({ dailySummary: val })}
+                value={notifSettings.dailySummary}
+                disabled={!notifSettings.enabled}
+              />
+            </View>
+
+            {notifSettings.dailySummary && (
+              <>
+                <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+                <View style={[styles.listItem, styles.listItemLast]}>
+                  <TimePicker
+                    value={notifSettings.dailySummaryTime}
+                    label="שעת סיכום"
+                    onChange={(time) => updateNotifSettings({ dailySummaryTime: time })}
+                    disabled={!notifSettings.enabled}
+                  />
+                </View>
+              </>
+            )}
+          </View>
         </View>
 
         {/* תצוגה והתנהגות */}
-        <SectionHeader icon={Moon} title="תצוגה והתנהגות" color="#8B5CF6" />
-        <View style={[styles.sectionContainer, { backgroundColor: theme.card }]}>
-          <SettingItem icon={Moon} title="מצב לילה" type="switch" value={isDarkMode} onPress={handleDarkModeToggle} color="#5856D6" />
-          <SettingItem
-            icon={Globe}
-            title="שפה"
-            type="value"
-            value={currentLang?.flag + ' ' + currentLang?.label}
-            onPress={() => setLanguageModalVisible(true)}
-            color="#34C759"
-          />
-          <SettingItem icon={Lock} title="כניסה ביומטרית" type="switch" value={biometricsEnabled} onPress={handleBiometricsToggle} color="#34C759" subtitle="Face ID / Touch ID" />
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconContainer, { backgroundColor: '#EDE9FE' }]}>
+              <Moon size={18} color="#8B5CF6" strokeWidth={2} />
+            </View>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>תצוגה והתנהגות</Text>
+          </View>
+
+          <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
+            <View style={[styles.listItem, styles.listItemFirst]}>
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#EDE9FE' }]}>
+                  <Moon size={18} color="#8B5CF6" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>מצב לילה</Text>
+                </View>
+              </View>
+              <Switch
+                trackColor={{ false: theme.divider, true: theme.primary }}
+                thumbColor="#fff"
+                onValueChange={handleDarkModeToggle}
+                value={isDarkMode}
+              />
+            </View>
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <TouchableOpacity
+              style={styles.listItem}
+              onPress={() => setLanguageModalVisible(true)}
+              activeOpacity={0.6}
+            >
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#D1FAE5' }]}>
+                  <Globe size={18} color="#10B981" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>שפה</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
+                    {currentLang?.flag} {currentLang?.label}
+                  </Text>
+                </View>
+              </View>
+              <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <View style={[styles.listItem, styles.listItemLast]}>
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#D1FAE5' }]}>
+                  <Lock size={18} color="#10B981" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>כניסה ביומטרית</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>Face ID / Touch ID</Text>
+                </View>
+              </View>
+              <Switch
+                trackColor={{ false: theme.divider, true: '#10B981' }}
+                thumbColor="#fff"
+                onValueChange={handleBiometricsToggle}
+                value={biometricsEnabled}
+              />
+            </View>
+          </View>
         </View>
 
-        {/* 3. פרטיות ותמיכה */}
-        <SectionHeader icon={Shield} title="פרטיות ותמיכה" color="#10B981" />
-        <View style={[styles.sectionContainer, { backgroundColor: theme.card }]}>
-          <SettingItem icon={FileText} title="מדיניות פרטיות" onPress={() => Linking.openURL('https://policies.google.com')} color="#8E8E93" />
-          <SettingItem icon={FileText} title="תנאי שימוש" onPress={() => Linking.openURL('https://policies.google.com/terms')} color="#8E8E93" />
-          <SettingItem icon={MessageCircle} title="צור קשר" onPress={() => setContactModalVisible(true)} color="#5AC8FA" subtitle="שלח הודעה לצוות" />
-          <SettingItem icon={Share2} title="שתף חברים" onPress={handleShareApp} color="#AF52DE" />
+        {/* פרטיות ותמיכה */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconContainer, { backgroundColor: '#D1FAE5' }]}>
+              <Shield size={18} color="#10B981" strokeWidth={2} />
+            </View>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>פרטיות ותמיכה</Text>
+          </View>
+
+          <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
+            <TouchableOpacity
+              style={[styles.listItem, styles.listItemFirst]}
+              onPress={() => setPrivacyModalVisible(true)}
+              activeOpacity={0.6}
+            >
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: theme.divider }]}>
+                  <FileText size={18} color={theme.textSecondary} strokeWidth={2} />
+                </View>
+                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>מדיניות פרטיות</Text>
+              </View>
+              <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <TouchableOpacity
+              style={styles.listItem}
+              onPress={() => setTermsModalVisible(true)}
+              activeOpacity={0.6}
+            >
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: theme.divider }]}>
+                  <FileText size={18} color={theme.textSecondary} strokeWidth={2} />
+                </View>
+                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>תנאי שימוש</Text>
+              </View>
+              <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <TouchableOpacity
+              style={styles.listItem}
+              onPress={() => Linking.openURL('mailto:Calmperent@Gmail.com?subject=פנייה מאפליקציית CalmParent')}
+              activeOpacity={0.6}
+            >
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#E0F2FE' }]}>
+                  <MessageCircle size={18} color="#0EA5E9" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>צור קשר</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>שלח מייל לצוות</Text>
+                </View>
+              </View>
+              <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <TouchableOpacity
+              style={[styles.listItem, styles.listItemLast]}
+              onPress={handleShareApp}
+              activeOpacity={0.6}
+            >
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#F3E8FF' }]}>
+                  <Share2 size={18} color="#A78BFA" strokeWidth={2} />
+                </View>
+                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>שתף חברים</Text>
+              </View>
+              <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* 4. אזור מסוכן */}
-        <SectionHeader icon={Trash2} title="אזור מסוכן" color="#EF4444" />
-        <View style={[styles.sectionContainer, { backgroundColor: theme.card }]}>
-          <SettingItem icon={Key} title="שינוי סיסמה" onPress={handleChangePassword} color="#007AFF" subtitle="שלח מייל לאיפוס" />
-          <SettingItem
-            icon={Trash2}
-            title="מחיקת ילד נוכחי"
-            isDestructive
-            onPress={handleDeleteChild}
-            subtitle={activeChild ? `מחק את ${activeChild.childName}` : 'אין ילד נבחר'}
-          />
-          <SettingItem icon={LogOut} title="התנתקות" isDestructive onPress={handleLogout} />
-          <SettingItem icon={Trash2} title="מחיקת חשבון" isDestructive onPress={handleDeleteAccount} subtitle="פעולה זו בלתי הפיכה" />
+        {/* אזור מסוכן */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconContainer, { backgroundColor: '#FEE2E2' }]}>
+              <Trash2 size={18} color="#EF4444" strokeWidth={2} />
+            </View>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>אזור מסוכן</Text>
+          </View>
+
+          <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
+            <TouchableOpacity
+              style={[styles.listItem, styles.listItemFirst]}
+              onPress={handleChangePassword}
+              activeOpacity={0.6}
+            >
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#DBEAFE' }]}>
+                  <Key size={18} color="#3B82F6" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>שינוי סיסמה</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>שלח מייל לאיפוס</Text>
+                </View>
+              </View>
+              <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <TouchableOpacity
+              style={styles.listItem}
+              onPress={handleDeleteChild}
+              activeOpacity={0.6}
+            >
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#FEE2E2' }]}>
+                  <Trash2 size={18} color="#EF4444" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: '#EF4444' }]}>מחיקת ילד נוכחי</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
+                    {activeChild ? `מחק את ${activeChild.childName}` : 'אין ילד נבחר'}
+                  </Text>
+                </View>
+              </View>
+              <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <TouchableOpacity
+              style={styles.listItem}
+              onPress={handleLogout}
+              activeOpacity={0.6}
+            >
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#FEE2E2' }]}>
+                  <LogOut size={18} color="#EF4444" strokeWidth={2} />
+                </View>
+                <Text style={[styles.listItemText, { color: '#EF4444' }]}>התנתקות</Text>
+              </View>
+              <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+
+            <TouchableOpacity
+              style={[styles.listItem, styles.listItemLast]}
+              onPress={handleDeleteAccount}
+              activeOpacity={0.6}
+            >
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#FEE2E2' }]}>
+                  <Trash2 size={18} color="#EF4444" strokeWidth={2} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: '#EF4444' }]}>מחיקת חשבון</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>פעולה זו בלתי הפיכה</Text>
+                </View>
+              </View>
+              <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
         </View>
 
+        {/* Version */}
         <Text style={[styles.version, { color: theme.textSecondary }]}>CalmParent v1.0.4</Text>
       </ScrollView>
 
-      {/* Modal לעריכת שם */}
-      <Modal visible={isEditModalVisible} transparent animationType="fade" onRequestClose={() => setEditModalVisible(false)}>
-        <TouchableWithoutFeedback onPress={() => setEditModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.modalContent, { backgroundColor: theme.card }]}>
+      {/* Language Modal */}
+      <Modal visible={isLanguageModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>בחירת שפה</Text>
+              <TouchableOpacity
+                onPress={() => setLanguageModalVisible(false)}
+                style={styles.modalClose}
+                activeOpacity={0.6}
+              >
+                <X size={24} color={theme.textSecondary} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
 
-                <View style={styles.modalHeader}>
-                  <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                    <X size={24} color={theme.textSecondary} />
-                  </TouchableOpacity>
-                  <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>עריכת שם</Text>
-                </View>
-
-                <TextInput
-                  style={[styles.input, { backgroundColor: isDarkMode ? '#2C2C2E' : '#F2F2F7', color: theme.textPrimary }]}
-                  value={newName}
-                  onChangeText={setNewName}
-                  textAlign="right"
-                  autoFocus
-                  placeholder="הקלד שם חדש..."
-                  placeholderTextColor={theme.textSecondary}
-                />
-
-                <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.primary }]} onPress={handleSaveName}>
-                  {loading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>שמור שינויים</Text>}
-                </TouchableOpacity>
-
-              </KeyboardAvoidingView>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* Modal לבחירת שפה */}
-      <Modal visible={isLanguageModalVisible} transparent animationType="fade" onRequestClose={() => setLanguageModalVisible(false)}>
-        <TouchableWithoutFeedback onPress={() => setLanguageModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => setLanguageModalVisible(false)}>
-                  <X size={24} color={theme.textSecondary} />
-                </TouchableOpacity>
-                <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>בחירת שפה</Text>
-              </View>
-
+            <View style={styles.modalContent}>
               {LANGUAGES.map((lang) => (
                 <TouchableOpacity
                   key={lang.key}
-                  style={[styles.languageOption, selectedLanguage === lang.key && { backgroundColor: theme.primary + '15' }]}
+                  style={[
+                    styles.languageItem,
+                    { backgroundColor: theme.background },
+                    selectedLanguage === lang.key && { backgroundColor: theme.primaryLight }
+                  ]}
                   onPress={() => handleLanguageSelect(lang.key)}
+                  activeOpacity={0.6}
                 >
-                  <View style={styles.languageLeft}>
-                    {selectedLanguage === lang.key && <Check size={20} color={theme.primary} strokeWidth={3} />}
-                  </View>
-                  <View style={styles.languageRight}>
-                    <Text style={[styles.languageLabel, { color: theme.textPrimary }]}>{lang.label}</Text>
+                  <View style={styles.languageContent}>
                     <Text style={styles.languageFlag}>{lang.flag}</Text>
+                    <Text style={[styles.languageLabel, { color: theme.textPrimary }]}>{lang.label}</Text>
                   </View>
+                  {selectedLanguage === lang.key && (
+                    <Check size={20} color={theme.primary} strokeWidth={2.5} />
+                  )}
                 </TouchableOpacity>
               ))}
-
             </View>
           </View>
-        </TouchableWithoutFeedback>
+        </View>
       </Modal>
 
-      {/* Modal ליצירת קשר */}
-      <Modal visible={isContactModalVisible} transparent animationType="fade" onRequestClose={() => setContactModalVisible(false)}>
+      {/* Privacy Policy Modal */}
+      <Modal visible={isPrivacyModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: theme.card, maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>מדיניות פרטיות</Text>
+              <TouchableOpacity
+                onPress={() => setPrivacyModalVisible(false)}
+                style={styles.modalClose}
+                activeOpacity={0.6}
+              >
+                <X size={24} color={theme.textSecondary} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.policyText, { color: theme.textPrimary }]}>
+                <Text style={styles.policyTitle}>עדכון אחרון: דצמבר 2024{'\n\n'}</Text>
+
+                <Text style={styles.policySubtitle}>1. מבוא{'\n'}</Text>
+                ברוכים הבאים לאפליקציית CalmParent. אנו מחויבים להגן על פרטיותכם ולשמור על המידע האישי שלכם בצורה מאובטחת. מדיניות פרטיות זו מסבירה כיצד אנו אוספים, משתמשים ומגנים על המידע שלכם.{'\n\n'}
+
+                <Text style={styles.policySubtitle}>2. איסוף מידע{'\n'}</Text>
+                אנו אוספים את המידע הבא:{'\n'}
+                • פרטי חשבון: שם, כתובת אימייל, תמונת פרופיל{'\n'}
+                • נתוני ילדים: שם, תאריך לידה, מגדר{'\n'}
+                • נתוני מעקב: זמני שינה, האכלה, החתלה ותרופות{'\n'}
+                • נתונים טכניים: סוג מכשיר, גרסת מערכת הפעלה{'\n\n'}
+
+                <Text style={styles.policySubtitle}>3. שימוש במידע{'\n'}</Text>
+                המידע שלכם משמש אותנו ל:{'\n'}
+                • מתן שירותי האפליקציה והתאמה אישית{'\n'}
+                • שליחת תזכורות והתראות{'\n'}
+                • שיפור חוויית המשתמש{'\n'}
+                • תמיכה טכנית{'\n\n'}
+
+                <Text style={styles.policySubtitle}>4. אבטחת מידע{'\n'}</Text>
+                אנו משתמשים בטכנולוגיות אבטחה מתקדמות כולל הצפנת נתונים, אחסון מאובטח בענן (Firebase), וגיבוי אוטומטי. המידע שלכם מאוחסן בשרתים מאובטחים וזמין רק לכם ולמי שתבחרו לשתף עמו.{'\n\n'}
+
+                <Text style={styles.policySubtitle}>5. שיתוף מידע{'\n'}</Text>
+                אנו לא מוכרים או משתפים את המידע האישי שלכם עם צדדים שלישיים למטרות שיווק. המידע עשוי להיות משותף רק עם בני משפחה שהוזמנו על ידכם לאפליקציה.{'\n\n'}
+
+                <Text style={styles.policySubtitle}>6. יצירת קשר{'\n'}</Text>
+                לשאלות בנוגע למדיניות הפרטיות, אנא פנו אלינו בכתובת: Calmperent@Gmail.com
+              </Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Terms of Service Modal */}
+      <Modal visible={isTermsModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: theme.card, maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>תנאי שימוש</Text>
+              <TouchableOpacity
+                onPress={() => setTermsModalVisible(false)}
+                style={styles.modalClose}
+                activeOpacity={0.6}
+              >
+                <X size={24} color={theme.textSecondary} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.policyText, { color: theme.textPrimary }]}>
+                <Text style={styles.policyTitle}>עדכון אחרון: דצמבר 2024{'\n\n'}</Text>
+
+                <Text style={styles.policySubtitle}>1. הסכמה לתנאים{'\n'}</Text>
+                בשימוש באפליקציית CalmParent, הנכם מסכימים לתנאי שימוש אלה. אם אינכם מסכימים לתנאים, אנא הימנעו משימוש באפליקציה.{'\n\n'}
+
+                <Text style={styles.policySubtitle}>2. תיאור השירות{'\n'}</Text>
+                CalmParent היא אפליקציה למעקב אחר פעילויות תינוקות וילדים. האפליקציה מאפשרת רישום שינה, האכלה, החתלה, תרופות ושיתוף מידע עם בני משפחה.{'\n\n'}
+
+                <Text style={styles.policySubtitle}>3. חשבון משתמש{'\n'}</Text>
+                • הנכם אחראים לשמירה על סודיות פרטי החשבון{'\n'}
+                • יש לספק מידע מדויק ועדכני{'\n'}
+                • אתם האחראים הבלעדיים לכל הפעילות בחשבונכם{'\n\n'}
+
+                <Text style={styles.policySubtitle}>4. שימוש מותר{'\n'}</Text>
+                האפליקציה מיועדת לשימוש אישי ומשפחתי בלבד. אסור להשתמש באפליקציה לכל מטרה בלתי חוקית או לא מורשית.{'\n\n'}
+
+                <Text style={styles.policySubtitle}>5. הגבלת אחריות{'\n'}</Text>
+                האפליקציה מסופקת "כמות שהיא". אנו לא נושאים באחריות לכל נזק ישיר או עקיף הנובע משימוש באפליקציה. האפליקציה אינה מהווה תחליף לייעוץ רפואי מקצועי.{'\n\n'}
+
+                <Text style={styles.policySubtitle}>6. קניין רוחני{'\n'}</Text>
+                כל הזכויות באפליקציה, כולל עיצוב, קוד ותוכן, שייכות ל-CalmParent. אין לשכפל, להפיץ או ליצור יצירות נגזרות ללא אישור מפורש.{'\n\n'}
+
+                <Text style={styles.policySubtitle}>7. שינויים בתנאים{'\n'}</Text>
+                אנו שומרים לעצמנו את הזכות לעדכן תנאים אלה בכל עת. שימוש מתמשך באפליקציה לאחר עדכון מהווה הסכמה לתנאים המעודכנים.{'\n\n'}
+
+                <Text style={styles.policySubtitle}>8. יצירת קשר{'\n'}</Text>
+                לשאלות בנוגע לתנאי השימוש, אנא פנו אלינו בכתובת: Calmperent@Gmail.com
+              </Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Contact Modal */}
+      <Modal visible={isContactModalVisible} transparent animationType="slide">
         <TouchableWithoutFeedback onPress={() => setContactModalVisible(false)}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.modalContent, { backgroundColor: theme.card }]}>
-
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={[styles.modalContainer, { backgroundColor: theme.card }]}
+              >
                 <View style={styles.modalHeader}>
-                  <TouchableOpacity onPress={() => setContactModalVisible(false)}>
-                    <X size={24} color={theme.textSecondary} />
-                  </TouchableOpacity>
                   <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>צור קשר</Text>
+                  <TouchableOpacity
+                    onPress={() => setContactModalVisible(false)}
+                    style={styles.modalClose}
+                    activeOpacity={0.6}
+                  >
+                    <X size={24} color={theme.textSecondary} strokeWidth={2} />
+                  </TouchableOpacity>
                 </View>
 
                 <Text style={[styles.contactHint, { color: theme.textSecondary }]}>
@@ -734,7 +939,7 @@ export default function SettingsScreen() {
                 </Text>
 
                 <TextInput
-                  style={[styles.textArea, { backgroundColor: isDarkMode ? '#2C2C2E' : '#F2F2F7', color: theme.textPrimary }]}
+                  style={[styles.textArea, { backgroundColor: theme.background, color: theme.textPrimary }]}
                   value={contactMessage}
                   onChangeText={setContactMessage}
                   textAlign="right"
@@ -745,176 +950,247 @@ export default function SettingsScreen() {
                   textAlignVertical="top"
                 />
 
-                <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.primary }]} onPress={handleSendContactMessage}>
+                <TouchableOpacity
+                  style={[styles.sendButton, { backgroundColor: theme.primary }]}
+                  onPress={handleSendContactMessage}
+                  activeOpacity={0.9}
+                >
                   {loading ? (
-                    <ActivityIndicator color="white" />
+                    <ActivityIndicator color="#fff" />
                   ) : (
-                    <View style={styles.sendBtnContent}>
-                      <Send size={18} color="white" strokeWidth={2.5} />
-                      <Text style={styles.saveButtonText}>שלח הודעה</Text>
+                    <View style={styles.sendButtonContent}>
+                      <Send size={18} color="#fff" strokeWidth={2.5} />
+                      <Text style={styles.sendButtonText}>שלח הודעה</Text>
                     </View>
                   )}
                 </TouchableOpacity>
-
               </KeyboardAvoidingView>
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-
-      {/* Loading Overlay כללי */}
-      {
-        loading && !isEditModalVisible && !isContactModalVisible && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={theme.primary} />
-          </View>
-        )
-      }
-
-
-    </View >
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-
-  // Header
+  container: {
+    flex: 1,
+  },
   header: {
-    paddingTop: 60,
-    paddingBottom: 24,
+    paddingTop: Platform.OS === 'ios' ? 12 : 20,
+    paddingBottom: 8,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+  },
+  headerContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textAlign: 'right',
-    letterSpacing: -0.5,
+    fontSize: 34,
+    fontWeight: '700',
+    letterSpacing: 0.37,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'right',
-    marginTop: 4,
+    fontSize: 15,
+    fontWeight: '400',
+    letterSpacing: -0.24,
   },
-  headerTop: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  backButton: {
+    padding: 4,
   },
-  headerCenter: {
-    alignItems: 'center',
+  scrollContent: {
+    paddingTop: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 100,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 10,
+  section: {
+    marginBottom: 40,
   },
-
-  scrollContent: { padding: 16, paddingBottom: 120 },
-
-  // User Avatar Card
-  userAvatarCard: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 8,
-  },
-  userAvatarSmall: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#E5E7EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  userAvatarInitials: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#6B7280',
-  },
-  userAvatarName: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  userAvatarEmail: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-
-  // פרופיל
-  profileCard: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    padding: 20,
-    borderRadius: 20,
-    marginBottom: 24,
-    marginTop: -12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5
-  },
-  avatarContainer: { position: 'relative', marginLeft: 16 },
-  avatarImage: { width: 72, height: 72, borderRadius: 36 },
-  avatarPlaceholder: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 28, fontWeight: '700', color: '#FFFFFF' },
-  editIconBadge: { position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'white' },
-  profileInfo: { flex: 1, alignItems: 'flex-end' },
-  profileName: { fontSize: 22, fontWeight: '700', marginBottom: 2, letterSpacing: -0.3 },
-  profileEmail: { fontSize: 14, opacity: 0.8 },
-  editProfileBtn: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 14, backgroundColor: '#EEF2FF', borderRadius: 20 },
-  editLink: { fontSize: 13, fontWeight: '600' },
-
-  // סקציות
   sectionHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    marginBottom: 10,
-    marginRight: 4,
+    gap: 12,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  sectionIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: 0.35,
+  },
+  listContainer: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  listItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    minHeight: 56,
+  },
+  listItemFirst: {
+    paddingTop: 18,
+  },
+  listItemLast: {
+    paddingBottom: 18,
+  },
+  listDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 20,
+    marginRight: 20,
+  },
+  listItemContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  listItemIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listItemTextContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  listItemText: {
+    fontSize: 17,
+    fontWeight: '400',
+    letterSpacing: -0.41,
+  },
+  listItemSubtext: {
+    fontSize: 13,
+    fontWeight: '400',
+    marginTop: 2,
+    letterSpacing: -0.08,
+  },
+  version: {
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '400',
+    marginTop: 8,
+    marginBottom: 20,
+    letterSpacing: -0.08,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 0.36,
+  },
+  modalClose: {
+    padding: 4,
+  },
+  modalContent: {
     gap: 8,
   },
-  sectionHeaderText: { fontSize: 13, fontWeight: '600' },
-  sectionIcon: { width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  sectionContainer: { borderRadius: 16, overflow: 'hidden', marginBottom: 24 },
-
-  // פריט ברשימה
-  itemContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 0.5 },
-  itemRight: { flexDirection: 'row', alignItems: 'center' },
-  itemLeft: { flexDirection: 'row', alignItems: 'center' },
-  itemTextContainer: { alignItems: 'flex-end', marginRight: 12 },
-  itemText: { fontSize: 16, fontWeight: '500' },
-  itemSubtitle: { fontSize: 12, marginTop: 2 },
-  iconBox: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  valueContainer: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  valueText: { fontSize: 14, fontWeight: '500' },
-
-  version: { textAlign: 'center', fontSize: 12, marginTop: 16, opacity: 0.6 },
-
-  // מודל
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { borderRadius: 24, padding: 24, width: '100%', maxWidth: 400, alignSelf: 'center' },
-  modalHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: '700' },
-  input: { borderRadius: 12, padding: 16, fontSize: 16, marginBottom: 20, textAlign: 'right' },
-  textArea: { borderRadius: 12, padding: 16, fontSize: 16, marginBottom: 20, textAlign: 'right', minHeight: 120 },
-  contactHint: { fontSize: 14, textAlign: 'right', marginBottom: 16, lineHeight: 20 },
-  saveButton: { borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center' },
-  saveButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-  sendBtnContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center', zIndex: 999 },
-
-  // Language Modal
-  languageOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 16, borderRadius: 12, marginBottom: 8 },
-  languageRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  languageLeft: { width: 24 },
-  languageFlag: { fontSize: 24 },
-  languageLabel: { fontSize: 16, fontWeight: '500' },
+  languageItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 16,
+  },
+  languageContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  languageFlag: {
+    fontSize: 24,
+  },
+  languageLabel: {
+    fontSize: 17,
+    fontWeight: '400',
+    letterSpacing: -0.41,
+  },
+  contactHint: {
+    fontSize: 15,
+    fontWeight: '400',
+    textAlign: 'right',
+    marginBottom: 16,
+    letterSpacing: -0.24,
+  },
+  textArea: {
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 16,
+    marginBottom: 20,
+    minHeight: 120,
+    textAlign: 'right',
+  },
+  sendButton: {
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  sendButtonContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sendButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: -0.41,
+  },
+  policyText: {
+    fontSize: 15,
+    lineHeight: 24,
+    textAlign: 'right',
+    paddingBottom: 24,
+  },
+  policyTitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  policySubtitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
 });

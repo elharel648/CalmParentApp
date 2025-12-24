@@ -7,7 +7,7 @@ import {
     Alert,
     Platform,
 } from 'react-native';
-import { Users, UserPlus, Crown, Eye, Edit3, Trash2, LogOut, Link, ChevronLeft } from 'lucide-react-native';
+import { Users, UserPlus, Crown, Eye, Trash2, LogOut, Link, ChevronLeft, Pencil, Plus } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useFamily } from '../../hooks/useFamily';
 import { FamilyRole } from '../../services/familyService';
@@ -17,19 +17,21 @@ interface FamilyMembersCardProps {
     onInvitePress: () => void;
     onJoinPress: () => void;
     onGuestInvitePress?: () => void;
+    onEditFamilyName?: () => void;
 }
 
-const ROLE_CONFIG: Record<FamilyRole, { label: string; icon: any; color: string }> = {
-    admin: { label: 'מנהל', icon: Crown, color: '#F59E0B' },
-    member: { label: 'חבר', icon: Edit3, color: '#6366F1' },
-    viewer: { label: 'צופה', icon: Eye, color: '#10B981' },
-    guest: { label: 'אורח', icon: Eye, color: '#F59E0B' },
+const ROLE_CONFIG: Record<FamilyRole, { label: string; color: string }> = {
+    admin: { label: 'מנהל', color: '#F59E0B' },
+    member: { label: 'חבר', color: '#6366F1' },
+    viewer: { label: 'צופה', color: '#10B981' },
+    guest: { label: 'אורח', color: '#F59E0B' },
 };
 
 export const FamilyMembersCard: React.FC<FamilyMembersCardProps> = ({
     onInvitePress,
     onJoinPress,
     onGuestInvitePress,
+    onEditFamilyName,
 }) => {
     const { family, members, isAdmin, remove, leave } = useFamily();
 
@@ -37,7 +39,7 @@ export const FamilyMembersCard: React.FC<FamilyMembersCardProps> = ({
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         Alert.alert(
             'הסרת חבר',
-            `להסיר את ${memberName} מהמשפחה?`,
+            `להסיר את ${memberName}?`,
             [
                 { text: 'ביטול', style: 'cancel' },
                 {
@@ -75,147 +77,151 @@ export const FamilyMembersCard: React.FC<FamilyMembersCardProps> = ({
         );
     };
 
-    // No family yet - show minimal setup
+    // No family yet - simple options
     if (!family) {
         return (
             <View style={styles.container}>
-                {/* Create Family */}
                 <TouchableOpacity
-                    style={styles.actionRow}
+                    style={styles.simpleRow}
                     onPress={onInvitePress}
                     activeOpacity={0.7}
                 >
-                    <ChevronLeft size={18} color="#D1D5DB" />
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>צור משפחה</Text>
-                        <Text style={styles.actionSubtitle}>הזמן אחרים לצפות בתיעודים</Text>
-                    </View>
-                    <View style={[styles.actionIcon, { backgroundColor: '#EEF2FF' }]}>
-                        <UserPlus size={18} color="#6366F1" strokeWidth={2} />
+                    <ChevronLeft size={16} color="#D1D5DB" />
+                    <Text style={styles.simpleRowText}>צור משפחה</Text>
+                    <View style={[styles.iconCircle, { backgroundColor: '#EEF2FF' }]}>
+                        <UserPlus size={16} color="#6366F1" />
                     </View>
                 </TouchableOpacity>
 
-                {/* Join with code */}
                 <TouchableOpacity
-                    style={styles.actionRow}
+                    style={styles.simpleRow}
                     onPress={onJoinPress}
                     activeOpacity={0.7}
                 >
-                    <ChevronLeft size={18} color="#D1D5DB" />
-                    <View style={styles.actionContent}>
-                        <Text style={styles.actionTitle}>הצטרף עם קוד</Text>
-                        <Text style={styles.actionSubtitle}>יש לך קוד הזמנה?</Text>
-                    </View>
-                    <View style={[styles.actionIcon, { backgroundColor: '#ECFDF5' }]}>
-                        <Link size={18} color="#10B981" strokeWidth={2} />
+                    <ChevronLeft size={16} color="#D1D5DB" />
+                    <Text style={styles.simpleRowText}>הצטרף עם קוד</Text>
+                    <View style={[styles.iconCircle, { backgroundColor: '#ECFDF5' }]}>
+                        <Link size={16} color="#10B981" />
                     </View>
                 </TouchableOpacity>
             </View>
         );
     }
 
-    // Has family - show minimal members list
+    // Has family - clean minimal view
     return (
         <View style={styles.container}>
-            {/* Family Name Header */}
-            <View style={styles.familyHeader}>
-                <Text style={styles.familySubtitle}>{members.length} חברים</Text>
-                <Text style={styles.familyName}>משפחת {family.babyName}</Text>
+            {/* Family Header - Simple */}
+            <View style={styles.header}>
+                <View style={styles.headerRight}>
+                    <Text style={styles.familyName}>משפחת {family.babyName}</Text>
+                    <Text style={styles.memberCount}>{members.length} חברים</Text>
+                </View>
+                {isAdmin && onEditFamilyName && (
+                    <TouchableOpacity
+                        onPress={onEditFamilyName}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={styles.editBtn}
+                    >
+                        <Pencil size={14} color="#9CA3AF" />
+                    </TouchableOpacity>
+                )}
             </View>
 
-            {/* Members */}
-            {members.map((member, index) => {
-                const config = ROLE_CONFIG[member.role];
-                const isMe = member.id === auth.currentUser?.uid;
+            {/* Members - Compact chips */}
+            <View style={styles.membersSection}>
+                {members.map((member, index) => {
+                    const config = ROLE_CONFIG[member.role];
+                    const isMe = member.id === auth.currentUser?.uid;
+                    const initial = (member.name || 'מ').charAt(0).toUpperCase();
 
-                return (
-                    <View key={member.id || index} style={styles.memberRow}>
-                        {isAdmin && !isMe ? (
-                            <TouchableOpacity
-                                onPress={() => handleRemoveMember(member.id!, member.name)}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            >
-                                <Trash2 size={16} color="#EF4444" />
-                            </TouchableOpacity>
-                        ) : (
-                            <View style={{ width: 16 }} />
-                        )}
-                        <View style={styles.memberInfo}>
-                            <Text style={[styles.memberRole, { color: config.color }]}>
-                                {config.label}
-                            </Text>
-                            <Text style={styles.memberName}>
-                                {member.name || 'משתמש'}
-                                {isMe && <Text style={styles.meTag}> (אני)</Text>}
-                            </Text>
+                    return (
+                        <View key={member.id || index} style={styles.memberChip}>
+                            <View style={[styles.chipAvatar, { backgroundColor: config.color + '20' }]}>
+                                <Text style={[styles.chipInitial, { color: config.color }]}>
+                                    {initial}
+                                </Text>
+                            </View>
+                            <View style={styles.chipInfo}>
+                                <Text style={styles.chipName} numberOfLines={1}>
+                                    {member.name || 'משתמש'}{isMe ? ' (אני)' : ''}
+                                </Text>
+                                <Text style={[styles.chipRole, { color: config.color }]}>
+                                    {config.label}
+                                </Text>
+                            </View>
+                            {isAdmin && !isMe && (
+                                <TouchableOpacity
+                                    onPress={() => handleRemoveMember(member.id!, member.name)}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
+                                    <Trash2 size={14} color="#EF4444" />
+                                </TouchableOpacity>
+                            )}
                         </View>
-                        <View style={[styles.memberAvatar, { backgroundColor: config.color + '20' }]}>
-                            <Text style={[styles.memberInitial, { color: config.color }]}>
-                                {(member.name || 'מ').charAt(0)}
-                            </Text>
-                        </View>
-                    </View>
-                );
-            })}
+                    );
+                })}
+            </View>
 
             {/* Divider */}
             <View style={styles.divider} />
 
-            {/* Actions */}
-            {isAdmin && (
+            {/* Actions Section - Separate from family display */}
+            <View style={styles.actionsSection}>
+                {isAdmin && (
+                    <TouchableOpacity
+                        style={styles.actionRow}
+                        onPress={onInvitePress}
+                        activeOpacity={0.7}
+                    >
+                        <ChevronLeft size={16} color="#D1D5DB" />
+                        <Text style={styles.actionText}>הזמנה למשפחה</Text>
+                        <View style={[styles.actionIcon, { backgroundColor: '#EEF2FF' }]}>
+                            <UserPlus size={14} color="#6366F1" />
+                        </View>
+                    </TouchableOpacity>
+                )}
+
+                {onGuestInvitePress && (
+                    <TouchableOpacity
+                        style={styles.actionRow}
+                        onPress={onGuestInvitePress}
+                        activeOpacity={0.7}
+                    >
+                        <ChevronLeft size={16} color="#D1D5DB" />
+                        <Text style={styles.actionText}>הזמן אורח</Text>
+                        <View style={[styles.actionIcon, { backgroundColor: '#ECFDF5' }]}>
+                            <Users size={14} color="#10B981" />
+                        </View>
+                    </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
                     style={styles.actionRow}
-                    onPress={onInvitePress}
+                    onPress={onJoinPress}
                     activeOpacity={0.7}
                 >
-                    <ChevronLeft size={18} color="#D1D5DB" />
-                    <Text style={styles.actionTitle}>הזמן חבר</Text>
-                    <View style={[styles.actionIcon, { backgroundColor: '#EEF2FF' }]}>
-                        <UserPlus size={16} color="#6366F1" strokeWidth={2} />
+                    <ChevronLeft size={16} color="#D1D5DB" />
+                    <Text style={styles.actionText}>הצטרף עם קוד</Text>
+                    <View style={[styles.actionIcon, { backgroundColor: '#FFF7ED' }]}>
+                        <Link size={14} color="#F59E0B" />
                     </View>
                 </TouchableOpacity>
-            )}
 
-            {onGuestInvitePress && (
-                <TouchableOpacity
-                    style={styles.actionRow}
-                    onPress={onGuestInvitePress}
-                    activeOpacity={0.7}
-                >
-                    <ChevronLeft size={18} color="#D1D5DB" />
-                    <Text style={styles.actionTitle}>הזמן אורח</Text>
-                    <View style={[styles.actionIcon, { backgroundColor: '#ECFDF5' }]}>
-                        <Users size={16} color="#10B981" strokeWidth={2} />
-                    </View>
-                </TouchableOpacity>
-            )}
-
-            {/* Join another family with code */}
-            <TouchableOpacity
-                style={styles.actionRow}
-                onPress={onJoinPress}
-                activeOpacity={0.7}
-            >
-                <ChevronLeft size={18} color="#D1D5DB" />
-                <Text style={styles.actionTitle}>הצטרף עם קוד</Text>
-                <View style={[styles.actionIcon, { backgroundColor: '#FFF7ED' }]}>
-                    <Link size={16} color="#F59E0B" strokeWidth={2} />
-                </View>
-            </TouchableOpacity>
-
-            {!isAdmin && (
-                <TouchableOpacity
-                    style={styles.actionRow}
-                    onPress={handleLeaveFamily}
-                    activeOpacity={0.7}
-                >
-                    <ChevronLeft size={18} color="#D1D5DB" />
-                    <Text style={[styles.actionTitle, { color: '#EF4444' }]}>עזוב משפחה</Text>
-                    <View style={[styles.actionIcon, { backgroundColor: '#FEE2E2' }]}>
-                        <LogOut size={16} color="#EF4444" strokeWidth={2} />
-                    </View>
-                </TouchableOpacity>
-            )}
+                {!isAdmin && (
+                    <TouchableOpacity
+                        style={styles.actionRow}
+                        onPress={handleLeaveFamily}
+                        activeOpacity={0.7}
+                    >
+                        <ChevronLeft size={16} color="#D1D5DB" />
+                        <Text style={[styles.actionText, { color: '#EF4444' }]}>עזוב משפחה</Text>
+                        <View style={[styles.actionIcon, { backgroundColor: '#FEE2E2' }]}>
+                            <LogOut size={14} color="#EF4444" />
+                        </View>
+                    </TouchableOpacity>
+                )}
+            </View>
         </View>
     );
 };
@@ -224,63 +230,91 @@ const styles = StyleSheet.create({
     container: {
         backgroundColor: '#fff',
         borderRadius: 16,
-        overflow: 'hidden',
+        padding: 16,
     },
 
-    // Family Header
-    familyHeader: {
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
-        alignItems: 'flex-end',
-    },
-    familyName: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#111827',
-    },
-    familySubtitle: {
-        fontSize: 12,
-        color: '#9CA3AF',
-        marginBottom: 2,
-    },
-
-    // Member Row
-    memberRow: {
+    // Simple row for no-family state
+    simpleRow: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
         paddingVertical: 12,
-        paddingHorizontal: 16,
         gap: 12,
     },
-    memberAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    memberInitial: {
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    memberInfo: {
+    simpleRowText: {
         flex: 1,
-        alignItems: 'flex-end',
-    },
-    memberName: {
         fontSize: 15,
         fontWeight: '600',
         color: '#111827',
+        textAlign: 'right',
     },
-    meTag: {
+    iconCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    // Header
+    header: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+    headerRight: {
+        alignItems: 'flex-end',
+    },
+    familyName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    memberCount: {
+        fontSize: 12,
         color: '#9CA3AF',
-        fontWeight: '400',
+        marginTop: 2,
     },
-    memberRole: {
-        fontSize: 11,
+    editBtn: {
+        padding: 8,
+    },
+
+    // Members section
+    membersSection: {
+        gap: 8,
+        marginBottom: 16,
+    },
+    memberChip: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        backgroundColor: '#F9FAFB',
+        borderRadius: 12,
+        padding: 10,
+        gap: 10,
+    },
+    chipAvatar: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    chipInitial: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    chipInfo: {
+        flex: 1,
+        alignItems: 'flex-end',
+    },
+    chipName: {
+        fontSize: 14,
         fontWeight: '600',
+        color: '#111827',
+    },
+    chipRole: {
+        fontSize: 11,
+        fontWeight: '500',
         marginTop: 1,
     },
 
@@ -288,39 +322,32 @@ const styles = StyleSheet.create({
     divider: {
         height: 1,
         backgroundColor: '#F3F4F6',
-        marginVertical: 8,
+        marginVertical: 12,
     },
 
-    // Action Row
+    // Actions section
+    actionsSection: {
+        gap: 4,
+    },
     actionRow: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-        gap: 12,
+        paddingVertical: 10,
+        gap: 10,
     },
     actionIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
+        width: 28,
+        height: 28,
+        borderRadius: 8,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    actionContent: {
+    actionText: {
         flex: 1,
-        alignItems: 'flex-end',
-    },
-    actionTitle: {
-        flex: 1,
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#111827',
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#374151',
         textAlign: 'right',
-    },
-    actionSubtitle: {
-        fontSize: 12,
-        color: '#9CA3AF',
-        marginTop: 1,
     },
 });
 

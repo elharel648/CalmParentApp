@@ -73,11 +73,9 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
             try {
                 const activityId = LiveActivity.startActivity(
                     {
-                        title: 'שאיבה',
-                        subtitle: 'שואבת חלב',
-                        progressBar: { date: Date.now() + (2 * 60 * 60 * 1000) },
-                        imageName: 'feed',
-                        dynamicIslandImageName: 'feed',
+                        title: '🍼 שאיבה',
+                        subtitle: '',
+                        progressBar: { date: Date.now() }, // Start time for count-up
                     },
                     {
                         backgroundColor: '#F59E0B',
@@ -127,6 +125,7 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
     const [leftBreastTime, setLeftBreastTime] = useState(0);
     const [rightBreastTime, setRightBreastTime] = useState(0);
     const breastTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const breastActivityIdRef = useRef<string | undefined>(undefined);
 
     // Breast timer effect
     useEffect(() => {
@@ -160,6 +159,39 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
         setBreastActiveSide(side);
         setBreastIsRunning(true);
         setBreastElapsedSeconds(0);
+
+        // Start iOS Live Activity
+        if (Platform.OS === 'ios') {
+            try {
+                // Stop existing activity first
+                if (breastActivityIdRef.current) {
+                    LiveActivity.stopActivity(breastActivityIdRef.current, {
+                        title: 'הנקה',
+                        subtitle: '',
+                    });
+                }
+                const sideText = side === 'left' ? 'שמאל' : 'ימין';
+                const activityId = LiveActivity.startActivity(
+                    {
+                        title: `הנקה ${sideText}`,
+                        subtitle: '',
+                        progressBar: { date: Date.now() },
+                    },
+                    {
+                        backgroundColor: '#EC4899',
+                        titleColor: '#FFFFFF',
+                        subtitleColor: '#FBCFE8',
+                        progressViewTint: '#F472B6',
+                        progressViewLabelColor: '#FFFFFF',
+                        deepLinkUrl: '/home',
+                        timerType: 'digital',
+                    }
+                );
+                if (activityId) breastActivityIdRef.current = activityId;
+            } catch (error) {
+                if (__DEV__) console.log('Live Activity not supported:', error);
+            }
+        }
     }, [breastIsRunning, breastActiveSide, breastElapsedSeconds]);
 
     const stopBreast = useCallback(() => {
@@ -174,6 +206,19 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
 
         setBreastIsRunning(false);
         setBreastElapsedSeconds(0);
+
+        // Stop iOS Live Activity
+        if (Platform.OS === 'ios' && breastActivityIdRef.current) {
+            try {
+                LiveActivity.stopActivity(breastActivityIdRef.current, {
+                    title: 'הנקה הסתיימה',
+                    subtitle: '',
+                });
+                breastActivityIdRef.current = undefined;
+            } catch (error) {
+                if (__DEV__) console.log('Error stopping Live Activity:', error);
+            }
+        }
     }, [breastActiveSide, breastElapsedSeconds]);
 
     const resetBreast = useCallback(() => {

@@ -10,6 +10,7 @@ import {
     removeMember,
     regenerateInviteCode,
     updateMemberRole,
+    renameFamily,
 } from '../services/familyService';
 import { auth, db } from '../services/firebaseConfig';
 
@@ -29,6 +30,7 @@ interface UseFamilyReturn {
     remove: (userId: string) => Promise<boolean>;
     refreshInviteCode: () => Promise<string | null>;
     changeRole: (userId: string, role: FamilyRole) => Promise<boolean>;
+    rename: (newName: string) => Promise<boolean>;
     refresh: () => Promise<void>;
 }
 
@@ -147,6 +149,10 @@ export const useFamily = (): UseFamilyReturn => {
         return await updateMemberRole(memberUserId, role);
     }, []);
 
+    const rename = useCallback(async (newName: string): Promise<boolean> => {
+        return await renameFamily(newName);
+    }, []);
+
     const refresh = useCallback(async () => {
         // No-op: handled by real-time listeners
     }, []);
@@ -165,6 +171,7 @@ export const useFamily = (): UseFamilyReturn => {
         remove,
         refreshInviteCode,
         changeRole,
+        rename,
         refresh,
     };
 };

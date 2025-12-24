@@ -28,6 +28,7 @@ interface HeaderSectionProps {
     navigation?: any;
     onAddChild?: () => void;
     onJoinWithCode?: () => void;
+    onEditChild?: (child: ActiveChild) => void;
 }
 
 /**
@@ -45,6 +46,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
     navigation,
     onAddChild,
     onJoinWithCode,
+    onEditChild,
 }) => {
     const { theme } = useTheme();
     const { allChildren, activeChild, setActiveChild } = useActiveChild();
@@ -128,6 +130,12 @@ const HeaderSection = memo<HeaderSectionProps>(({
     const handleJoinWithCode = () => {
         setShowAddModal(false);
         onJoinWithCode?.();
+    };
+
+    // Handle edit child (long press)
+    const handleEditChild = (child: ActiveChild) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        onEditChild?.(child);
     };
 
     // Get initials from name
@@ -329,16 +337,21 @@ const HeaderSection = memo<HeaderSectionProps>(({
             {/* Top Row: Greeting + Weather */}
             <View style={styles.topRow}>
                 <View style={styles.greetingSection}>
-                    <Text style={[styles.greeting, { color: theme.textSecondary }]}>
-                        {greeting} {profile.name}
+                    <Text style={[styles.greetingLarge, { color: '#1C1C1E' }]}>
+                        {greeting}, {profile.name}
                     </Text>
                 </View>
 
                 {/* Weather + Notification Group */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     {/* Notification Bell */}
-                    <TouchableOpacity style={styles.notificationBell} activeOpacity={0.7}>
-                        <Bell size={18} color="#9CA3AF" strokeWidth={1.5} />
+                    <TouchableOpacity
+                        style={styles.notificationBell}
+                        activeOpacity={0.7}
+                        onPress={() => navigation?.navigate('Notifications')}
+                    >
+                        <Bell size={20} color="#6B7280" strokeWidth={1.5} />
+                        {/* Blue dot - shows when there are unread notifications */}
                         <View style={styles.notificationDot} />
                     </TouchableOpacity>
 
@@ -370,6 +383,8 @@ const HeaderSection = memo<HeaderSectionProps>(({
                                     isActive && styles.childAvatarActive
                                 ]}
                                 onPress={() => handleSelectChild(child)}
+                                onLongPress={() => handleEditChild(child)}
+                                delayLongPress={300}
                                 activeOpacity={0.7}
                             >
                                 {child.photoUrl ? (
@@ -487,7 +502,7 @@ HeaderSection.displayName = 'HeaderSection';
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 20,
+        marginBottom: 28,
     },
 
     // Top Row
@@ -499,6 +514,17 @@ const styles = StyleSheet.create({
     },
     greetingSection: {
         alignItems: 'flex-end',
+        flex: 1,
+    },
+    greetingLarge: {
+        fontSize: 20,
+        fontWeight: '600',
+        letterSpacing: -0.3,
+        marginBottom: 0,
+    },
+    greetingSubtitle: {
+        fontSize: 15,
+        fontWeight: '400',
     },
     greeting: {
         fontSize: 14,
