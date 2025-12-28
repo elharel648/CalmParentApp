@@ -45,7 +45,7 @@ export const useMedications = (childId: string | undefined): UseMedicationsRetur
             await addDoc(collection(db, 'events'), {
                 userId: user.uid,
                 childId,
-                type: 'supplement',
+                type: 'supplements',
                 subType: type,
                 note: supplementName,
                 timestamp: serverTimestamp(),

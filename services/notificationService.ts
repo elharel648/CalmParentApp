@@ -2,11 +2,128 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db } from './firebaseConfig';
+import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
+
+// --- Pattern Analysis Types ---
+export interface PatternData {
+    feedingTimes: number[]; // Hour of day (0-23)
+    sleepTimes: number[];   // Hour of day (0-23)
+    avgFeedingHour: number | null;
+    avgSleepHour: number | null;
+    feedingCount: number;
+    sleepCount: number;
+}
+
+// --- Pattern Analyzer ---
+class PatternAnalyzer {
+    /**
+     * Analyze last 7 days of events to find patterns
+     */
+    async analyzePatterns(childId: string): Promise<PatternData> {
+        const result: PatternData = {
+            feedingTimes: [],
+            sleepTimes: [],
+            avgFeedingHour: null,
+            avgSleepHour: null,
+            feedingCount: 0,
+            sleepCount: 0,
+        };
+
+        if (!childId) return result;
+
+        try {
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+            const eventsQuery = query(
+                collection(db, 'events'),
+                where('childId', '==', childId),
+                where('timestamp', '>=', Timestamp.fromDate(sevenDaysAgo)),
+                orderBy('timestamp', 'desc')
+            );
+
+            const snapshot = await getDocs(eventsQuery);
+
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const timestamp = data.timestamp instanceof Timestamp
+                    ? data.timestamp.toDate()
+                    : new Date(data.timestamp);
+                const hour = timestamp.getHours();
+
+                if (data.type === 'feeding' || data.type === 'food') {
+                    result.feedingTimes.push(hour);
+                    result.feedingCount++;
+                }
+
+                if (data.type === 'sleep') {
+                    result.sleepTimes.push(hour);
+                    result.sleepCount++;
+                }
+            });
+
+            // Calculate averages
+            if (result.feedingTimes.length > 0) {
+                const sum = result.feedingTimes.reduce((a, b) => a + b, 0);
+                result.avgFeedingHour = Math.round(sum / result.feedingTimes.length);
+            }
+
+            if (result.sleepTimes.length > 0) {
+                const sum = result.sleepTimes.reduce((a, b) => a + b, 0);
+                result.avgSleepHour = Math.round(sum / result.sleepTimes.length);
+            }
+
+        } catch (error) {
+            if (__DEV__) console.log('Pattern analysis failed:', error);
+        }
+
+        return result;
+    }
+
+    /**
+     * Get most common times for each activity
+     */
+    getMostCommonTimes(times: number[]): number[] {
+        if (times.length === 0) return [];
+
+        // Count occurrences of each hour
+        const counts: { [hour: number]: number } = {};
+        times.forEach(h => { counts[h] = (counts[h] || 0) + 1; });
+
+        // Sort by frequency, take top 3
+        return Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([hour]) => parseInt(hour));
+    }
+
+    /**
+     * Calculate reminder time (30 minutes before average)
+     */
+    getReminderTime(avgHour: number | null): { hour: number; minute: number } | null {
+        if (avgHour === null) return null;
+
+        // 30 minutes before
+        let reminderHour = avgHour;
+        let reminderMinute = 30;
+
+        if (reminderMinute < 30) {
+            reminderHour = (reminderHour - 1 + 24) % 24;
+            reminderMinute = 30;
+        } else {
+            reminderMinute = 0;
+        }
+
+        return { hour: reminderHour, minute: reminderMinute };
+    }
+}
+
+export const patternAnalyzer = new PatternAnalyzer();
 
 // --- Types ---
 export type NotificationType =
     | 'feeding_reminder'
-    | 'diaper_reminder'
     | 'sleep_reminder'
     | 'supplement_reminder'
     | 'vaccine_reminder'
@@ -17,8 +134,6 @@ export interface NotificationSettings {
     feedingReminder: boolean;
     feedingIntervalHours: 1 | 2 | 3 | 4;
     feedingStartTime: string; // HH:MM format
-    diaperReminder: boolean;
-    diaperIntervalHours: 2 | 3 | 4;
     sleepReminder: boolean;
     sleepTime: string; // HH:MM format
     supplementReminder: boolean;
@@ -33,8 +148,6 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
     feedingReminder: true,
     feedingIntervalHours: 3,
     feedingStartTime: '08:00',
-    diaperReminder: true,
-    diaperIntervalHours: 3,
     sleepReminder: true,
     sleepTime: '20:00',
     supplementReminder: true,
@@ -48,10 +161,6 @@ const NOTIFICATION_CONTENT = {
     feeding_reminder: {
         title: '🍼 זמן לארוחה',
         body: 'עברו {hours} שעות מהאכלה האחרונה',
-    },
-    diaper_reminder: {
-        title: '🔄 זמן להחלפת חיתול',
-        body: 'כדאי לבדוק את התינוק',
     },
     sleep_reminder: {
         title: '😴 הגיע זמן לישון',
@@ -98,10 +207,28 @@ class NotificationService {
                 return false;
             }
 
+            // CLEANUP: Cancel any legacy diaper notifications (feature removed)
+            await this.cancelLegacyDiaperNotifications();
+
             return true;
         } catch (error) {
             if (__DEV__) console.log('Failed to initialize notifications:', error);
             return false;
+        }
+    }
+
+    // Cancel legacy diaper notifications (after feature removal)
+    private async cancelLegacyDiaperNotifications(): Promise<void> {
+        try {
+            const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+            for (const notification of scheduled) {
+                if (notification.content.data?.type === 'diaper_reminder') {
+                    await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+                    if (__DEV__) console.log('🗑️ Cancelled legacy diaper notification');
+                }
+            }
+        } catch (error) {
+            if (__DEV__) console.log('Failed to cancel legacy diaper notifications:', error);
         }
     }
 
@@ -216,28 +343,6 @@ class NotificationService {
         this.scheduledNotifications.set('supplement_reminder', id);
     }
 
-    // Schedule diaper reminder (repeating every X hours)
-    async scheduleDiaperReminder(): Promise<void> {
-        if (!this.settings.enabled || !this.settings.diaperReminder) return;
-
-        await this.cancelNotification('diaper_reminder');
-
-        // Schedule repeating notification every X hours
-        const id = await Notifications.scheduleNotificationAsync({
-            content: {
-                title: NOTIFICATION_CONTENT.diaper_reminder.title,
-                body: NOTIFICATION_CONTENT.diaper_reminder.body,
-                data: { type: 'diaper_reminder' },
-            },
-            trigger: {
-                type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-                seconds: this.settings.diaperIntervalHours * 60 * 60,
-                repeats: true,
-            },
-        });
-
-        this.scheduledNotifications.set('diaper_reminder', id);
-    }
 
     // Schedule sleep reminder (daily at bedtime)
     async scheduleSleepReminder(): Promise<void> {
@@ -339,6 +444,84 @@ class NotificationService {
     // Get all scheduled notifications
     async getScheduled(): Promise<Notifications.NotificationRequest[]> {
         return await Notifications.getAllScheduledNotificationsAsync();
+    }
+
+    // Schedule smart reminders based on patterns
+    async scheduleSmartReminders(childId: string): Promise<void> {
+        if (!this.settings.enabled) return;
+        if (!childId) return;
+
+        try {
+            // Analyze user patterns
+            const patterns = await patternAnalyzer.analyzePatterns(childId);
+
+            // Schedule feeding reminder based on pattern
+            if (this.settings.feedingReminder && patterns.avgFeedingHour !== null) {
+                await this.cancelNotification('feeding_reminder');
+
+                // 30 minutes before average feeding time
+                let reminderHour = patterns.avgFeedingHour;
+                let reminderMinute = 30;
+                if (reminderHour === 0) {
+                    reminderHour = 23;
+                    reminderMinute = 30;
+                } else {
+                    reminderHour -= 1;
+                    reminderMinute = 30;
+                }
+
+                const id = await Notifications.scheduleNotificationAsync({
+                    content: {
+                        title: '🍼 הכנה לארוחה',
+                        body: `בדרך כלל את/ה מאכיל/ה בסביבות ${patterns.avgFeedingHour}:00`,
+                        data: { type: 'feeding_reminder' },
+                    },
+                    trigger: {
+                        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+                        hour: reminderHour,
+                        minute: reminderMinute,
+                    },
+                });
+                this.scheduledNotifications.set('feeding_reminder', id);
+
+                if (__DEV__) console.log(`🔔 Smart feeding reminder scheduled for ${reminderHour}:${reminderMinute}`);
+            }
+
+            // Schedule sleep reminder based on pattern
+            if (this.settings.sleepReminder && patterns.avgSleepHour !== null) {
+                await this.cancelNotification('sleep_reminder');
+
+                // 30 minutes before average sleep time
+                let reminderHour = patterns.avgSleepHour;
+                let reminderMinute = 30;
+                if (reminderHour === 0) {
+                    reminderHour = 23;
+                    reminderMinute = 30;
+                } else {
+                    reminderHour -= 1;
+                    reminderMinute = 30;
+                }
+
+                const id = await Notifications.scheduleNotificationAsync({
+                    content: {
+                        title: '😴 הכנה לשינה',
+                        body: `בדרך כלל התינוק/ת נרדם/ת בסביבות ${patterns.avgSleepHour}:00`,
+                        data: { type: 'sleep_reminder' },
+                    },
+                    trigger: {
+                        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+                        hour: reminderHour,
+                        minute: reminderMinute,
+                    },
+                });
+                this.scheduledNotifications.set('sleep_reminder', id);
+
+                if (__DEV__) console.log(`🔔 Smart sleep reminder scheduled for ${reminderHour}:${reminderMinute}`);
+            }
+
+        } catch (error) {
+            if (__DEV__) console.log('Failed to schedule smart reminders:', error);
+        }
     }
 }
 

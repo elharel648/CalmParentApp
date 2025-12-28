@@ -2,11 +2,19 @@ import React, { memo, useCallback, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Platform, Dimensions } from 'react-native';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { X, GripVertical, Eye, EyeOff, RotateCcw, Utensils, Moon, Droplets, Music, Heart, Pill, Plus, HeartPulse, TrendingUp, Award, Sparkles } from 'lucide-react-native';
+import { X, GripVertical, Eye, EyeOff, RotateCcw, Utensils, Moon, Droplets, Music, Heart, Pill, Plus, HeartPulse, TrendingUp, Award, Sparkles, LayoutGrid, Lightbulb } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useQuickActions, QuickActionKey } from '../../context/QuickActionsContext';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Custom Tooth Icon
+const TeethIcon = ({ size, color }: { size: number; color: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M7.5 22C6.5 22 5.5 21 5.5 19C5.5 15.5 5 12 5 10C5 5.5 8 2 12 2C16 2 19 5.5 19 10C19 12 18.5 15.5 18.5 19C18.5 21 17.5 22 16.5 22C15.5 22 14.5 20.5 14.5 20.5L12 18L9.5 20.5C9.5 20.5 8.5 22 7.5 22Z" />
+    </Svg>
+);
 
 // Icons map
 const ICONS: Record<QuickActionKey, any> = {
@@ -20,6 +28,9 @@ const ICONS: Record<QuickActionKey, any> = {
     growth: TrendingUp,
     milestones: Award,
     magicMoments: Sparkles,
+    tools: LayoutGrid,
+    teeth: TeethIcon,
+    nightLight: Lightbulb,
     custom: Plus,
 };
 
@@ -35,6 +46,9 @@ const ACTION_DATA: Record<QuickActionKey, { label: string; color: string }> = {
     growth: { label: 'מעקב גדילה', color: '#10B981' },
     milestones: { label: 'אבני דרך', color: '#F59E0B' },
     magicMoments: { label: 'רגעים קסומים', color: '#A78BFA' },
+    tools: { label: 'כלים', color: '#8B5CF6' },
+    teeth: { label: 'שיניים', color: '#EC4899' },
+    nightLight: { label: 'פנס לילה', color: '#F59E0B' },
     custom: { label: 'הוספה', color: '#6B7280' },
 };
 

@@ -14,12 +14,12 @@ import Animated, {
 
 const { width, height } = Dimensions.get('window');
 
-// Pastel colors - muted teals and soft blues
+// Lavender/Purple colors - matching app theme
 const BLOB_COLORS = {
-    blob1: ['#B8E4E0', '#8DD3C7'], // Muted teal
-    blob2: ['#A8D5E5', '#7FC8DC'], // Soft blue
-    blob3: ['#C5E8E4', '#9DD9D2'], // Light teal
-    blob4: ['#BED8EE', '#94C4E0'], // Pale blue
+    blob1: ['#DDD6FE', '#C4B5FD'], // Soft lavender
+    blob2: ['#E9D5FF', '#D8B4FE'], // Light purple
+    blob3: ['#EDE9FE', '#DDD6FE'], // Pale lavender
+    blob4: ['#F3E8FF', '#E9D5FF'], // Very light purple
 };
 
 interface LiquidGlassBackgroundProps {
@@ -242,11 +242,11 @@ const LiquidGlassBackground: React.FC<LiquidGlassBackgroundProps> = ({
 const styles = StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#F8FCFC',
+        backgroundColor: '#FAF5FF',
     },
     baseGradient: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#F5FAFA',
+        backgroundColor: '#F5F3FF',
     },
     canvas: {
         flex: 1,

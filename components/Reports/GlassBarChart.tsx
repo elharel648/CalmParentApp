@@ -62,7 +62,7 @@ const GlassBarChartPerfect: React.FC<GlassBarChartProps> = ({
 }) => {
     // ==================== LAYOUT MATH ====================
     const chartWidth = SCREEN_WIDTH - 64;
-    const padding = { top: 20, bottom: 50, left: 45, right: 15 };
+    const padding = { top: 20, bottom: 50, left: 50, right: 30 }; // Increased padding for labels
     const chartAreaWidth = chartWidth - padding.left - padding.right;
     const chartAreaHeight = height - padding.top - padding.bottom - 20; // Extra for title
 
@@ -76,6 +76,8 @@ const GlassBarChartPerfect: React.FC<GlassBarChartProps> = ({
     const [lastHapticIndex, setLastHapticIndex] = useState<number | null>(null);
     const touchActive = useSharedValue(0);
     const touchX = useSharedValue(0);
+
+    // ... (Calculations)
 
     // ==================== CALCULATIONS ====================
     const { maxValue, ySteps, average } = useMemo(() => {
@@ -139,8 +141,12 @@ const GlassBarChartPerfect: React.FC<GlassBarChartProps> = ({
     // ==================== TOUCH HANDLING ====================
     const triggerHaptic = useCallback((index: number) => {
         if (index !== lastHapticIndex && Platform.OS !== 'web') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setLastHapticIndex(index);
+            try {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
+                setLastHapticIndex(index);
+            } catch (e) {
+                // Ignore haptic errors
+            }
         }
     }, [lastHapticIndex]);
 
@@ -163,6 +169,8 @@ const GlassBarChartPerfect: React.FC<GlassBarChartProps> = ({
     }, [touchActive]);
 
     const gesture = Gesture.Pan()
+        .activeOffsetX([-10, 10]) // Only activate if moved 10px horizontally
+        .failOffsetY([-10, 10])   // Fail if moved 10px vertically (allows scrolling)
         .onStart((e) => {
             touchActive.value = withTiming(1, { duration: 100 });
             runOnJS(handleTouch)(e.x);
@@ -197,13 +205,13 @@ const GlassBarChartPerfect: React.FC<GlassBarChartProps> = ({
                 { scale: interpolate(touchActive.value, [0, 1], [0.85, 1], Extrapolation.CLAMP) },
                 { translateY: interpolate(touchActive.value, [0, 1], [8, 0], Extrapolation.CLAMP) },
             ],
-        };
+        } as any;
     }, []);
 
     // ==================== RENDER ====================
     if (data.length === 0) {
         return (
-            <Animated.View entering={FadeInUp.duration(500)} style={[styles.container, { height }]}>
+            <Animated.View entering={FadeInUp.duration(500)} style={[styles.container, { height }]} collapsable={false}>
                 <BlurView intensity={60} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
                 <View style={styles.overlay} />
                 <View style={styles.border} />
@@ -222,7 +230,7 @@ const GlassBarChartPerfect: React.FC<GlassBarChartProps> = ({
     const labelInterval = cells.length > 14 ? 3 : cells.length > 10 ? 2 : 1;
 
     return (
-        <Animated.View entering={FadeInUp.duration(600).delay(100)} style={[styles.container, { height }]}>
+        <Animated.View entering={FadeInUp.duration(600).delay(100)} style={[styles.container, { height }]} collapsable={false}>
             {/* Frosted Glass Background */}
             <BlurView intensity={70} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
             <View style={styles.overlay} />
@@ -535,6 +543,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         alignItems: 'center',
         overflow: 'hidden',
+        backgroundColor: 'rgba(255, 255, 255, 0.9)', // Required for efficient shadow calculation
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.15,

@@ -2,4 +2,7 @@
   <string name="app_name">CalmParentApp</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
   <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
+  <string name="facebook_app_id">1567376814402845</string>
+  <string name="facebook_client_token">c2be86c713add9c46c10f5b716deb396</string>
+  <string name="fb_login_protocol_scheme">fb1567376814402845</string>
 </resources>

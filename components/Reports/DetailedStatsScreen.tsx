@@ -16,7 +16,7 @@ import {
     TrendingUp, TrendingDown, Clock, Award, Star, Zap
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { format, subWeeks, subMonths, startOfDay, endOfDay, eachDayOfInterval } from 'date-fns';
+import { format, subWeeks, subMonths, startOfDay, endOfDay, eachDayOfInterval, differenceInHours } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { useTheme } from '../../context/ThemeContext';
 import { db } from '../../services/firebaseConfig';
@@ -97,7 +97,7 @@ const METRIC_CONFIG = {
             { icon: TrendingUp, title: 'סה"כ מנות', key: 'totalDoses' },
         ],
     },
-};
+}
 
 const TIME_RANGE_LABELS: Record<TimeRange, string> = {
     day: 'יומי',
@@ -105,6 +105,18 @@ const TIME_RANGE_LABELS: Record<TimeRange, string> = {
     month: 'חודשי',
     custom: 'מותאם',
 };
+
+// Feeding subtypes
+type FeedingSubType = 'all' | 'bottle' | 'breast_right' | 'breast_left' | 'solids' | 'pumping';
+
+const FEEDING_SUBTYPES: { id: FeedingSubType; label: string; color: string }[] = [
+    { id: 'all', label: 'הכל', color: '#F59E0B' },
+    { id: 'breast_right', label: 'הנקה ימין', color: '#EC4899' },
+    { id: 'breast_left', label: 'הנקה שמאל', color: '#F472B6' },
+    { id: 'bottle', label: 'בקבוק', color: '#818CF8' },
+    { id: 'solids', label: 'מוצקים', color: '#34D399' },
+    { id: 'pumping', label: 'שאיבה', color: '#A78BFA' },
+];
 
 // Goals configuration per metric
 const METRIC_GOALS = {
@@ -132,7 +144,10 @@ export default function DetailedStatsScreen({
     const { theme } = useTheme();
     const [timeRange, setTimeRange] = useState<TimeRange>('week');
     const [data, setData] = useState<DayData[]>([]);
+    const [prevWeekData, setPrevWeekData] = useState<DayData[]>([]);
+    const [allFoodEvents, setAllFoodEvents] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [feedingSubType, setFeedingSubType] = useState<FeedingSubType>('all');
 
     const config = METRIC_CONFIG[metricType];
     const IconComponent = config.icon;
@@ -187,6 +202,50 @@ export default function DetailedStatsScreen({
                     timestamp: doc.data().timestamp?.toDate() || new Date(),
                 }));
 
+                // Store all food events for interval calculation
+                if (metricType === 'food') {
+                    const foodEvents = events.filter((e: any) => {
+                        if (e.type !== 'food' && e.type !== 'feeding') return false;
+                        if (feedingSubType === 'all') return true;
+                        if (feedingSubType === 'bottle') return e.subType === 'bottle';
+                        if (feedingSubType === 'breast_right') return e.subType === 'breast' && e.breastSide === 'right';
+                        if (feedingSubType === 'breast_left') return e.subType === 'breast' && e.breastSide === 'left';
+                        if (feedingSubType === 'solids') return e.subType === 'solids';
+                        if (feedingSubType === 'pumping') return e.subType === 'pumping';
+                        return false;
+                    }).sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime());
+                    setAllFoodEvents(foodEvents);
+                } else {
+                    setAllFoodEvents([]);
+                }
+
+                // Fetch previous week data for comparison (only for week view)
+                let prevWeekEvents: any[] = [];
+                if (timeRange === 'week' && metricType === 'sleep') {
+                    try {
+                        const prevWeekStart = subWeeks(dateRange.start, 1);
+                        const prevWeekEnd = subWeeks(dateRange.end, 1);
+                        const prevStartTimestamp = Timestamp.fromDate(prevWeekStart);
+                        const prevEndTimestamp = Timestamp.fromDate(prevWeekEnd);
+
+                        const prevQ = query(
+                            eventsRef,
+                            where('childId', '==', childId),
+                            where('timestamp', '>=', prevStartTimestamp),
+                            where('timestamp', '<=', prevEndTimestamp),
+                            orderBy('timestamp', 'asc')
+                        );
+
+                        const prevSnapshot = await getDocs(prevQ);
+                        prevWeekEvents = prevSnapshot.docs.map(doc => ({
+                            ...doc.data(),
+                            timestamp: doc.data().timestamp?.toDate() || new Date(),
+                        }));
+                    } catch (error) {
+                        console.error('Error fetching previous week data:', error);
+                    }
+                }
+
                 // Create day-by-day data
                 const days = eachDayOfInterval({ start: dateRange.start, end: dateRange.end });
                 const dayData: DayData[] = days.map(day => {
@@ -211,7 +270,16 @@ export default function DetailedStatsScreen({
                             });
                         });
                     } else if (metricType === 'food') {
-                        dayEvents.filter((e: any) => e.type === 'food').forEach((e: any) => {
+                        dayEvents.filter((e: any) => {
+                            if (e.type !== 'food' && e.type !== 'feeding') return false;
+                            if (feedingSubType === 'all') return true;
+                            if (feedingSubType === 'bottle') return e.subType === 'bottle';
+                            if (feedingSubType === 'breast_right') return e.subType === 'breast' && e.breastSide === 'right';
+                            if (feedingSubType === 'breast_left') return e.subType === 'breast' && e.breastSide === 'left';
+                            if (feedingSubType === 'solids') return e.subType === 'solids';
+                            if (feedingSubType === 'pumping') return e.subType === 'pumping';
+                            return false;
+                        }).forEach((e: any) => {
                             const amount = parseInt(String(e.amount || 0).replace(/[^\d]/g, '')) || 0;
                             value += amount;
                         });
@@ -225,6 +293,34 @@ export default function DetailedStatsScreen({
                 });
 
                 setData(dayData);
+
+                // Calculate previous week data for comparison
+                if (timeRange === 'week' && metricType === 'sleep' && prevWeekEvents.length > 0) {
+                    const prevDays = eachDayOfInterval({ 
+                        start: subWeeks(dateRange.start, 1), 
+                        end: subWeeks(dateRange.end, 1) 
+                    });
+                    const prevDayData: DayData[] = prevDays.map(day => {
+                        const dayStart = startOfDay(day);
+                        const dayEnd = endOfDay(day);
+
+                        const dayEvents = prevWeekEvents.filter((e: any) => {
+                            const eventDate = new Date(e.timestamp);
+                            return eventDate >= dayStart && eventDate <= dayEnd;
+                        });
+
+                        let value = 0;
+                        dayEvents.filter((e: any) => e.type === 'sleep').forEach((e: any) => {
+                            const hours = (e.duration || 0) / 3600;
+                            value += hours;
+                        });
+
+                        return { date: day, value };
+                    });
+                    setPrevWeekData(prevDayData);
+                } else {
+                    setPrevWeekData([]);
+                }
             } catch (error) {
                 console.error('Error fetching stats:', error);
             } finally {
@@ -233,7 +329,7 @@ export default function DetailedStatsScreen({
         };
 
         fetchData();
-    }, [childId, dateRange, metricType]);
+    }, [childId, dateRange, metricType, feedingSubType]);
 
     // Calculate stats
     const stats = useMemo(() => {
@@ -250,18 +346,70 @@ export default function DetailedStatsScreen({
         return { total, average, max, maxDay };
     }, [data]);
 
+    // Calculate week change for sleep
+    const weekChange = useMemo(() => {
+        if (metricType !== 'sleep' || prevWeekData.length === 0 || data.length === 0) {
+            return null;
+        }
+
+        const currentWeekTotal = data.reduce((sum, day) => sum + day.value, 0);
+        const prevWeekTotal = prevWeekData.reduce((sum, day) => sum + day.value, 0);
+
+        if (prevWeekTotal === 0) {
+            return currentWeekTotal > 0 ? '+100%' : '0%';
+        }
+
+        const change = ((currentWeekTotal - prevWeekTotal) / prevWeekTotal) * 100;
+        const sign = change >= 0 ? '+' : '';
+        return `${sign}${change.toFixed(0)}%`;
+    }, [data, prevWeekData, metricType]);
+
+    // Calculate average interval between feedings
+    const avgInterval = useMemo(() => {
+        if (metricType !== 'food' || allFoodEvents.length < 2) {
+            return null;
+        }
+
+        const intervals: number[] = [];
+        for (let i = 1; i < allFoodEvents.length; i++) {
+            const timeDiff = differenceInHours(
+                allFoodEvents[i].timestamp,
+                allFoodEvents[i - 1].timestamp
+            );
+            if (timeDiff > 0 && timeDiff < 24) { // Only count reasonable intervals (less than 24 hours)
+                intervals.push(timeDiff);
+            }
+        }
+
+        if (intervals.length === 0) {
+            return null;
+        }
+
+        const avg = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
+        const hours = Math.floor(avg);
+        const minutes = Math.round((avg - hours) * 60);
+
+        if (hours === 0) {
+            return `${minutes} דק'`;
+        } else if (minutes === 0) {
+            return `${hours} שעות`;
+        } else {
+            return `${hours}.${Math.floor(minutes / 6)} שעות`; // Round to nearest 10 minutes
+        }
+    }, [allFoodEvents, metricType]);
+
     // Generate insights based on metric type
     const insightValues = useMemo(() => {
         if (metricType === 'sleep') {
             return {
                 avgSleepTime: stats.average > 0 ? `${stats.average.toFixed(1)} שעות` : '--',
                 bestNight: stats.maxDay ? `${stats.max.toFixed(1)} שעות (${stats.maxDay})` : '--',
-                weekChange: '+12%', // TODO: Calculate real change
+                weekChange: weekChange || '--',
             };
         } else if (metricType === 'food') {
             return {
                 biggestFeeding: `${stats.max} מ"ל`,
-                avgInterval: '3.2 שעות', // TODO: Calculate real interval
+                avgInterval: avgInterval || '--',
                 totalAmount: `${Math.round(stats.total)} מ"ל`,
             };
         } else if (metricType === 'diapers') {
@@ -277,7 +425,7 @@ export default function DetailedStatsScreen({
                 totalDoses: `${Math.round(stats.total)} מנות`,
             };
         }
-    }, [stats, metricType]);
+    }, [stats, metricType, weekChange, avgInterval]);
 
     // Format value for display
     const formatValue = (value: number) => {
@@ -377,6 +525,43 @@ export default function DetailedStatsScreen({
                         );
                     })}
                 </View>
+
+                {/* Feeding Subtype Filter (only for food) */}
+                {metricType === 'food' && (
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.feedingFilterContainer}
+                        style={styles.feedingFilterScroll}
+                    >
+                        {FEEDING_SUBTYPES.map((subType) => {
+                            const isActive = feedingSubType === subType.id;
+                            return (
+                                <TouchableOpacity
+                                    key={subType.id}
+                                    style={[
+                                        styles.feedingFilterPill,
+                                        {
+                                            backgroundColor: isActive ? subType.color : theme.cardSecondary,
+                                            borderColor: isActive ? subType.color : theme.border,
+                                        },
+                                    ]}
+                                    onPress={() => {
+                                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                        setFeedingSubType(subType.id);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.feedingFilterText,
+                                        { color: isActive ? '#fff' : theme.textSecondary },
+                                    ]}>
+                                        {subType.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </ScrollView>
+                )}
 
                 {/* Main Stats Card */}
                 <View style={[styles.statsCard, { backgroundColor: config.lightBg }]}>
@@ -790,5 +975,24 @@ const styles = StyleSheet.create({
     comparisonNote: {
         fontSize: 11,
         marginTop: 2,
+    },
+    // Feeding filter styles
+    feedingFilterScroll: {
+        marginBottom: 16,
+        marginHorizontal: -16,
+    },
+    feedingFilterContainer: {
+        paddingHorizontal: 16,
+        gap: 8,
+    },
+    feedingFilterPill: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+    },
+    feedingFilterText: {
+        fontSize: 13,
+        fontWeight: '500',
     },
 });

@@ -16,8 +16,8 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Share,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
@@ -48,6 +48,8 @@ import { auth, db } from '../services/firebaseConfig';
 import { deleteUser, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
+import { Language } from '../types';
 import { useNotifications } from '../hooks/useNotifications';
 import { useChildProfile } from '../hooks/useChildProfile';
 import { useActiveChild } from '../context/ActiveChildContext';
@@ -62,13 +64,14 @@ const LANGUAGES = [
 
 export default function SettingsScreen() {
   const { isDarkMode, setDarkMode, theme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
   const navigation = useNavigation<any>();
   const { activeChild, allChildren, setActiveChild, refreshChildren } = useActiveChild();
   const { settings: notifSettings, updateSettings: updateNotifSettings } = useNotifications();
 
   const [userData, setUserData] = useState({ name: '', email: '', photoURL: null });
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('he');
+  const [selectedLanguage, setSelectedLanguage] = useState(language);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -102,7 +105,11 @@ export default function SettingsScreen() {
 
         if (data.settings) {
           if (data.settings.biometricsEnabled !== undefined) setBiometricsEnabled(data.settings.biometricsEnabled);
-          if (data.settings.language !== undefined) setSelectedLanguage(data.settings.language);
+          if (data.settings.language !== undefined) {
+            const lang = data.settings.language;
+            setSelectedLanguage(lang);
+            setLanguage(lang);
+          }
         }
       } else {
         setUserData({
@@ -148,13 +155,13 @@ export default function SettingsScreen() {
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
       if (!hasHardware || !isEnrolled) {
-        Alert.alert('לא זמין', 'המכשיר לא תומך ב-Face ID/Touch ID או שלא הוגדר קוד גישה.');
+        Alert.alert(t('alerts.notAvailable'), t('alerts.biometricNotSupported'));
         return;
       }
 
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'אמת זהות כדי להפעיל הגנה ביומטרית',
-        fallbackLabel: 'השתמש בסיסמה'
+        promptMessage: t('biometric.authenticate'),
+        fallbackLabel: t('biometric.usePassword')
       });
 
       if (result.success) {
@@ -166,7 +173,7 @@ export default function SettingsScreen() {
         setBiometricsEnabled(false);
       }
     } catch (error) {
-      Alert.alert('שגיאה', 'אירעה שגיאה בתהליך האימות');
+      Alert.alert(t('common.error'), t('alerts.authError'));
       setBiometricsEnabled(false);
     }
   };
@@ -176,37 +183,35 @@ export default function SettingsScreen() {
     setDarkMode(value);
   };
 
-  const handleLanguageSelect = (langKey: string) => {
+  const handleLanguageSelect = async (langKey: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedLanguage(langKey);
+    const lang = langKey as Language;
+    setSelectedLanguage(lang);
+    await setLanguage(lang);
     saveSettingToDB('language', langKey);
     setLanguageModalVisible(false);
-
-    if (langKey === 'en') {
-      Alert.alert('Coming Soon', 'English support will be available in a future update.');
-    }
   };
 
   const handleShareApp = async () => {
     try {
-      await Share.share({ message: 'היי! אני משתמש/ת ב-CalmParent וזה ממש עוזר לי לנהל את הטיפול בבייבי. ממליץ/ה בחום! 👶📱' });
+      await Share.share({ message: t('share.message') });
     } catch (error) { }
   };
 
   const handleChangePassword = async () => {
     Alert.alert(
-      'איפוס סיסמה',
-      `האם לשלוח מייל לאיפוס סיסמה לכתובת:\n${userData.email}?`,
+      t('alerts.passwordReset'),
+      `${t('alerts.passwordResetQuestion')}\n${userData.email}?`,
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'שלח מייל', onPress: async () => {
+          text: t('alerts.sendEmail'), onPress: async () => {
             if (userData.email) {
               try {
                 await sendPasswordResetEmail(auth, userData.email);
-                Alert.alert('נשלח בהצלחה!', 'בדוק/י את תיבת המייל שלך (גם בספאם).');
+                Alert.alert(t('alerts.sentSuccessfully'), t('alerts.checkEmail'));
               } catch (e) {
-                Alert.alert('שגיאה', 'לא הצלחנו לשלוח את המייל.');
+                Alert.alert(t('common.error'), t('alerts.couldNotSendEmail'));
               }
             }
           }
@@ -217,7 +222,7 @@ export default function SettingsScreen() {
 
   const handleSendContactMessage = async () => {
     if (contactMessage.trim().length < 10) {
-      Alert.alert('שגיאה', 'ההודעה חייבת להכיל לפחות 10 תווים');
+      Alert.alert(t('common.error'), t('alerts.messageTooShort'));
       return;
     }
 
@@ -236,12 +241,12 @@ export default function SettingsScreen() {
         });
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('נשלח בהצלחה! ✅', 'קיבלנו את פנייתך ונחזור אלייך בהקדם.');
+        Alert.alert(t('alerts.sentSuccessfully') + ' ✅', t('alerts.messageSent'));
         setContactMessage('');
         setContactModalVisible(false);
       }
     } catch (error) {
-      Alert.alert('שגיאה', 'לא הצלחנו לשלוח את ההודעה. נסה שוב.');
+      Alert.alert(t('common.error'), t('alerts.couldNotSendMessage'));
     } finally {
       setLoading(false);
     }
@@ -249,33 +254,33 @@ export default function SettingsScreen() {
 
   const handleLogout = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert('התנתקות', 'האם את/ה בטוח/ה שברצונך להתנתק?', [
-      { text: 'ביטול', style: 'cancel' },
-      { text: 'כן, התנתק', style: 'destructive', onPress: () => signOut(auth) }
+    Alert.alert(t('alerts.logoutTitle'), t('alerts.logoutQuestion'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('alerts.yesLogout'), style: 'destructive', onPress: () => signOut(auth) }
     ]);
   };
 
   const handleDeleteChild = async () => {
-    if (!activeChild) return Alert.alert('שגיאה', 'אין ילד נבחר');
+    if (!activeChild) return Alert.alert(t('common.error'), t('alerts.noChildSelected'));
 
     const childName = activeChild.childName;
 
     Alert.alert(
-      `מחיקת ${childName}?`,
-      'פעולה זו תמחק את כל הנתונים של הילד: תמונות, סטטיסטיקות, אירועים.',
+      `${t('alerts.deleteChild')} ${childName}?`,
+      t('alerts.deleteChildWarning'),
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'מחק',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'אתה בטוח לחלוטין?',
-              `פעולה זו בלתי הפיכה! לא ניתן לשחזר את ${childName}.`,
+              t('alerts.areYouSure'),
+              `${t('alerts.irreversible')} ${childName}.`,
               [
-                { text: 'ביטול', style: 'cancel' },
+                { text: t('common.cancel'), style: 'cancel' },
                 {
-                  text: 'כן, מחק הכל',
+                  text: t('alerts.yesDeleteAll'),
                   style: 'destructive',
                   onPress: async () => {
                     try {
@@ -289,15 +294,15 @@ export default function SettingsScreen() {
                       const remainingChildren = allChildren.filter(child => child.childId !== deletedChildId);
 
                       if (remainingChildren.length === 0) {
-                        Alert.alert('נמחק', `${childName} נמחק. הוסף ילד חדש.`, [
-                          { text: 'אישור', onPress: () => navigation.navigate('CreateBaby') }
+                        Alert.alert(t('alerts.deleted'), `${childName} ${t('alerts.deletedAddNew')}`, [
+                          { text: t('alerts.confirm'), onPress: () => navigation.navigate('CreateBaby') }
                         ]);
                       } else {
                         setActiveChild(remainingChildren[0]);
-                        Alert.alert('נמחק', `${childName} נמחק. עבר ל-${remainingChildren[0].childName}`);
+                        Alert.alert(t('alerts.deleted'), `${childName} ${t('alerts.deletedSwitched')}${remainingChildren[0].childName}`);
                       }
                     } catch (error) {
-                      Alert.alert('שגיאה', 'לא ניתן למחוק את הילד');
+                      Alert.alert(t('common.error'), t('alerts.couldNotDeleteChild'));
                     }
                   }
                 }
@@ -330,25 +335,42 @@ export default function SettingsScreen() {
                   text: 'מחק לצמיתות',
                   style: 'destructive',
                   onPress: async () => {
+                    setLoading(true);
                     try {
-                      if (auth.currentUser) {
-                        await deleteUser(auth.currentUser);
+                      const user = auth.currentUser;
+                      if (user) {
+                        // Delete the user from Firebase Auth
+                        await deleteUser(user);
+
+                        // User is automatically signed out after deletion
+                        // But we call signOut to ensure clean state
+                        try {
+                          await signOut(auth);
+                        } catch (e) {
+                          // Ignore - user already deleted
+                        }
+
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        Alert.alert(
-                          'החשבון נמחק ✅',
-                          'כל הנתונים שלך נמחקו בהצלחה. להתראות!',
-                          [{ text: 'אישור' }]
-                        );
+                        // No alert needed - navigation will handle redirect to login
                       }
                     } catch (e: any) {
+                      setLoading(false);
                       if (e?.code === 'auth/requires-recent-login') {
                         Alert.alert(
                           'נדרשת התחברות מחדש',
                           'מטעמי אבטחה, יש להתנתק ולהתחבר מחדש לפני מחיקת החשבון.',
-                          [{ text: 'הבנתי' }]
+                          [
+                            { text: 'ביטול', style: 'cancel' },
+                            {
+                              text: 'התנתק עכשיו',
+                              style: 'destructive',
+                              onPress: () => signOut(auth)
+                            }
+                          ]
                         );
                       } else {
-                        Alert.alert('שגיאה', 'אירעה שגיאה במחיקת החשבון. נסה שוב.');
+                        console.error('Delete account error:', e);
+                        Alert.alert('שגיאה', 'אירעה שגיאה במחיקת החשבון. נסה שוב מאוחר יותר.');
                       }
                     }
                   }
@@ -393,7 +415,7 @@ export default function SettingsScreen() {
             <View style={[styles.sectionIconContainer, { backgroundColor: '#FFF4E6' }]}>
               <Bell size={18} color="#FF9500" strokeWidth={2} />
             </View>
-            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>התראות ותזכורות</Text>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('settings.notifications')}</Text>
           </View>
 
           <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
@@ -403,7 +425,7 @@ export default function SettingsScreen() {
                   <Bell size={18} color="#FF9500" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>התראות מופעלות</Text>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.notificationsEnabled')}</Text>
                 </View>
               </View>
               <Switch
@@ -422,9 +444,9 @@ export default function SettingsScreen() {
                   <Utensils size={18} color="#F59E0B" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>תזכורת אוכל</Text>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.feedReminder')}</Text>
                   <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
-                    כל {notifSettings.feedingIntervalHours} שעות
+                    {t('time.every')} {notifSettings.feedingIntervalHours} {t('time.hours')}
                   </Text>
                 </View>
               </View>
@@ -444,7 +466,7 @@ export default function SettingsScreen() {
                   <IntervalPicker
                     value={notifSettings.feedingIntervalHours}
                     options={[1, 2, 3, 4]}
-                    unit="שעות"
+                    unit={t('settings.hours')}
                     onChange={(val) => updateNotifSettings({ feedingIntervalHours: val as 1 | 2 | 3 | 4 })}
                     disabled={!notifSettings.enabled}
                   />
@@ -453,7 +475,7 @@ export default function SettingsScreen() {
                 <View style={styles.listItem}>
                   <TimePicker
                     value={notifSettings.feedingStartTime || "08:00"}
-                    label="שעת התחלה"
+                    label={t('time.startTime')}
                     onChange={(time) => updateNotifSettings({ feedingStartTime: time })}
                     disabled={!notifSettings.enabled}
                   />
@@ -469,9 +491,9 @@ export default function SettingsScreen() {
                   <Pill size={18} color="#10B981" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>תזכורת תוספים</Text>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.supplementsReminder')}</Text>
                   <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
-                    כל יום ב-{notifSettings.supplementTime}
+                    {t('time.every')} {t('date.today')} {t('time.at')} {notifSettings.supplementTime}
                   </Text>
                 </View>
               </View>
@@ -490,7 +512,7 @@ export default function SettingsScreen() {
                 <View style={styles.listItem}>
                   <TimePicker
                     value={notifSettings.supplementTime}
-                    label="שעת נטילה"
+                    label={t('time.intakeTime')}
                     onChange={(time) => updateNotifSettings({ supplementTime: time })}
                     disabled={!notifSettings.enabled}
                   />
@@ -506,9 +528,9 @@ export default function SettingsScreen() {
                   <FileText size={18} color="#EC4899" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>סיכום יומי</Text>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.dailySummary')}</Text>
                   <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
-                    כל יום ב-{notifSettings.dailySummaryTime}
+                    {t('time.every')} {t('date.today')} {t('time.at')} {notifSettings.dailySummaryTime}
                   </Text>
                 </View>
               </View>
@@ -527,7 +549,7 @@ export default function SettingsScreen() {
                 <View style={[styles.listItem, styles.listItemLast]}>
                   <TimePicker
                     value={notifSettings.dailySummaryTime}
-                    label="שעת סיכום"
+                    label={t('time.summaryTime')}
                     onChange={(time) => updateNotifSettings({ dailySummaryTime: time })}
                     disabled={!notifSettings.enabled}
                   />
@@ -543,7 +565,7 @@ export default function SettingsScreen() {
             <View style={[styles.sectionIconContainer, { backgroundColor: '#EDE9FE' }]}>
               <Moon size={18} color="#8B5CF6" strokeWidth={2} />
             </View>
-            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>תצוגה והתנהגות</Text>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('settings.display')}</Text>
           </View>
 
           <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
@@ -553,7 +575,7 @@ export default function SettingsScreen() {
                   <Moon size={18} color="#8B5CF6" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>מצב לילה</Text>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.nightMode')}</Text>
                 </View>
               </View>
               <Switch
@@ -593,7 +615,7 @@ export default function SettingsScreen() {
                   <Lock size={18} color="#10B981" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>כניסה ביומטרית</Text>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.biometric')}</Text>
                   <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>Face ID / Touch ID</Text>
                 </View>
               </View>
@@ -613,7 +635,7 @@ export default function SettingsScreen() {
             <View style={[styles.sectionIconContainer, { backgroundColor: '#D1FAE5' }]}>
               <Shield size={18} color="#10B981" strokeWidth={2} />
             </View>
-            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>פרטיות ותמיכה</Text>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('settings.privacy')}</Text>
           </View>
 
           <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
@@ -626,7 +648,7 @@ export default function SettingsScreen() {
                 <View style={[styles.listItemIcon, { backgroundColor: theme.divider }]}>
                   <FileText size={18} color={theme.textSecondary} strokeWidth={2} />
                 </View>
-                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>מדיניות פרטיות</Text>
+                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.privacyPolicy')}</Text>
               </View>
               <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
             </TouchableOpacity>
@@ -642,7 +664,7 @@ export default function SettingsScreen() {
                 <View style={[styles.listItemIcon, { backgroundColor: theme.divider }]}>
                   <FileText size={18} color={theme.textSecondary} strokeWidth={2} />
                 </View>
-                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>תנאי שימוש</Text>
+                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.termsOfService')}</Text>
               </View>
               <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
             </TouchableOpacity>
@@ -659,8 +681,8 @@ export default function SettingsScreen() {
                   <MessageCircle size={18} color="#0EA5E9" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>צור קשר</Text>
-                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>שלח מייל לצוות</Text>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.contact')}</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>{t('settings.contactSubtitle')}</Text>
                 </View>
               </View>
               <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
@@ -677,7 +699,7 @@ export default function SettingsScreen() {
                 <View style={[styles.listItemIcon, { backgroundColor: '#F3E8FF' }]}>
                   <Share2 size={18} color="#A78BFA" strokeWidth={2} />
                 </View>
-                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>שתף חברים</Text>
+                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.shareFriends')}</Text>
               </View>
               <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
             </TouchableOpacity>
@@ -690,7 +712,7 @@ export default function SettingsScreen() {
             <View style={[styles.sectionIconContainer, { backgroundColor: '#FEE2E2' }]}>
               <Trash2 size={18} color="#EF4444" strokeWidth={2} />
             </View>
-            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>אזור מסוכן</Text>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('settings.dangerZone')}</Text>
           </View>
 
           <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
@@ -704,8 +726,8 @@ export default function SettingsScreen() {
                   <Key size={18} color="#3B82F6" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>שינוי סיסמה</Text>
-                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>שלח מייל לאיפוס</Text>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.changePassword')}</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>{t('settings.changePasswordSubtitle')}</Text>
                 </View>
               </View>
               <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
@@ -723,7 +745,7 @@ export default function SettingsScreen() {
                   <Trash2 size={18} color="#EF4444" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: '#EF4444' }]}>מחיקת ילד נוכחי</Text>
+                  <Text style={[styles.listItemText, { color: '#EF4444' }]}>{t('settings.deleteCurrentChild')}</Text>
                   <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
                     {activeChild ? `מחק את ${activeChild.childName}` : 'אין ילד נבחר'}
                   </Text>
@@ -743,7 +765,7 @@ export default function SettingsScreen() {
                 <View style={[styles.listItemIcon, { backgroundColor: '#FEE2E2' }]}>
                   <LogOut size={18} color="#EF4444" strokeWidth={2} />
                 </View>
-                <Text style={[styles.listItemText, { color: '#EF4444' }]}>התנתקות</Text>
+                <Text style={[styles.listItemText, { color: '#EF4444' }]}>{t('settings.logout')}</Text>
               </View>
               <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
             </TouchableOpacity>
@@ -760,8 +782,8 @@ export default function SettingsScreen() {
                   <Trash2 size={18} color="#EF4444" strokeWidth={2} />
                 </View>
                 <View style={styles.listItemTextContainer}>
-                  <Text style={[styles.listItemText, { color: '#EF4444' }]}>מחיקת חשבון</Text>
-                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>פעולה זו בלתי הפיכה</Text>
+                  <Text style={[styles.listItemText, { color: '#EF4444' }]}>{t('account.deleteAccount')}</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>{t('account.deleteAccountWarning')}</Text>
                 </View>
               </View>
               <ChevronLeft size={20} color={theme.textTertiary} strokeWidth={2} />
@@ -778,7 +800,7 @@ export default function SettingsScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>בחירת שפה</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>{t('settings.selectLanguage')}</Text>
               <TouchableOpacity
                 onPress={() => setLanguageModalVisible(false)}
                 style={styles.modalClose}
@@ -831,32 +853,32 @@ export default function SettingsScreen() {
 
             <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
               <Text style={[styles.policyText, { color: theme.textPrimary }]}>
-                <Text style={styles.policyTitle}>עדכון אחרון: דצמבר 2024{'\n\n'}</Text>
+                <Text style={styles.policyTitle}>{t('alerts.lastUpdated')}{'\n\n'}</Text>
 
-                <Text style={styles.policySubtitle}>1. מבוא{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('privacy.intro')}{'\n'}</Text>
                 ברוכים הבאים לאפליקציית CalmParent. אנו מחויבים להגן על פרטיותכם ולשמור על המידע האישי שלכם בצורה מאובטחת. מדיניות פרטיות זו מסבירה כיצד אנו אוספים, משתמשים ומגנים על המידע שלכם.{'\n\n'}
 
-                <Text style={styles.policySubtitle}>2. איסוף מידע{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('privacy.collection')}{'\n'}</Text>
                 אנו אוספים את המידע הבא:{'\n'}
                 • פרטי חשבון: שם, כתובת אימייל, תמונת פרופיל{'\n'}
                 • נתוני ילדים: שם, תאריך לידה, מגדר{'\n'}
                 • נתוני מעקב: זמני שינה, האכלה, החתלה ותרופות{'\n'}
                 • נתונים טכניים: סוג מכשיר, גרסת מערכת הפעלה{'\n\n'}
 
-                <Text style={styles.policySubtitle}>3. שימוש במידע{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('privacy.usage')}{'\n'}</Text>
                 המידע שלכם משמש אותנו ל:{'\n'}
                 • מתן שירותי האפליקציה והתאמה אישית{'\n'}
                 • שליחת תזכורות והתראות{'\n'}
                 • שיפור חוויית המשתמש{'\n'}
                 • תמיכה טכנית{'\n\n'}
 
-                <Text style={styles.policySubtitle}>4. אבטחת מידע{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('privacy.security')}{'\n'}</Text>
                 אנו משתמשים בטכנולוגיות אבטחה מתקדמות כולל הצפנת נתונים, אחסון מאובטח בענן (Firebase), וגיבוי אוטומטי. המידע שלכם מאוחסן בשרתים מאובטחים וזמין רק לכם ולמי שתבחרו לשתף עמו.{'\n\n'}
 
-                <Text style={styles.policySubtitle}>5. שיתוף מידע{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('privacy.sharing')}{'\n'}</Text>
                 אנו לא מוכרים או משתפים את המידע האישי שלכם עם צדדים שלישיים למטרות שיווק. המידע עשוי להיות משותף רק עם בני משפחה שהוזמנו על ידכם לאפליקציה.{'\n\n'}
 
-                <Text style={styles.policySubtitle}>6. יצירת קשר{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('privacy.contact')}{'\n'}</Text>
                 לשאלות בנוגע למדיניות הפרטיות, אנא פנו אלינו בכתובת: Calmperent@Gmail.com
               </Text>
             </ScrollView>
@@ -869,7 +891,7 @@ export default function SettingsScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { backgroundColor: theme.card, maxHeight: '85%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>תנאי שימוש</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>{t('settings.termsOfService')}</Text>
               <TouchableOpacity
                 onPress={() => setTermsModalVisible(false)}
                 style={styles.modalClose}
@@ -881,32 +903,32 @@ export default function SettingsScreen() {
 
             <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
               <Text style={[styles.policyText, { color: theme.textPrimary }]}>
-                <Text style={styles.policyTitle}>עדכון אחרון: דצמבר 2024{'\n\n'}</Text>
+                <Text style={styles.policyTitle}>{t('alerts.lastUpdated')}{'\n\n'}</Text>
 
-                <Text style={styles.policySubtitle}>1. הסכמה לתנאים{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('terms.agreement')}{'\n'}</Text>
                 בשימוש באפליקציית CalmParent, הנכם מסכימים לתנאי שימוש אלה. אם אינכם מסכימים לתנאים, אנא הימנעו משימוש באפליקציה.{'\n\n'}
 
-                <Text style={styles.policySubtitle}>2. תיאור השירות{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('terms.serviceDescription')}{'\n'}</Text>
                 CalmParent היא אפליקציה למעקב אחר פעילויות תינוקות וילדים. האפליקציה מאפשרת רישום שינה, האכלה, החתלה, תרופות ושיתוף מידע עם בני משפחה.{'\n\n'}
 
-                <Text style={styles.policySubtitle}>3. חשבון משתמש{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('terms.userAccount')}{'\n'}</Text>
                 • הנכם אחראים לשמירה על סודיות פרטי החשבון{'\n'}
                 • יש לספק מידע מדויק ועדכני{'\n'}
                 • אתם האחראים הבלעדיים לכל הפעילות בחשבונכם{'\n\n'}
 
-                <Text style={styles.policySubtitle}>4. שימוש מותר{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('terms.allowedUse')}{'\n'}</Text>
                 האפליקציה מיועדת לשימוש אישי ומשפחתי בלבד. אסור להשתמש באפליקציה לכל מטרה בלתי חוקית או לא מורשית.{'\n\n'}
 
-                <Text style={styles.policySubtitle}>5. הגבלת אחריות{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('terms.liability')}{'\n'}</Text>
                 האפליקציה מסופקת "כמות שהיא". אנו לא נושאים באחריות לכל נזק ישיר או עקיף הנובע משימוש באפליקציה. האפליקציה אינה מהווה תחליף לייעוץ רפואי מקצועי.{'\n\n'}
 
-                <Text style={styles.policySubtitle}>6. קניין רוחני{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('terms.intellectualProperty')}{'\n'}</Text>
                 כל הזכויות באפליקציה, כולל עיצוב, קוד ותוכן, שייכות ל-CalmParent. אין לשכפל, להפיץ או ליצור יצירות נגזרות ללא אישור מפורש.{'\n\n'}
 
-                <Text style={styles.policySubtitle}>7. שינויים בתנאים{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('terms.changes')}{'\n'}</Text>
                 אנו שומרים לעצמנו את הזכות לעדכן תנאים אלה בכל עת. שימוש מתמשך באפליקציה לאחר עדכון מהווה הסכמה לתנאים המעודכנים.{'\n\n'}
 
-                <Text style={styles.policySubtitle}>8. יצירת קשר{'\n'}</Text>
+                <Text style={styles.policySubtitle}>{t('terms.contact')}{'\n'}</Text>
                 לשאלות בנוגע לתנאי השימוש, אנא פנו אלינו בכתובת: Calmperent@Gmail.com
               </Text>
             </ScrollView>
@@ -924,7 +946,7 @@ export default function SettingsScreen() {
                 style={[styles.modalContainer, { backgroundColor: theme.card }]}
               >
                 <View style={styles.modalHeader}>
-                  <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>צור קשר</Text>
+                  <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>{t('settings.contact')}</Text>
                   <TouchableOpacity
                     onPress={() => setContactModalVisible(false)}
                     style={styles.modalClose}
@@ -960,7 +982,7 @@ export default function SettingsScreen() {
                   ) : (
                     <View style={styles.sendButtonContent}>
                       <Send size={18} color="#fff" strokeWidth={2.5} />
-                      <Text style={styles.sendButtonText}>שלח הודעה</Text>
+                      <Text style={styles.sendButtonText}>{t('settings.sendMessage')}</Text>
                     </View>
                   )}
                 </TouchableOpacity>

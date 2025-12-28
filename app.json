@@ -38,7 +38,19 @@
           }
         }
       ],
-      "expo-live-activity"
+      "expo-live-activity",
+      [
+        "react-native-fbsdk-next",
+        {
+          "appID": "1567376814402845",
+          "clientToken": "c2be86c713add9c46c10f5b716deb396",
+          "displayName": "CalmParent",
+          "scheme": "fb1567376814402845",
+          "advertiserIdCollectionEnabled": false,
+          "autoLogAppEventsEnabled": false,
+          "isAutoInitEnabled": true
+        }
+      ]
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -60,7 +72,8 @@
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
-              "fb1567376814402845"
+              "fb1567376814402845",
+              "com.googleusercontent.apps.16421819020-muvdskd7ppjnfcrnal4lsra01pqjr505"
             ]
           }
         ],

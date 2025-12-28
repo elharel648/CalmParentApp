@@ -40,7 +40,7 @@ export const AIInsightHeader: React.FC<AIInsightProps> = ({ childName, insight, 
     }));
 
     return (
-        <Animated.View entering={FadeInUp.duration(600).delay(100)} style={styles.aiContainer}>
+        <Animated.View entering={FadeInUp.duration(600).delay(100)} style={styles.aiContainer} collapsable={false}>
             {/* Glow effect */}
             <Animated.View style={[styles.aiGlow, glowStyle]} />
 
@@ -118,7 +118,7 @@ export const PremiumStatCard: React.FC<PremiumStatCardProps> = ({
     }));
 
     return (
-        <Animated.View entering={FadeInUp.duration(500).delay(delay)}>
+        <Animated.View entering={FadeInUp.duration(500).delay(delay)} collapsable={false}>
             <TouchableOpacity
                 activeOpacity={1}
                 onPressIn={handlePressIn}
@@ -244,7 +244,7 @@ export const SkiaBezierChart: React.FC<SkiaChartProps> = ({
     }
 
     return (
-        <Animated.View entering={FadeInUp.duration(600).delay(400)} style={[styles.chartContainer, { height }]}>
+        <Animated.View entering={FadeInUp.duration(600).delay(400)} style={[styles.chartContainer, { height }]} collapsable={false}>
             <BlurView intensity={60} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
             <View style={styles.chartOverlay} />
             <View style={styles.chartBorder} />

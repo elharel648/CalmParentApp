@@ -134,7 +134,7 @@ const LiquidGlassLineChart: React.FC<LiquidGlassChartProps> = ({
 
     if (!linePath || data.length < 2) {
         return (
-            <Animated.View entering={FadeInUp.duration(500)} style={[styles.chartCard, { height }]}>
+            <Animated.View entering={FadeInUp.duration(500)} style={[styles.chartCard, { height }]} collapsable={false}>
                 <BlurView intensity={60} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
                 <View style={styles.chartOverlay} />
                 <View style={styles.chartBorder} />
@@ -147,7 +147,7 @@ const LiquidGlassLineChart: React.FC<LiquidGlassChartProps> = ({
     }
 
     return (
-        <Animated.View entering={FadeInUp.duration(600).delay(200)} style={[styles.chartCard, { height }]}>
+        <Animated.View entering={FadeInUp.duration(600).delay(200)} style={[styles.chartCard, { height }]} collapsable={false}>
             {/* Frosted Glass Background */}
             <BlurView intensity={70} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
             <View style={styles.chartOverlay} />
@@ -331,7 +331,7 @@ const LiquidGlassBarChart: React.FC<LiquidGlassBarChartProps> = ({
 
     if (data.length === 0) {
         return (
-            <Animated.View entering={FadeInUp.duration(500)} style={[styles.chartCard, { height }]}>
+            <Animated.View entering={FadeInUp.duration(500)} style={[styles.chartCard, { height }]} collapsable={false}>
                 <BlurView intensity={60} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
                 <View style={styles.chartOverlay} />
                 <Text style={styles.chartTitle}>{title}</Text>
@@ -343,7 +343,7 @@ const LiquidGlassBarChart: React.FC<LiquidGlassBarChartProps> = ({
     }
 
     return (
-        <Animated.View entering={FadeInUp.duration(600).delay(300)} style={[styles.chartCard, { height }]}>
+        <Animated.View entering={FadeInUp.duration(600).delay(300)} style={[styles.chartCard, { height }]} collapsable={false}>
             <BlurView intensity={70} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
             <View style={styles.chartOverlay} />
             <View style={styles.chartBorder} />

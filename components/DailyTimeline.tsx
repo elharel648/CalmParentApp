@@ -1,12 +1,19 @@
-import React, { memo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert, Image } from 'react-native';
-import { Utensils, Moon, Layers, ChevronDown, ChevronUp, X, FileText } from 'lucide-react-native';
+import React, { memo, useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView } from 'react-native';
+import { Utensils, Moon, Layers, ChevronDown, ChevronUp, X, FileText, Pill, AlertCircle, RefreshCw } from 'lucide-react-native';
 import { getRecentHistory, deleteEvent } from '../services/firebaseService';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
+import { useFamily } from '../hooks/useFamily';
+import Animated, { FadeInRight, FadeIn } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { Platform } from 'react-native';
+import { auth } from '../services/firebaseConfig';
+import { TimelineSkeleton } from './Home/SkeletonLoader';
 
 interface TimelineEvent {
   id: string;
-  type: 'food' | 'sleep' | 'diaper';
+  type: 'food' | 'sleep' | 'diaper' | 'supplements' | 'custom';
   timestamp: Date;
   amount?: string;
   note?: string;
@@ -21,32 +28,48 @@ interface DailyTimelineProps {
   childId?: string; // Accept childId as prop
 }
 
-const TYPE_CONFIG = {
-  food: {
-    icon: Utensils,
-    color: '#F59E0B',
-    label: 'אוכל',
-  },
-  sleep: {
-    icon: Moon,
-    color: '#8B5CF6',
-    label: 'שינה',
-  },
-  diaper: {
-    icon: Layers,
-    color: '#10B981',
-    label: 'חיתול',
-  },
-} as const;
 
 const INITIAL_VISIBLE_COUNT = 4;
 
 const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = '' }) => {
   const { theme, isDarkMode } = useTheme();
+  const { t } = useLanguage();
+  const { family } = useFamily();
+  
+  // Get translated TYPE_CONFIG
+  const TYPE_CONFIG = {
+    food: {
+      icon: Utensils,
+      color: '#F59E0B',
+      label: t('actions.food'),
+    },
+    sleep: {
+      icon: Moon,
+      color: '#8B5CF6',
+      label: t('actions.sleep'),
+    },
+    diaper: {
+      icon: Layers,
+      color: '#10B981',
+      label: t('actions.diaper'),
+    },
+    supplements: {
+      icon: Pill,
+      color: '#EC4899',
+      label: t('actions.supplements'),
+    },
+    custom: {
+      icon: FileText,
+      color: '#8B5CF6',
+      label: t('actions.custom'),
+    },
+  };
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const [lineHeight, setLineHeight] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     if (childId) {
@@ -55,49 +78,63 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
       setEvents([]);
       setLoading(false);
     }
-  }, [childId, refreshTrigger]);
+  }, [childId, refreshTrigger, family]);
 
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-  }, [events]);
+  // Check if event happened in last hour for pulsing effect
+  const isRecentEvent = (timestamp: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - timestamp.getTime();
+    return diff < 3600000; // 1 hour in milliseconds
+  };
 
   const loadTimeline = async () => {
     if (!childId) return;
+    setLoading(true);
+    setError(null);
     try {
-      const history = await getRecentHistory(childId);
+      // Check if user is a guest and get historyAccessDays
+      const userId = auth.currentUser?.uid;
+      const historyAccessDays = userId && family?.members[userId]?.historyAccessDays;
+
+      const history = await getRecentHistory(childId, undefined, historyAccessDays);
       // Map Firebase data directly
       const mapped: TimelineEvent[] = history.map((item: any) => ({
         ...item,
         timestamp: item.timestamp instanceof Date ? item.timestamp : new Date(item.timestamp),
       }));
       setEvents(mapped);
-    } catch (error) {
+      setError(null);
+    } catch (error: any) {
       if (__DEV__) console.log('Timeline load error:', error);
+      const errorMessage = error?.message || t('timeline.loading');
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (eventId: string) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
     Alert.alert(
-      'מחיקת תיעוד',
-      'האם אתה בטוח שברצונך למחוק תיעוד זה?',
+      t('common.delete'),
+      t('common.delete') + '?',
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'מחק',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await deleteEvent(eventId);
               // Remove from local state
               setEvents(prevEvents => prevEvents.filter(e => e.id !== eventId));
+              if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
             } catch (error) {
-              Alert.alert('שגיאה', 'לא ניתן למחוק את התיעוד');
+              Alert.alert(t('common.error'), t('common.error'));
             }
           },
         },
@@ -106,27 +143,41 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
   };
 
   const getTimeAgo = (date: Date) => {
-    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-    if (seconds < 60) return 'עכשיו';
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const seconds = Math.floor(diffMs / 1000);
+    
+    if (seconds < 60) return t('time.now');
+    
     const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}ד׳`;
+    if (minutes < 60) return `לפני ${minutes} דקות`;
+    
     const hours = Math.floor(minutes / 60);
-    return `${hours}ש׳`;
+    if (hours < 24) {
+      return hours === 1 ? 'לפני שעה' : `לפני ${hours} שעות`;
+    }
+    
+    const days = Math.floor(hours / 24);
+    if (days === 1) return t('timeline.yesterday');
+    if (days < 7) return t('time.daysAgo', { count: days });
+    
+    // For older events, show date
+    return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
   };
 
   // Format event details
   const getEventDetails = (event: TimelineEvent) => {
     if (event.type === 'food') {
       if (event.subType === 'bottle') {
-        return event.amount || 'בקבוק';
+        return event.amount || t('timeline.bottle');
       } else if (event.subType === 'breast') {
-        return 'הנקה';
+        return t('timeline.breast');
       } else if (event.subType === 'pumping') {
-        return event.amount ? `שאיבה ${event.amount}` : 'שאיבה';
+        return event.amount ? `${t('timeline.pumping')} ${event.amount}` : t('timeline.pumping');
       } else if (event.subType === 'solids') {
-        return event.note || 'מזון מוצק';
+        return event.note || t('tracking.solidsFood');
       }
-      return event.amount || event.note || 'אוכל';
+      return event.amount || event.note || t('timeline.food');
     } else if (event.type === 'sleep') {
       // Extract duration from note or duration field
       if (event.duration) {
@@ -142,31 +193,50 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
         const match = event.note.match(/משך שינה: (\d+:\d+)/);
         if (match) return match[1];
       }
-      return 'שינה';
+      return t('timeline.sleep');
     } else if (event.type === 'diaper') {
-      if (event.subType === 'pee') return 'שתן';
-      if (event.subType === 'poop') return 'יציאה';
-      if (event.subType === 'both') return 'שניהם';
+      if (event.subType === 'pee') return t('diaper.wet');
+      if (event.subType === 'poop') return t('diaper.dirty');
+      if (event.subType === 'both') return t('tracking.both');
       return 'החלפת חיתול';
+    } else if (event.type === 'supplements') {
+      if (event.subType === 'vitaminD') return 'ויטמין D';
+      if (event.subType === 'iron') return t('timeline.iron');
+      if (event.subType === 'probiotic') return t('timeline.probiotic');
+      if (event.subType === 'multivitamin') return 'Multivitamin';
+      return event.note || t('timeline.supplement');
+    } else if (event.type === 'custom') {
+      return event.note || 'פעולה מותאמת';
     }
     return '';
   };
 
   const getEventSubtext = (event: TimelineEvent) => {
     if (event.type === 'food') {
-      if (event.subType === 'bottle') return 'בקבוק';
+      if (event.subType === 'bottle') return t('timeline.bottle');
       if (event.subType === 'breast') return event.note ? event.note.substring(0, 30) : '';
-      if (event.subType === 'solids') return 'מזון מוצקים';
-      if (event.subType === 'pumping') return event.note || 'שאיבה';
+      if (event.subType === 'solids') return t('tracking.solidsFood');
+      if (event.subType === 'pumping') return event.note || t('timeline.pumping');
     } else if (event.type === 'sleep') {
       // Extract user note after pipe separator
-      if (event.note && event.note.includes(' | ')) {
-        const parts = event.note.split(' | ');
-        return parts[1] ? parts[1].substring(0, 35) : 'שינה';
+      // Extract user note after pipe separator
+      if (event.note) {
+        if (event.note.includes(' | ')) {
+          const parts = event.note.split(' | ');
+          return parts[1] ? parts[1].substring(0, 35) : 'שינה';
+        }
+        // If note exists but no pipe (and it's not just "שינה חדשה" or duration-like), show it
+        // Check if note is just a duration string to avoid duplication if title shows duration
+        const isDuration = event.note.includes('משך שינה') || event.note.match(/^\d{2}:\d{2} →/);
+        return isDuration ? 'שינה' : event.note;
       }
-      return 'שינה';
+      return t('timeline.sleep');
+    } else if (event.type === 'diaper') {
+      return event.note || '';
+    } else if (event.type === 'custom') {
+      return event.subType || '';
     }
-    return '';
+    return event.note || '';
   };
 
   const stats = events.reduce((acc, event) => {
@@ -177,35 +247,70 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
   const visibleEvents = isExpanded ? events : events.slice(0, INITIAL_VISIBLE_COUNT);
   const hasMore = events.length > INITIAL_VISIBLE_COUNT;
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.titleSection}>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>{t('timeline.title')}</Text>
+          </View>
+        </View>
+        <TimelineSkeleton />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.titleSection}>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>{t('timeline.title')}</Text>
+          </View>
+        </View>
+        <View style={[styles.errorContainer, { backgroundColor: theme.card }]}>
+          <AlertCircle size={24} color="#EF4444" />
+          <Text style={[styles.errorText, { color: theme.textSecondary }]}>{error}</Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: theme.primary }]}
+            onPress={loadTimeline}
+            activeOpacity={0.7}
+          >
+            <RefreshCw size={16} color="#fff" />
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   if (events.length === 0) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
           <View style={styles.titleSection}>
-            <View style={styles.accentLine} />
-            <Text style={[styles.title, { color: theme.textPrimary }]}>סדר היום</Text>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>{t('timeline.title')}</Text>
           </View>
         </View>
 
         <View style={[styles.emptyCard, { backgroundColor: theme.card }]}>
           <View style={styles.emptyIcon}>
-            <FileText size={28} color="#9CA3AF" strokeWidth={1.5} />
+            <FileText size={32} color="#9CA3AF" strokeWidth={1.5} />
           </View>
-          <Text style={[styles.emptyText, { color: theme.textPrimary }]}>אין תיעודים להיום</Text>
-          <Text style={[styles.emptyHint, { color: theme.textSecondary }]}>השתמש בכפתורים למעלה כדי להתחיל</Text>
+          <Text style={[styles.emptyText, { color: theme.textPrimary }]}>{t('timeline.noRecordsToday')}</Text>
+          <Text style={[styles.emptyHint, { color: theme.textSecondary }]}>
+            השתמש בפעולות המהירות למעלה{'\n'}כדי להתחיל לתעד פעילויות
+          </Text>
         </View>
       </View>
     );
   }
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.titleSection}>
-          <View style={styles.accentLine} />
           <Text style={[styles.title, { color: theme.textPrimary }]}>סדר היום</Text>
         </View>
 
@@ -225,7 +330,7 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
         </View>
       </View>
 
-      {/* Timeline */}
+      {/* Timeline with Staggered Entry and Growing Line */}
       <View style={styles.timeline}>
         {visibleEvents.map((event, index) => {
           const config = TYPE_CONFIG[event.type as keyof typeof TYPE_CONFIG] || TYPE_CONFIG.food;
@@ -233,88 +338,104 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
           const isLast = index === visibleEvents.length - 1;
           const details = getEventDetails(event);
           const subtext = getEventSubtext(event);
+          const isRecent = isRecentEvent(event.timestamp);
 
           return (
-            <View key={event.id} style={styles.eventRow}>
-              {/* Left side: Time + Dot */}
-              <View style={styles.leftSection}>
-                <Text style={styles.time}>
-                  {event.timestamp.toLocaleTimeString('he-IL', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                  })}
-                </Text>
-                <Text style={styles.timeAgo}>{getTimeAgo(event.timestamp)}</Text>
-              </View>
-
-              {/* Timeline icon + line */}
-              <View style={styles.timelineTrack}>
-                <View style={[styles.timelineIcon, { backgroundColor: config.color + '20' }]}>
-                  <Icon size={14} color={config.color} strokeWidth={2} />
+            <Animated.View
+              key={event.id}
+              entering={FadeInRight.duration(300).delay(index * 80).springify()}
+            >
+              <View style={styles.eventRow} collapsable={false}>
+                {/* Left side: Time + Dot */}
+                <View style={styles.leftSection}>
+                  <Text style={styles.time}>
+                    {event.timestamp.toLocaleTimeString('he-IL', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false
+                    })}
+                  </Text>
+                  <Text style={styles.timeAgo}>{getTimeAgo(event.timestamp)}</Text>
                 </View>
-                {!isLast && <View style={styles.connector} />}
-              </View>
 
-              {/* Right side: Content */}
-              <View style={styles.eventCard}>
-                <View style={styles.cardContent}>
-                  <View style={styles.eventHeader}>
-                    <Text style={[styles.eventTitle, { color: theme.textPrimary }]}>{details}</Text>
-                    <TouchableOpacity
-                      style={styles.deleteBtn}
-                      onPress={() => handleDelete(event.id)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <X size={14} color="#9CA3AF" strokeWidth={2} />
-                    </TouchableOpacity>
+                {/* Timeline icon + line */}
+                <View style={styles.timelineTrack}>
+                  <View style={[styles.timelineIcon, { backgroundColor: config.color + '20' }]}>
+                    <Icon size={14} color={config.color} strokeWidth={2} />
                   </View>
-                  {subtext && (
-                    <Text style={[styles.eventSubtext, { color: theme.textSecondary }]}>{subtext}</Text>
-                  )}
+                  {/* Line connector */}
+                  {!isLast && <View style={styles.connector} />}
                 </View>
 
-                {/* Reporter Badge - Small avatar showing who reported */}
-                {event.reporterName && (
-                  <View style={styles.reporterBadge}>
-                    {event.reporterPhotoUrl ? (
-                      <Image source={{ uri: event.reporterPhotoUrl }} style={styles.reporterAvatar} />
-                    ) : (
-                      <View style={[styles.reporterAvatarPlaceholder, { backgroundColor: config.color + '30' }]}>
-                        <Text style={[styles.reporterInitial, { color: config.color }]}>
-                          {event.reporterName.charAt(0)}
-                        </Text>
+                {/* Right side: Content */}
+                <View style={styles.eventCardContainer}>
+                  <View style={[styles.eventCard, { backgroundColor: theme.card }]}>
+                    <View style={styles.cardContent}>
+                      <View style={styles.eventHeader}>
+                        <Text style={[styles.eventTitle, { color: theme.textPrimary }]}>{details}</Text>
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => handleDelete(event.id)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <X size={14} color="#9CA3AF" strokeWidth={2} />
+                        </TouchableOpacity>
+                      </View>
+                      {subtext && (
+                        <Text style={[styles.eventSubtext, { color: theme.textSecondary }]}>{subtext}</Text>
+                      )}
+                    </View>
+
+                    {/* Reporter Badge - Small avatar showing who reported */}
+                    {event.reporterName && (
+                      <View style={styles.reporterBadge}>
+                        {event.reporterPhotoUrl ? (
+                          <Image source={{ uri: event.reporterPhotoUrl }} style={styles.reporterAvatar} />
+                        ) : (
+                          <View style={[styles.reporterAvatarPlaceholder, { backgroundColor: config.color + '30' }]}>
+                            <Text style={[styles.reporterInitial, { color: config.color }]}>
+                              {event.reporterName.charAt(0)}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                     )}
                   </View>
-                )}
+                </View>
               </View>
-            </View>
+            </Animated.View>
           );
         })}
       </View>
 
       {/* Expand */}
       {hasMore && (
-        <TouchableOpacity
-          style={styles.expandButton}
-          onPress={() => setIsExpanded(!isExpanded)}
-          activeOpacity={0.6}
-        >
-          {isExpanded ? (
-            <>
-              <ChevronUp size={14} color="#9CA3AF" strokeWidth={2.5} />
-              <Text style={styles.expandText}>הצג פחות</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.expandText}>הצג {events.length - INITIAL_VISIBLE_COUNT} נוספים</Text>
-              <ChevronDown size={14} color="#9CA3AF" strokeWidth={2.5} />
-            </>
-          )}
-        </TouchableOpacity>
+        <Animated.View entering={FadeIn.duration(300).delay(visibleEvents.length * 80)}>
+          <TouchableOpacity
+            style={styles.expandButton}
+            onPress={() => {
+              setIsExpanded(!isExpanded);
+              if (Platform.OS !== 'web') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+            }}
+            activeOpacity={0.6}
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp size={14} color="#9CA3AF" strokeWidth={2.5} />
+                <Text style={styles.expandText}>{t('timeline.showLess')}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.expandText}>{t('timeline.showMore', { count: events.length - INITIAL_VISIBLE_COUNT })}</Text>
+                <ChevronDown size={14} color="#9CA3AF" strokeWidth={2.5} />
+              </>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
       )}
-    </Animated.View>
+    </View>
   );
 });
 
@@ -322,8 +443,8 @@ DailyTimeline.displayName = 'DailyTimeline';
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 24,
-    marginBottom: 16,
+    marginTop: 20,
+    marginBottom: 20,
   },
 
   // Header
@@ -377,7 +498,41 @@ const styles = StyleSheet.create({
   },
   eventRow: {
     flexDirection: 'row-reverse',
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  loadingContainer: {
+    padding: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 100,
+  },
+  errorContainer: {
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    minHeight: 100,
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   // Left: Time
@@ -433,6 +588,17 @@ const styles = StyleSheet.create({
   },
 
   // Right: Content - Pill Style
+  eventCardContainer: {
+    flex: 1,
+    backgroundColor: '#F9FAFB', // Required for efficient shadow calculation
+    borderRadius: 24,
+    // Multi-layered shadows for floating effect
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
   eventCard: {
     flex: 1,
     backgroundColor: '#F9FAFB',
@@ -441,6 +607,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     overflow: 'hidden',
     position: 'relative',
+    minHeight: 64,
   },
   deleteBtn: {
     padding: 4,

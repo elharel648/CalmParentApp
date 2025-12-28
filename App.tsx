@@ -1,16 +1,18 @@
 import 'react-native-gesture-handler';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigationState } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Home, BarChart2, User, Settings, Lock, Baby } from 'lucide-react-native';
+import { Home, BarChart2, User, Settings, Lock, Baby, UserCheck } from 'lucide-react-native';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { BlurView } from 'expo-blur';
 import { Canvas, LinearGradient, Rect, vec } from '@shopify/react-native-skia';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import LiquidGlassTabBar from './components/LiquidGlassTabBar';
 import { auth, db } from './services/firebaseConfig';
 
 // ייבוא המסכים הקיימים
@@ -36,6 +38,7 @@ import { FoodTimerProvider } from './context/FoodTimerContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { ActiveChildProvider, useActiveChild } from './context/ActiveChildContext';
 import { QuickActionsProvider } from './context/QuickActionsContext';
+import { LanguageProvider } from './context/LanguageContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import * as Sentry from '@sentry/react-native';
 
@@ -50,10 +53,11 @@ Sentry.init({
   tracesSampleRate: 0.2, // 20% מהטרנזקציות יימדדו
   enableAutoPerformanceTracing: true, // מעקב אוטומטי אחרי navigation ו-API calls
 
-  // Configure Session Replay
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1,
-  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+  // 🚫 DISABLED Session Replay - causes EXC_BAD_ACCESS crash on iOS
+  replaysSessionSampleRate: 0,
+  replaysOnErrorSampleRate: 0,
+  // integrations: [Sentry.mobileReplayIntegration()], // DISABLED - crashes on screenshot
+  integrations: [Sentry.feedbackIntegration()],
 
   // uncomment the line below to enable Spotlight (https://spotlightjs.com)
   // spotlight: __DEV__,
@@ -120,45 +124,7 @@ function MainAppNavigator() {
         tabBarShowLabel: false,
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSecondary,
-        tabBarBackground: () => (
-          <View style={[StyleSheet.absoluteFill, { borderRadius: 32, overflow: 'hidden' }]}>
-            {/* Apple-style liquid glass background */}
-            <BlurView
-              intensity={isDarkMode ? 100 : 80}
-              tint={isDarkMode ? 'systemUltraThinMaterialDark' : 'systemUltraThinMaterial'}
-              style={StyleSheet.absoluteFill}
-            />
-            {/* Frosted glass overlay for depth */}
-            <View style={{
-              ...StyleSheet.absoluteFillObject,
-              backgroundColor: isDarkMode
-                ? 'rgba(30, 30, 30, 0.55)'
-                : 'rgba(255, 255, 255, 0.65)',
-            }} />
-            {/* Top edge highlight - glass reflection */}
-            <View style={{
-              position: 'absolute',
-              top: 0,
-              left: 20,
-              right: 20,
-              height: 1,
-              backgroundColor: isDarkMode
-                ? 'rgba(255, 255, 255, 0.20)'
-                : 'rgba(255, 255, 255, 0.98)',
-            }} />
-            {/* Subtle gradient glow */}
-            <View style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 28,
-              backgroundColor: isDarkMode
-                ? 'rgba(255, 255, 255, 0.04)'
-                : 'rgba(255, 255, 255, 0.35)',
-            }} />
-          </View>
-        ),
+        tabBarBackground: () => <LiquidGlassTabBar isDarkMode={isDarkMode} activeTabIndex={0} tabCount={4} />,
         tabBarStyle: {
           position: 'absolute',
           bottom: 28,
@@ -168,16 +134,8 @@ function MainAppNavigator() {
           backgroundColor: 'transparent',
           borderRadius: 32,
           height: 72,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 12 },
-          shadowOpacity: isDarkMode ? 0.5 : 0.25,
-          shadowRadius: 24,
           borderTopWidth: 0,
-          borderWidth: isDarkMode ? 0.5 : 1,
-          borderColor: isDarkMode
-            ? 'rgba(255, 255, 255, 0.1)'
-            : 'rgba(255, 255, 255, 0.5)',
-          overflow: 'hidden',
+          overflow: 'visible',
         }
       }}
     >
@@ -198,7 +156,7 @@ function MainAppNavigator() {
       {/* Babysitter - only for parents */}
       {canAccessBabysitter && (
         <Tab.Screen name="בייביסיטר" component={BabysitterStackScreen} options={{
-          tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={Baby} label="בייביסיטר" />
+          tabBarIcon: ({ color, focused }) => <CustomTabIcon focused={focused} color={color} icon={UserCheck} label="בייביסיטר" />
         }} />
       )}
 
@@ -331,41 +289,49 @@ export default Sentry.wrap(function App() {
 
   if (!user) {
     return (
-      <SafeAreaProvider>
-        <LoginScreen onLoginSuccess={() => setIsAppLoading(true)} />
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <LoginScreen onLoginSuccess={() => setIsAppLoading(true)} />
+        </SafeAreaProvider>
+      </ThemeProvider>
     );
   }
 
   if (user && !hasBabyProfile) {
     return (
-      <SafeAreaProvider>
-        <BabyProfileScreen
-          onProfileSaved={() => setHasBabyProfile(true)}
-          onSkip={() => setHasBabyProfile(true)}
-        />
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <BabyProfileScreen
+            onProfileSaved={() => setHasBabyProfile(true)}
+            onSkip={() => setHasBabyProfile(true)}
+          />
+        </SafeAreaProvider>
+      </ThemeProvider>
     );
   }
 
   return (
-    <ErrorBoundary>
-      <SleepTimerProvider>
-        <FoodTimerProvider>
-          <QuickActionsProvider>
-            <ThemeProvider>
-              <ActiveChildProvider>
-                <SafeAreaProvider>
-                  <NavigationContainer>
-                    <MainAppNavigator />
-                  </NavigationContainer>
-                </SafeAreaProvider>
-              </ActiveChildProvider>
-            </ThemeProvider>
-          </QuickActionsProvider>
-        </FoodTimerProvider>
-      </SleepTimerProvider>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <SleepTimerProvider>
+          <FoodTimerProvider>
+            <QuickActionsProvider>
+              <LanguageProvider>
+                <ThemeProvider>
+                  <ActiveChildProvider>
+                    <SafeAreaProvider>
+                      <NavigationContainer>
+                        <MainAppNavigator />
+                      </NavigationContainer>
+                    </SafeAreaProvider>
+                  </ActiveChildProvider>
+                </ThemeProvider>
+              </LanguageProvider>
+            </QuickActionsProvider>
+          </FoodTimerProvider>
+        </SleepTimerProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 });
 

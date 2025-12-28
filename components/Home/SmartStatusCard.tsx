@@ -176,6 +176,7 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         padding: 16,
         marginBottom: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.01)', // Required for efficient shadow calculation
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.08,

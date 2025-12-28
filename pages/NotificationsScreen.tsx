@@ -1,58 +1,38 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Bell, ChevronRight, Clock, Utensils, Moon, Pill, CheckCircle2, X } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
+import { Bell, ChevronRight, Clock, Utensils, Moon, Pill, CheckCircle2, X, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
-
-interface Notification {
-    id: string;
-    type: 'feed' | 'sleep' | 'medication' | 'reminder' | 'achievement';
-    title: string;
-    message: string;
-    timestamp: Date;
-    isRead: boolean;
-    isUrgent?: boolean;
-}
+import { notificationStorageService, StoredNotification } from '../services/notificationStorageService';
 
 export default function NotificationsScreen() {
     const navigation = useNavigation();
     const { isDarkMode } = useTheme();
     const [refreshing, setRefreshing] = useState(false);
+    const [notifications, setNotifications] = useState<StoredNotification[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    // Sample notifications - in production, this would come from a context or Firebase
-    const [notifications, setNotifications] = useState<Notification[]>([
-        {
-            id: '1',
-            type: 'feed',
-            title: 'זמן האכלה',
-            message: 'עברו 3 שעות מהאכלה אחרונה',
-            timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 min ago
-            isRead: false,
-            isUrgent: true,
-        },
-        {
-            id: '2',
-            type: 'medication',
-            title: 'ויטמין D',
-            message: 'לא שכחת לתת ויטמין היום?',
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-            isRead: false,
-        },
-        {
-            id: '3',
-            type: 'achievement',
-            title: 'כל הכבוד! 🎉',
-            message: 'הגעת ל-7 ימים רצופים של מעקב',
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-            isRead: true,
-        },
-    ]);
+    // Fetch notifications from Firebase
+    const fetchNotifications = useCallback(async () => {
+        try {
+            const data = await notificationStorageService.getNotifications();
+            setNotifications(data);
+        } catch (error) {
+            if (__DEV__) console.log('Failed to fetch notifications:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    // Load on mount
+    useEffect(() => {
+        fetchNotifications();
+    }, [fetchNotifications]);
 
     const unreadCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
 
-    const getIcon = (type: Notification['type']) => {
+    const getIcon = (type: StoredNotification['type']) => {
         switch (type) {
             case 'feed': return Utensils;
             case 'sleep': return Moon;
@@ -62,7 +42,7 @@ export default function NotificationsScreen() {
         }
     };
 
-    const getIconColor = (type: Notification['type']) => {
+    const getIconColor = (type: StoredNotification['type']) => {
         switch (type) {
             case 'feed': return '#F59E0B';
             case 'sleep': return '#8B5CF6';
@@ -84,24 +64,46 @@ export default function NotificationsScreen() {
         return `לפני ${days} ימים`;
     };
 
-    const markAsRead = (id: string) => {
+    const markAsRead = async (id: string) => {
+        if (!id) return;
+        await notificationStorageService.markAsRead(id);
         setNotifications(prev =>
             prev.map(n => n.id === id ? { ...n, isRead: true } : n)
         );
     };
 
-    const markAllAsRead = () => {
+    const markAllAsRead = async () => {
+        await notificationStorageService.markAllAsRead();
         setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     };
 
-    const dismissNotification = (id: string) => {
+    const dismissNotification = async (id: string) => {
+        if (!id) return;
+        await notificationStorageService.deleteNotification(id);
         setNotifications(prev => prev.filter(n => n.id !== id));
+    };
+
+    const clearAllNotifications = async () => {
+        Alert.alert(
+            'נקה הכל',
+            'האם למחוק את כל ההתראות?',
+            [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                    text: 'מחק הכל',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await notificationStorageService.clearAll();
+                        setNotifications([]);
+                    }
+                }
+            ]
+        );
     };
 
     const onRefresh = async () => {
         setRefreshing(true);
-        // Simulate refresh
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await fetchNotifications();
         setRefreshing(false);
     };
 
@@ -113,11 +115,18 @@ export default function NotificationsScreen() {
                     <ChevronRight size={24} color={isDarkMode ? '#fff' : '#1C1C1E'} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, isDarkMode && styles.textDark]}>התראות</Text>
-                {unreadCount > 0 && (
-                    <TouchableOpacity onPress={markAllAsRead} style={styles.markAllBtn}>
-                        <Text style={styles.markAllText}>סמן הכל כנקרא</Text>
-                    </TouchableOpacity>
-                )}
+                <View style={styles.headerActions}>
+                    {unreadCount > 0 && (
+                        <TouchableOpacity onPress={markAllAsRead} style={styles.markAllBtn}>
+                            <Text style={styles.markAllText}>סמן הכל</Text>
+                        </TouchableOpacity>
+                    )}
+                    {notifications.length > 0 && (
+                        <TouchableOpacity onPress={clearAllNotifications} style={styles.clearBtn}>
+                            <Trash2 size={18} color="#EF4444" />
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             {/* Notifications List */}
@@ -228,6 +237,14 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#6366F1',
         fontWeight: '500',
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    clearBtn: {
+        padding: 8,
     },
     scrollView: {
         flex: 1,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Modal } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Clock } from 'lucide-react-native';
 
@@ -63,15 +63,47 @@ export const TimePicker: React.FC<TimePickerProps> = ({
                 </View>
             </TouchableOpacity>
 
-            {showPicker && (
+            {/* Android Picker */}
+            {showPicker && Platform.OS === 'android' && (
                 <DateTimePicker
                     value={getDateFromTime(value)}
                     mode="time"
                     is24Hour={true}
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="default"
                     onChange={handleTimeChange}
-                    locale="he-IL"
                 />
+            )}
+
+            {/* iOS Modal Picker */}
+            {Platform.OS === 'ios' && (
+                <Modal
+                    visible={showPicker}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setShowPicker(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <View style={styles.modalHeader}>
+                                <TouchableOpacity onPress={() => setShowPicker(false)}>
+                                    <Text style={styles.cancelText}>ביטול</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => setShowPicker(false)}>
+                                    <Text style={styles.confirmText}>אישור</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <DateTimePicker
+                                value={getDateFromTime(value)}
+                                mode="time"
+                                is24Hour={true}
+                                display="spinner"
+                                onChange={handleTimeChange}
+                                locale="he-IL"
+                                textColor="#000"
+                            />
+                        </View>
+                    </View>
+                </Modal>
             )}
         </View>
     );
@@ -119,6 +151,37 @@ const styles = StyleSheet.create({
     },
     timeDisabled: {
         color: '#9CA3AF',
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: 'white',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingBottom: 20,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
+        backgroundColor: '#F9FAFB',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+    },
+    confirmText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#6366F1',
+    },
+    cancelText: {
+        fontSize: 16,
+        color: '#6B7280',
     },
 });
 

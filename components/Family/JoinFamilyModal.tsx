@@ -13,7 +13,7 @@ import {
 import { X, Users, LogIn } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useFamily } from '../../hooks/useFamily';
-import { joinAsGuest } from '../../services/familyService';
+import { joinFamily } from '../../services/familyService';
 
 interface JoinFamilyModalProps {
     visible: boolean;
@@ -26,7 +26,6 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
     onClose,
     onSuccess,
 }) => {
-    const { join } = useFamily();
     const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -41,27 +40,12 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
         setError('');
 
         try {
-            // First try to join as guest (for guest invite codes)
-            const guestResult = await joinAsGuest(code);
-
-            if (guestResult.success) {
-                // Successfully joined as guest
-                setLoading(false);
-                if (Platform.OS !== 'web') {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                }
-                setCode('');
-                onClose();
-                onSuccess?.();
-                return;
-            }
-
-            // If guest join failed, try regular family join
-            const familyResult = await join(code);
+            // Smart join - automatically detects if code is for family or guest
+            const result = await joinFamily(code);
 
             setLoading(false);
 
-            if (familyResult.success) {
+            if (result.success) {
                 if (Platform.OS !== 'web') {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 }
@@ -72,8 +56,7 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
                 if (Platform.OS !== 'web') {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                 }
-                // Show error from guest attempt if it was more specific, otherwise show family error
-                setError(guestResult.message !== 'קוד הזמנה לא תקין' ? guestResult.message : familyResult.message);
+                setError(result.message);
             }
         } catch (error) {
             setLoading(false);
@@ -109,7 +92,8 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
 
                     {/* Description */}
                     <Text style={styles.description}>
-                        הזן את קוד ההזמנה שקיבלת כדי להצטרף ולראות את התיעודים בזמן אמת
+                        הזן את קוד ההזמנה שקיבלת{'\n'}
+                        המערכת תזהה אוטומטית אם זה קוד למשפחה (גישה מלאה) או קוד לאורח (24 שעות)
                     </Text>
 
                     {/* Code Input */}
@@ -123,7 +107,7 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
                             placeholderTextColor="#9CA3AF"
                             keyboardType="number-pad"
                             maxLength={6}
-                            autoFocus
+                        // autoFocus removed to prevent crash on mount
                         />
                         {error ? <Text style={styles.errorText}>{error}</Text> : null}
                     </View>
@@ -146,7 +130,8 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
 
                     {/* Tip */}
                     <Text style={styles.tip}>
-                        💡 קיבלת קוד מבן/בת הזוג? הזן אותו כאן
+                        💡 קוד משפחה: גישה מלאה לכל הילדים{'\n'}
+                        💡 קוד אורח: גישה ל-24 שעות בלבד
                     </Text>
                 </View>
             </KeyboardAvoidingView>

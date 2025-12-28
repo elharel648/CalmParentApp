@@ -15,11 +15,12 @@ import {
   Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import {
-  Moon, Droplets, Calendar, ChevronRight, ChevronLeft,
-  Utensils, Baby, Pill, TrendingUp, TrendingDown, Download,
-  Clock, Award, BarChart2, Activity, Thermometer, X, Check, Trophy, Timer
-} from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Defs, Pattern, Rect } from 'react-native-svg';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { X, TrendingUp, TrendingDown, ChevronRight, Share2, Download, Calendar, Activity, Moon, Utensils, Droplets, Pill, RefreshCw, Trophy, Award, Clock, BarChart2, Check, GripVertical, Edit2, Baby } from 'lucide-react-native';
+import StatsEditModal, { DEFAULT_STATS_ORDER, STATS_ORDER_KEY, StatKey } from '../components/Reports/StatsEditModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { db } from '../services/firebaseConfig';
 import { collection, query, where, getDocs, Timestamp, orderBy, limit } from 'firebase/firestore';
@@ -28,6 +29,7 @@ import { he } from 'date-fns/locale';
 import { BarChart, LineChart, PieChart } from 'react-native-chart-kit';
 import { useActiveChild } from '../context/ActiveChildContext';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 import * as Haptics from 'expo-haptics';
 import ChildPicker from '../components/Home/ChildPicker';
 import { LiquidGlassBackground } from '../components/LiquidGlass';
@@ -53,7 +55,7 @@ interface DailyStats {
   sleepCount: number;
   diapers: number;
   supplements: number;
-  feedingTypes: { bottle: number; breast: number; solids: number };
+  feedingTypes: { bottle: number; breast: number; pumping: number; solids: number };
 }
 
 interface TimeInsights {
@@ -85,6 +87,7 @@ type MetricType = 'sleep' | 'food' | 'diapers' | 'supplements' | null;
 
 export default function ReportsScreen() {
   const { theme, isDarkMode } = useTheme();
+  const { t } = useLanguage();
   const { activeChild } = useActiveChild();
 
   // State
@@ -105,7 +108,7 @@ export default function ReportsScreen() {
     food: 0, foodCount: 0,
     sleep: 0, sleepCount: 0,
     diapers: 0, supplements: 0,
-    feedingTypes: { bottle: 0, breast: 0, solids: 0 }
+    feedingTypes: { bottle: 0, breast: 0, pumping: 0, solids: 0 }
   });
 
   const [prevWeekStats, setPrevWeekStats] = useState<DailyStats | null>(null);
@@ -113,9 +116,29 @@ export default function ReportsScreen() {
   const [weeklyData, setWeeklyData] = useState<WeeklyData>({ labels: [], food: [], sleep: [], diapers: [] });
   const [dayBreakdown, setDayBreakdown] = useState<{ [day: string]: DailyStats }>({});
 
+  // Stats Order
+  const [statsOrder, setStatsOrder] = useState<StatKey[]>(DEFAULT_STATS_ORDER);
+  const [showStatsEdit, setShowStatsEdit] = useState(false);
+
+  // Load stats order
+  useEffect(() => {
+    AsyncStorage.getItem(STATS_ORDER_KEY).then(json => {
+      if (json) {
+        setStatsOrder(JSON.parse(json));
+      }
+    }).catch(() => { });
+  }, []);
+
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [allEvents, setAllEvents] = useState<any[]>([]);
+  const [weeklyGoals, setWeeklyGoals] = useState<{
+    sleepDaysGoal: number;
+    sleepDaysMet: number;
+    docDaysGoal: number;
+    docDaysMet: number;
+    streak: number;
+  }>({ sleepDaysGoal: 7, sleepDaysMet: 0, docDaysGoal: 7, docDaysMet: 0, streak: 0 });
 
   // Get date range
   const getDateRange = useCallback(() => {
@@ -165,7 +188,7 @@ export default function ReportsScreen() {
       const stats: DailyStats = {
         food: 0, foodCount: 0, sleep: 0, sleepCount: 0,
         diapers: 0, supplements: 0,
-        feedingTypes: { bottle: 0, breast: 0, solids: 0 }
+        feedingTypes: { bottle: 0, breast: 0, pumping: 0, solids: 0 }
       };
 
       // Day breakdown for charts
@@ -176,7 +199,7 @@ export default function ReportsScreen() {
         dayMap[key] = {
           food: 0, foodCount: 0, sleep: 0, sleepCount: 0,
           diapers: 0, supplements: 0,
-          feedingTypes: { bottle: 0, breast: 0, solids: 0 }
+          feedingTypes: { bottle: 0, breast: 0, pumping: 0, solids: 0 }
         };
       }
 
@@ -211,8 +234,8 @@ export default function ReportsScreen() {
           // Count by subType
           if (data.subType === 'bottle') stats.feedingTypes.bottle += 1;
           else if (data.subType === 'breast') stats.feedingTypes.breast += 1;
+          else if (data.subType === 'pumping') stats.feedingTypes.pumping += 1;
           else if (data.subType === 'solids') stats.feedingTypes.solids += 1;
-          else if (data.subType === 'pumping') stats.feedingTypes.bottle += 1; // Count pumping as bottle
 
           if (dayMap[dayKey]) {
             dayMap[dayKey].food += amount;
@@ -287,6 +310,41 @@ export default function ReportsScreen() {
       setDayBreakdown(dayMap);
       setAllEvents(events);
 
+      // Calculate real weekly goals
+      const dayKeys = Object.keys(dayMap);
+      let sleepDaysMet = 0;
+      let docDaysMet = 0;
+      let currentStreak = 0;
+      let streakBroken = false;
+
+      // Check each day (from most recent to oldest)
+      const reversedDays = [...dayKeys].reverse();
+      for (const dayKey of reversedDays) {
+        const day = dayMap[dayKey];
+        const hasDocumentation = day.foodCount > 0 || day.sleepCount > 0 || day.diapers > 0 || day.supplements > 0;
+
+        // Sleep goal: 8+ hours total that day
+        if (day.sleep >= 8) sleepDaysMet++;
+
+        // Documentation goal: any entry that day
+        if (hasDocumentation) docDaysMet++;
+
+        // Calculate streak (consecutive days with documentation from today)
+        if (hasDocumentation && !streakBroken) {
+          currentStreak++;
+        } else if (!hasDocumentation) {
+          streakBroken = true;
+        }
+      }
+
+      setWeeklyGoals({
+        sleepDaysGoal: Math.min(daysInRange, dayKeys.length),
+        sleepDaysMet,
+        docDaysGoal: Math.min(daysInRange, dayKeys.length),
+        docDaysMet,
+        streak: currentStreak,
+      });
+
       // Weekly chart data
       const labels = Object.keys(dayMap);
       const displayLabels = daysInRange > 14
@@ -316,7 +374,7 @@ export default function ReportsScreen() {
         const prevStats: DailyStats = {
           food: 0, foodCount: 0, sleep: 0, sleepCount: 0,
           diapers: 0, supplements: 0,
-          feedingTypes: { bottle: 0, breast: 0, solids: 0 }
+          feedingTypes: { bottle: 0, breast: 0, pumping: 0, solids: 0 }
         };
 
         prevSnapshot.forEach((doc) => {
@@ -341,8 +399,9 @@ export default function ReportsScreen() {
         setPrevWeekStats(prevStats);
       }
 
-    } catch {
-      // Silent fail
+    } catch (error) {
+      if (__DEV__) console.error('ReportsScreen fetchData error:', error);
+      // Silent fail - don't show error to user
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -356,7 +415,7 @@ export default function ReportsScreen() {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchData();
-  }, [selectedDate, timeRange, activeChild?.childId]);
+  }, [activeChild?.childId, timeRange, selectedDate, customStartDate, customEndDate]);
 
   // Export report
   const handleExport = async () => {
@@ -455,9 +514,9 @@ export default function ReportsScreen() {
         {change !== undefined && change !== 0 && (
           <View style={[styles.trendBadge, { backgroundColor: change > 0 ? '#D1FAE5' : '#FEE2E2' }]}>
             {change > 0 ? (
-              <TrendingUp size={10} color="#059669" />
+              <TrendingUp size={12} color="#059669" />
             ) : (
-              <TrendingDown size={10} color="#DC2626" />
+              <TrendingDown size={12} color="#DC2626" />
             )}
             <Text style={{ fontSize: 10, color: change > 0 ? '#059669' : '#DC2626', fontWeight: '600' }}>
               {Math.abs(change)}%
@@ -505,59 +564,138 @@ export default function ReportsScreen() {
     </View>
   );
 
-  // Date Range Modal
+  // State for single day mode
+  const [isSingleDayMode, setSingleDayMode] = useState(false);
+  const [activePickerField, setActivePickerField] = useState<'start' | 'end' | null>(null);
+
+  // Date Range Modal with inline calendar
   const DateRangeModal = () => (
     <Modal visible={showRangeModal} transparent animationType="fade">
       <View style={styles.modalOverlay}>
         <View style={[styles.rangeModal, { backgroundColor: theme.card }]}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowRangeModal(false)}>
+            <TouchableOpacity onPress={() => { setShowRangeModal(false); setActivePickerField(null); }}>
               <X size={22} color={theme.textSecondary} />
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>בחר טווח תאריכים</Text>
-            <TouchableOpacity onPress={() => { setTimeRange('custom'); setShowRangeModal(false); }}>
+            <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>בחר תאריכים</Text>
+            <TouchableOpacity onPress={() => {
+              if (isSingleDayMode) {
+                setCustomEndDate(customStartDate);
+              }
+              setTimeRange('custom');
+              setShowRangeModal(false);
+              setActivePickerField(null);
+            }}>
               <Check size={22} color="#6366F1" />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.datePickerRow}>
-            <View style={styles.datePickerItem}>
-              <Text style={[styles.datePickerLabel, { color: theme.textSecondary }]}>מתאריך</Text>
-              <TouchableOpacity
-                style={[styles.datePickerBtn, { backgroundColor: theme.cardSecondary }]}
-                onPress={() => setShowStartPicker(true)}
-              >
-                <Text style={[styles.datePickerValue, { color: theme.textPrimary }]}>
-                  {format(customStartDate, 'd/M/yy')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.datePickerItem}>
-              <Text style={[styles.datePickerLabel, { color: theme.textSecondary }]}>עד תאריך</Text>
-              <TouchableOpacity
-                style={[styles.datePickerBtn, { backgroundColor: theme.cardSecondary }]}
-                onPress={() => setShowEndPicker(true)}
-              >
-                <Text style={[styles.datePickerValue, { color: theme.textPrimary }]}>
-                  {format(customEndDate, 'd/M/yy')}
-                </Text>
-              </TouchableOpacity>
-            </View>
+          {/* Toggle: Single Day vs Range */}
+          <View style={styles.modeToggleRow}>
+            <TouchableOpacity
+              style={[styles.modeToggleBtn, isSingleDayMode && { backgroundColor: '#6366F1' }]}
+              onPress={() => {
+                setSingleDayMode(true);
+                setActivePickerField('start');
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <Text style={[styles.modeToggleText, isSingleDayMode && { color: '#fff' }]}>יום בודד</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeToggleBtn, !isSingleDayMode && { backgroundColor: '#6366F1' }]}
+              onPress={() => {
+                setSingleDayMode(false);
+                setActivePickerField('start');
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <Text style={[styles.modeToggleText, !isSingleDayMode && { color: '#fff' }]}>טווח תאריכים</Text>
+            </TouchableOpacity>
           </View>
+
+          {/* Date Selection Buttons */}
+          {isSingleDayMode ? (
+            <View style={styles.singleDatePicker}>
+              <TouchableOpacity
+                style={[styles.datePickerBtn, styles.singleDateBtn, { backgroundColor: activePickerField === 'start' ? '#EEF2FF' : theme.cardSecondary }]}
+                onPress={() => setActivePickerField('start')}
+              >
+                <Calendar size={18} color="#6366F1" />
+                <Text style={[styles.datePickerValue, { color: theme.textPrimary }]}>
+                  {format(customStartDate, 'd MMMM yyyy', { locale: he })}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.datePickerRow}>
+              <View style={styles.datePickerItem}>
+                <Text style={[styles.datePickerLabel, { color: theme.textSecondary }]}>מתאריך</Text>
+                <TouchableOpacity
+                  style={[styles.datePickerBtn, { backgroundColor: activePickerField === 'start' ? '#EEF2FF' : theme.cardSecondary }]}
+                  onPress={() => setActivePickerField('start')}
+                >
+                  <Text style={[styles.datePickerValue, { color: theme.textPrimary }]}>
+                    {format(customStartDate, 'd/M/yy')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.datePickerItem}>
+                <Text style={[styles.datePickerLabel, { color: theme.textSecondary }]}>עד תאריך</Text>
+                <TouchableOpacity
+                  style={[styles.datePickerBtn, { backgroundColor: activePickerField === 'end' ? '#EEF2FF' : theme.cardSecondary }]}
+                  onPress={() => setActivePickerField('end')}
+                >
+                  <Text style={[styles.datePickerValue, { color: theme.textPrimary }]}>
+                    {format(customEndDate, 'd/M/yy')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Inline Calendar */}
+          {activePickerField && (
+            <View style={styles.inlineCalendarContainer}>
+              <DateTimePicker
+                value={activePickerField === 'start' ? customStartDate : customEndDate}
+                mode="date"
+                display="inline"
+                onChange={(event, date) => {
+                  if (date) {
+                    if (activePickerField === 'start') {
+                      setCustomStartDate(date);
+                      if (!isSingleDayMode && date > customEndDate) {
+                        setCustomEndDate(date);
+                      }
+                    } else {
+                      setCustomEndDate(date);
+                    }
+                  }
+                }}
+                maximumDate={activePickerField === 'start' ? (isSingleDayMode ? new Date() : customEndDate) : new Date()}
+                minimumDate={activePickerField === 'end' ? customStartDate : undefined}
+                locale="he"
+                themeVariant="light"
+                accentColor="#6366F1"
+                style={styles.inlineCalendar}
+              />
+            </View>
+          )}
         </View>
       </View>
     </Modal>
   );
 
-  // Minimalistic Donut Chart for Feeding Types
   const FeedingPieChart = () => {
-    const total = dailyStats.feedingTypes.bottle + dailyStats.feedingTypes.breast + dailyStats.feedingTypes.solids;
+    const total = dailyStats.feedingTypes.bottle + dailyStats.feedingTypes.breast + dailyStats.feedingTypes.pumping + dailyStats.feedingTypes.solids;
     if (total === 0) return null;
 
     const items = [
-      { name: 'בקבוק', value: dailyStats.feedingTypes.bottle, color: '#818CF8' },
-      { name: 'הנקה', value: dailyStats.feedingTypes.breast, color: '#A78BFA' },
-      { name: 'מוצקים', value: dailyStats.feedingTypes.solids, color: '#C4B5FD' }
+      { name: 'בקבוק 🍼', value: dailyStats.feedingTypes.bottle, color: '#818CF8' },
+      { name: 'הנקה 🤱', value: dailyStats.feedingTypes.breast, color: '#A78BFA' },
+      { name: 'שאיבה 🥛', value: dailyStats.feedingTypes.pumping, color: '#F472B6' },
+      { name: 'מוצקים 🥣', value: dailyStats.feedingTypes.solids, color: '#C4B5FD' }
     ].filter(item => item.value > 0);
 
     // Calculate percentages for the progress bars
@@ -606,174 +744,179 @@ export default function ReportsScreen() {
 
   // Summary Tab
   const SummaryTab = () => (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
-
-      <View style={styles.statsGrid}>
-        <StatCard
-          icon={Utensils}
-          value={dailyStats.foodCount}
-          label="האכלות"
-          subValue={`${dailyStats.food} מ"ל`}
-          change={comparison?.feedingChange}
-          iconColor="#F59E0B"
-          iconBg="#FEF3C7"
-          onPress={() => setSelectedMetric('food')}
-        />
-        <StatCard
-          icon={Moon}
-          value={`${dailyStats.sleep.toFixed(1)}`}
-          label="שעות שינה"
-          change={comparison?.sleepChange}
-          iconColor="#8B5CF6"
-          iconBg="#EDE9FE"
-          onPress={() => setSelectedMetric('sleep')}
-        />
-        <StatCard
-          icon={Droplets}
-          value={dailyStats.diapers}
-          label="חיתולים"
-          change={comparison?.diaperChange}
-          iconColor="#14B8A6"
-          iconBg="#CCFBF1"
-          onPress={() => setSelectedMetric('diapers')}
-        />
-        <StatCard
-          icon={Pill}
-          value={dailyStats.supplements}
-          label="תוספים"
-          iconColor="#EC4899"
-          iconBg="#FCE7F3"
-          onPress={() => setSelectedMetric('supplements')}
-        />
-      </View>
-
-      {/* Weekly Goals & Streaks */}
-      <View style={[styles.goalsSection, { backgroundColor: theme.card }]}>
-        <View style={styles.goalsSectionHeader}>
-          <Trophy size={18} color="#F59E0B" strokeWidth={1.5} />
-          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>יעדים שבועיים</Text>
-        </View>
-
-        {/* Sleep Goal */}
-        <View style={styles.goalItem}>
-          <View style={styles.goalItemHeader}>
-            <View style={[styles.goalIconWrap, { backgroundColor: '#EDE9FE' }]}>
-              <Moon size={14} color="#8B5CF6" />
-            </View>
-            <Text style={[styles.goalItemTitle, { color: theme.textPrimary }]}>שינה של 8+ שעות</Text>
-            <Text style={[styles.goalItemProgress, { color: theme.textSecondary }]}>
-              {Math.min(7, Math.floor(dailyStats.sleep >= 8 ? 7 : dailyStats.sleep / 8 * 7))}/7 ימים
-            </Text>
-          </View>
-          <View style={[styles.goalProgressBar, { backgroundColor: theme.cardSecondary }]}>
-            <View
-              style={[
-                styles.goalProgressFill,
-                {
-                  width: `${Math.min(100, (dailyStats.sleep >= 8 ? 100 : dailyStats.sleep / 8 * 100))}%`,
-                  backgroundColor: '#8B5CF6'
-                }
-              ]}
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.tabContent}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      <Animated.View 
+        entering={FadeInUp.duration(500).delay(100).springify().damping(15)}
+        style={[styles.statsGrid, { position: 'relative' }]}
+      >
+        {statsOrder.map((key) => {
+          if (key === 'food') return (
+            <StatCard
+              key="food"
+              icon={Utensils}
+              value={dailyStats.foodCount}
+              label="האכלות"
+              subValue={`${dailyStats.food} מ"ל`}
+              change={comparison?.feedingChange}
+              iconColor="#F59E0B"
+              iconBg="#FEF3C7"
+              onPress={() => setSelectedMetric('food')}
             />
-          </View>
-        </View>
-
-        {/* Feeding Goal */}
-        <View style={styles.goalItem}>
-          <View style={styles.goalItemHeader}>
-            <View style={[styles.goalIconWrap, { backgroundColor: '#FEF3C7' }]}>
-              <Utensils size={14} color="#F59E0B" />
-            </View>
-            <Text style={[styles.goalItemTitle, { color: theme.textPrimary }]}>תיעוד עקבי</Text>
-            <Text style={[styles.goalItemProgress, { color: theme.textSecondary }]}>
-              {dailyStats.foodCount > 0 ? 7 : 0}/7 ימים
-            </Text>
-          </View>
-          <View style={[styles.goalProgressBar, { backgroundColor: theme.cardSecondary }]}>
-            <View
-              style={[
-                styles.goalProgressFill,
-                {
-                  width: `${dailyStats.foodCount > 0 ? 100 : 0}%`,
-                  backgroundColor: '#F59E0B'
-                }
-              ]}
+          );
+          if (key === 'sleep') return (
+            <StatCard
+              key="sleep"
+              icon={Moon}
+              value={`${dailyStats.sleep.toFixed(1)}`}
+              label="שעות שינה"
+              change={comparison?.sleepChange}
+              iconColor="#8B5CF6"
+              iconBg="#EDE9FE"
+              onPress={() => setSelectedMetric('sleep')}
             />
-          </View>
-        </View>
+          );
+          if (key === 'diapers') return (
+            <StatCard
+              key="diapers"
+              icon={Droplets}
+              value={dailyStats.diapers}
+              label="חיתולים"
+              change={comparison?.diaperChange}
+              iconColor="#14B8A6"
+              iconBg="#CCFBF1"
+              onPress={() => setSelectedMetric('diapers')}
+            />
+          );
+          if (key === 'supplements') return (
+            <StatCard
+              key="supplements"
+              icon={Pill}
+              value={dailyStats.supplements}
+              label="תוספים"
+              iconColor="#EC4899"
+              iconBg="#FCE7F3"
+              onPress={() => setSelectedMetric('supplements')}
+            />
+          );
+          return null;
+        })}
 
-        {/* Streak Badge */}
-        {dailyStats.foodCount > 0 && (
-          <View style={[styles.streakBadge, { backgroundColor: '#FEF3C7' }]}>
-            <Text style={styles.streakEmoji}>🔥</Text>
-            <Text style={[styles.streakText, { color: '#92400E' }]}>7 ימים רצופים של תיעוד!</Text>
-          </View>
-        )}
-      </View>
+        <TouchableOpacity
+          style={styles.editStatsBtn}
+          onPress={() => setShowStatsEdit(true)}
+        >
+          <Edit2 size={16} color={theme.textSecondary} />
+          <Text style={[styles.editStatsText, { color: theme.textSecondary }]}>{t('stats.editOrder')}</Text>
+        </TouchableOpacity>
+      </Animated.View>
 
-      {/* Weekly Comparison */}
-      <View style={[styles.comparisonSection, { backgroundColor: theme.card }]}>
+      {/* Weekly Comparison - Enhanced */}
+      <Animated.View 
+        entering={FadeInUp.duration(500).delay(200).springify().damping(15)}
+        style={[styles.comparisonSection, { backgroundColor: theme.card }]}
+      >
         <View style={styles.goalsSectionHeader}>
-          <TrendingUp size={18} color="#6366F1" strokeWidth={1.5} />
-          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>השוואה שבועית</Text>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+            {timeRange === 'day' ? t('stats.comparison.yesterday') : timeRange === 'month' ? t('stats.comparison.lastMonth') : t('stats.comparison.lastWeek')}
+          </Text>
         </View>
 
         <View style={styles.comparisonGrid}>
           {/* Sleep Comparison */}
           <View style={styles.comparisonItem}>
-            <View style={[styles.comparisonIconWrap, { backgroundColor: '#EDE9FE' }]}>
-              <Moon size={16} color="#8B5CF6" />
-            </View>
             <Text style={[styles.comparisonLabel, { color: theme.textSecondary }]}>שינה</Text>
-            <View style={styles.comparisonValueRow}>
-              <Text style={[styles.comparisonValue, { color: comparison?.sleepChange && comparison.sleepChange >= 0 ? '#10B981' : '#EF4444' }]}>
-                {comparison?.sleepChange !== undefined ? (comparison.sleepChange >= 0 ? '+' : '') + comparison.sleepChange + '%' : '--'}
-              </Text>
-              {comparison?.sleepChange !== undefined && (
-                comparison.sleepChange >= 0
-                  ? <TrendingUp size={14} color="#10B981" />
-                  : <TrendingDown size={14} color="#EF4444" />
-              )}
-            </View>
+            <Text style={[styles.comparisonValue, { color: comparison?.sleepChange && comparison.sleepChange >= 0 ? '#10B981' : '#EF4444' }]}>
+              {comparison?.sleepChange !== undefined ? (comparison.sleepChange >= 0 ? '+' : '') + comparison.sleepChange + '%' : '--'}
+            </Text>
           </View>
 
           {/* Food Comparison */}
           <View style={styles.comparisonItem}>
-            <View style={[styles.comparisonIconWrap, { backgroundColor: '#FEF3C7' }]}>
-              <Utensils size={16} color="#F59E0B" />
-            </View>
             <Text style={[styles.comparisonLabel, { color: theme.textSecondary }]}>האכלות</Text>
-            <View style={styles.comparisonValueRow}>
-              <Text style={[styles.comparisonValue, { color: comparison?.feedingChange && comparison.feedingChange >= 0 ? '#10B981' : '#EF4444' }]}>
-                {comparison?.feedingChange !== undefined ? (comparison.feedingChange >= 0 ? '+' : '') + comparison.feedingChange + '%' : '--'}
-              </Text>
-              {comparison?.feedingChange !== undefined && (
-                comparison.feedingChange >= 0
-                  ? <TrendingUp size={14} color="#10B981" />
-                  : <TrendingDown size={14} color="#EF4444" />
-              )}
-            </View>
+            <Text style={[styles.comparisonValue, { color: comparison?.feedingChange && comparison.feedingChange >= 0 ? '#10B981' : '#EF4444' }]}>
+              {comparison?.feedingChange !== undefined ? (comparison.feedingChange >= 0 ? '+' : '') + comparison.feedingChange + '%' : '--'}
+            </Text>
           </View>
 
           {/* Diapers Comparison */}
           <View style={styles.comparisonItem}>
-            <View style={[styles.comparisonIconWrap, { backgroundColor: '#CCFBF1' }]}>
-              <Droplets size={16} color="#14B8A6" />
-            </View>
             <Text style={[styles.comparisonLabel, { color: theme.textSecondary }]}>חיתולים</Text>
-            <View style={styles.comparisonValueRow}>
-              <Text style={[styles.comparisonValue, { color: comparison?.diaperChange && comparison.diaperChange >= 0 ? '#10B981' : '#EF4444' }]}>
-                {comparison?.diaperChange !== undefined ? (comparison.diaperChange >= 0 ? '+' : '') + comparison.diaperChange + '%' : '--'}
-              </Text>
-              {comparison?.diaperChange !== undefined && (
-                comparison.diaperChange >= 0
-                  ? <TrendingUp size={14} color="#10B981" />
-                  : <TrendingDown size={14} color="#EF4444" />
-              )}
-            </View>
+            <Text style={[styles.comparisonValue, { color: comparison?.diaperChange && comparison.diaperChange >= 0 ? '#10B981' : '#EF4444' }]}>
+              {comparison?.diaperChange !== undefined ? (comparison.diaperChange >= 0 ? '+' : '') + comparison.diaperChange + '%' : '--'}
+            </Text>
           </View>
         </View>
-      </View>
+      </Animated.View>
+
+      {/* Weekly Goals & Streaks - Enhanced */}
+      <Animated.View 
+        entering={FadeInUp.duration(500).delay(300).springify().damping(15)}
+        style={[styles.goalsSection, { backgroundColor: theme.card }]}
+      >
+        <View style={styles.goalsSectionHeader}>
+          <View style={styles.goalsSectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+              {timeRange === 'day' ? t('stats.goals.daily') : timeRange === 'month' ? t('stats.goals.monthly') : t('stats.goals.weekly')}
+            </Text>
+          </View>
+        </View>
+
+        {/* Sleep Goal */}
+        <View style={styles.goalItem}>
+          <View style={styles.goalItemHeader}>
+            <Text style={[styles.goalItemTitle, { color: theme.textPrimary }]}>שינה של 8+ שעות</Text>
+            <Text style={[styles.goalItemProgress, { color: theme.textSecondary }]}>
+              {weeklyGoals.sleepDaysMet}/{weeklyGoals.sleepDaysGoal}
+            </Text>
+          </View>
+          <View style={[styles.goalProgressBar, { backgroundColor: theme.cardSecondary }]}>
+            <View
+              style={[
+                styles.goalProgressFill,
+                {
+                  width: `${weeklyGoals.sleepDaysGoal > 0 ? (weeklyGoals.sleepDaysMet / weeklyGoals.sleepDaysGoal) * 100 : 0}%`,
+                  backgroundColor: '#10B981'
+                }
+              ]}
+            />
+          </View>
+        </View>
+
+        {/* Documentation Goal */}
+        <View style={styles.goalItem}>
+          <View style={styles.goalItemHeader}>
+            <Text style={[styles.goalItemTitle, { color: theme.textPrimary }]}>ימים עם תיעוד</Text>
+            <Text style={[styles.goalItemProgress, { color: theme.textSecondary }]}>
+              {weeklyGoals.docDaysMet}/{weeklyGoals.docDaysGoal}
+            </Text>
+          </View>
+          <View style={[styles.goalProgressBar, { backgroundColor: theme.cardSecondary }]}>
+            <View
+              style={[
+                styles.goalProgressFill,
+                {
+                  width: `${weeklyGoals.docDaysGoal > 0 ? (weeklyGoals.docDaysMet / weeklyGoals.docDaysGoal) * 100 : 0}%`,
+                  backgroundColor: '#10B981'
+                }
+              ]}
+            />
+          </View>
+        </View>
+
+        {/* Streak with icon */}
+        {weeklyGoals.streak > 0 && (
+          <View style={styles.streakRow}>
+            <Check size={16} color="#10B981" strokeWidth={2.5} />
+            <Text style={[styles.streakSimple, { color: '#10B981' }]}>
+              {weeklyGoals.streak} ימים רצופים
+            </Text>
+          </View>
+        )}
+      </Animated.View>
     </ScrollView>
   );
 
@@ -860,7 +1003,7 @@ export default function ReportsScreen() {
       {/* Milestones Section */}
       <View style={[styles.sectionTitleRow, { marginTop: 20 }]}>
         <TrendingUp size={16} color="#6366F1" strokeWidth={1.5} />
-        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>יעדים</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('stats.goals')}</Text>
       </View>
       {aiInsights.milestones.map((milestone, index) => (
         <MilestoneCard
@@ -878,7 +1021,7 @@ export default function ReportsScreen() {
         <>
           <View style={[styles.sectionTitleRow, { marginTop: 20 }]}>
             <BarChart2 size={16} color="#6366F1" strokeWidth={1.5} />
-            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>השוואה לתקופה קודמת</Text>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('stats.comparison')}</Text>
           </View>
           <View style={styles.insightsList}>
             <PremiumInsightCard
@@ -949,15 +1092,65 @@ export default function ReportsScreen() {
     </ScrollView>
   );
 
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
   const mainContent = (
-    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
-      {/* Liquid Glass Background */}
-      <LiquidGlassBackground />
+    <View style={styles.container}>
+      {/* Enhanced Background - Minimalist Apple Style */}
+      <LinearGradient
+        colors={isDarkMode
+          ? ['#0A0A0F', '#0F0F18', '#0C0C12', '#0A0A0F']
+          : ['#FAFAFA', '#F7F7F7', '#F3F3F3', '#FAFAFA']
+        }
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        locations={[0, 0.3, 0.7, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      
+      {/* Dot Pattern Texture */}
+      <Svg 
+        style={StyleSheet.absoluteFill} 
+        width={SCREEN_WIDTH} 
+        height={SCREEN_HEIGHT}
+        preserveAspectRatio="none"
+      >
+        <Defs>
+          <Pattern
+            id="dotPatternReports"
+            patternUnits="userSpaceOnUse"
+            width={28}
+            height={28}
+          >
+            <Circle
+              cx={14}
+              cy={14}
+              r={1.5}
+              fill={isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.035)'}
+            />
+          </Pattern>
+        </Defs>
+        <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#dotPatternReports)" />
+      </Svg>
+      
+      {/* Radial Glow at Top */}
+      <LinearGradient
+        colors={isDarkMode
+          ? ['rgba(79, 70, 229, 0.15)', 'transparent']
+          : ['rgba(79, 70, 229, 0.08)', 'transparent']
+        }
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.6 }}
+        style={StyleSheet.absoluteFill}
+      />
 
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
 
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+      {/* Header - Enhanced */}
+      <Animated.View 
+        entering={FadeInDown.duration(400).springify().damping(15)}
+        style={[styles.header, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.7)', borderBottomColor: theme.border }]}
+      >
         <View style={styles.headerTop}>
           <ChildPicker compact />
           <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
@@ -965,7 +1158,7 @@ export default function ReportsScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>סטטיסטיקות</Text>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>{t('stats.title')}</Text>
 
         {/* Time Range Pills */}
         <View style={styles.filterRow}>
@@ -994,28 +1187,7 @@ export default function ReportsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Day picker for daily view */}
-        {timeRange === 'day' && (
-          <View style={styles.dateRow}>
-            <TouchableOpacity onPress={() => setSelectedDate(subDays(selectedDate, 1))}>
-              <ChevronRight color={theme.textSecondary} size={22} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setShowDatePicker(true)}
-              style={[styles.dateBtn, { backgroundColor: theme.cardSecondary }]}
-            >
-              <Text style={[styles.dateText, { color: theme.textPrimary }]}>
-                {format(selectedDate, 'd MMMM', { locale: he })}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setSelectedDate(addDays(selectedDate, 1))}
-              disabled={isSameDay(selectedDate, new Date())}
-            >
-              <ChevronLeft color={theme.textSecondary} size={22} style={{ opacity: isSameDay(selectedDate, new Date()) ? 0.3 : 1 }} />
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Day navigation removed - use custom date picker instead */}
 
         {/* Custom range display */}
         {timeRange === 'custom' && (
@@ -1025,7 +1197,7 @@ export default function ReportsScreen() {
             </Text>
           </TouchableOpacity>
         )}
-      </View>
+      </Animated.View>
 
       {/* Content */}
       {loading ? (
@@ -1035,11 +1207,10 @@ export default function ReportsScreen() {
       ) : !activeChild?.childId ? (
         <View style={styles.emptyState}>
           <Baby size={48} color={theme.border} strokeWidth={1} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>בחר ילד לצפייה בסטטיסטיקות</Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{t('empty.noChild')}</Text>
         </View>
       ) : (
         <View style={{ flex: 1 }}>
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           <SummaryTab />
         </View>
       )}
@@ -1056,6 +1227,13 @@ export default function ReportsScreen() {
       )}
 
       <DateRangeModal />
+
+      <StatsEditModal
+        visible={showStatsEdit}
+        onClose={() => setShowStatsEdit(false)}
+        currentOrder={statsOrder}
+        onOrderChange={setStatsOrder}
+      />
     </View>
   );
 
@@ -1099,14 +1277,16 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, fontWeight: '600' },
 
   // Content
-  tabContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 },
+  tabContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 100 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { fontSize: 16, fontWeight: '500' },
 
-  // Stats Grid
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  statCard: { width: (SCREEN_WIDTH - 44) / 2, padding: 14, borderRadius: 14, alignItems: 'flex-end' },
+  // Stats Grid - 2x2 Layout
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20, justifyContent: 'space-between' },
+  editStatsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 4 },
+  editStatsText: { fontSize: 13 },
+  statCard: { width: (SCREEN_WIDTH - 52) / 2, padding: 16, borderRadius: 20, alignItems: 'flex-end', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
   statIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   statValueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statValue: { fontSize: 24, fontWeight: '700' },
@@ -1148,6 +1328,13 @@ const styles = StyleSheet.create({
   datePickerLabel: { fontSize: 12, marginBottom: 8, textAlign: 'right' },
   datePickerBtn: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
   datePickerValue: { fontSize: 16, fontWeight: '600' },
+  modeToggleRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 20 },
+  modeToggleBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F3F4F6' },
+  modeToggleText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
+  singleDatePicker: { alignItems: 'center' },
+  singleDateBtn: { flexDirection: 'row', gap: 10, paddingVertical: 14, paddingHorizontal: 20 },
+  inlineCalendarContainer: { marginTop: 16, alignItems: 'center' },
+  inlineCalendar: { width: '100%', height: 320 },
 
   // Donut Chart
   donutContainer: { flexDirection: 'row-reverse', alignItems: 'center', gap: 20, paddingVertical: 8 },
@@ -1165,7 +1352,7 @@ const styles = StyleSheet.create({
   sectionTitleRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 },
 
   // Goals Section
-  goalsSection: { borderRadius: 16, padding: 16, marginTop: 16 },
+  goalsSection: { borderRadius: 20, padding: 20, marginTop: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
   goalsSectionHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 16 },
   goalItem: { marginBottom: 16 },
   goalItemHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 8 },
@@ -1177,9 +1364,11 @@ const styles = StyleSheet.create({
   streakBadge: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, marginTop: 8 },
   streakEmoji: { fontSize: 18 },
   streakText: { fontSize: 13, fontWeight: '600' },
+  streakSimple: { fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 8 },
+  streakRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12 },
 
   // Comparison Section
-  comparisonSection: { borderRadius: 16, padding: 16, marginTop: 16, marginBottom: 20 },
+  comparisonSection: { borderRadius: 20, padding: 20, marginTop: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
   comparisonGrid: { flexDirection: 'row-reverse', justifyContent: 'space-between', gap: 8 },
   comparisonItem: { flex: 1, alignItems: 'center', paddingVertical: 12 },
   comparisonIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },

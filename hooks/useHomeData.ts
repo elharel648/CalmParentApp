@@ -12,6 +12,13 @@ interface DailyStats {
 
 interface UseHomeDataReturn extends HomeDataState {
     dailyStats: DailyStats;
+    growthStats?: {
+        currentWeight?: string;
+        lastWeightDiff?: string;
+        currentHeight?: string;
+        lastHeightDiff?: string;
+        lastMeasuredDate?: Date;
+    };
     toggleBabyStatus: () => void;
     generateInsight: () => Promise<void>;
     refresh: () => Promise<void>;
@@ -38,6 +45,13 @@ export const useHomeData = (
         sleepMinutes: 0,
         diaperCount: 0,
     });
+    const [growthStats, setGrowthStats] = useState<{
+        currentWeight?: string;
+        lastWeightDiff?: string;
+        currentHeight?: string;
+        lastHeightDiff?: string;
+        lastMeasuredDate?: Date;
+    }>({});
 
 
     const user = auth.currentUser;
@@ -126,10 +140,66 @@ export const useHomeData = (
                 if (data.status) setBabyStatus(data.status);
             }
 
-            // Calculate daily stats from history
-            const history = await getRecentHistory(childId, creatorId);
+            // Calculate daily stats from history - check if user is guest
+            // Get user's family and access level
+            const userDoc = await getDoc(doc(db, 'users', creatorId || ''));
+            const familyId = userDoc.exists() ? userDoc.data()?.familyId : null;
+            let historyAccessDays: number | undefined;
+            
+            if (familyId) {
+                const familyDoc = await getDoc(doc(db, 'families', familyId));
+                if (familyDoc.exists()) {
+                    const familyData = familyDoc.data();
+                    const memberData = familyData.members?.[creatorId || ''];
+                    historyAccessDays = memberData?.historyAccessDays;
+                }
+            }
+            
+            const history = await getRecentHistory(childId, creatorId, historyAccessDays);
             const stats = calculateDailyStats(history);
             setDailyStats(stats);
+
+            // Fetch growth stats
+            if (snap.exists()) {
+                const data = snap.data();
+                if (data.stats && Array.isArray(data.stats) && data.stats.length > 0) {
+                    // Sort by timestamp desc
+                    const sortedStats = [...data.stats].sort((a: any, b: any) => {
+                        const dateA = a.date instanceof Object && a.date.seconds ? new Date(a.date.seconds * 1000) : new Date(a.date || 0);
+                        const dateB = b.date instanceof Object && b.date.seconds ? new Date(b.date.seconds * 1000) : new Date(b.date || 0);
+                        return dateB.getTime() - dateA.getTime();
+                    });
+
+                    const latest = sortedStats[0];
+                    // Find previous measurements for diff
+                    const prevWeightObj = sortedStats.find((s: any) => s.weight && s !== latest);
+                    const prevHeightObj = sortedStats.find((s: any) => s.height && s !== latest);
+
+                    let lastWeightDiff;
+                    if (latest.weight && prevWeightObj?.weight) {
+                        const diff = parseFloat(latest.weight) - parseFloat(prevWeightObj.weight);
+                        lastWeightDiff = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
+                    }
+
+                    let lastHeightDiff;
+                    if (latest.height && prevHeightObj?.height) {
+                        const diff = parseFloat(latest.height) - parseFloat(prevHeightObj.height);
+                        lastHeightDiff = diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
+                    }
+
+                    const lastDate = latest.date instanceof Object && latest.date.seconds
+                        ? new Date(latest.date.seconds * 1000)
+                        : new Date(latest.date);
+
+                    setGrowthStats({
+                        currentWeight: latest.weight,
+                        lastWeightDiff,
+                        currentHeight: latest.height,
+                        lastHeightDiff,
+                        lastMeasuredDate: lastDate
+                    });
+                }
+            }
 
         } catch (e) {
             if (__DEV__) console.error('Home data refresh error:', e);
@@ -171,6 +241,49 @@ export const useHomeData = (
                 const stats = calculateDailyStats(history);
                 setDailyStats(stats);
 
+                // Re-fetch child processing for growth stats (since we already fetched the doc above)
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data.stats && Array.isArray(data.stats) && data.stats.length > 0) {
+                        // Sort by timestamp desc
+                        const sortedStats = [...data.stats].sort((a: any, b: any) => {
+                            const dateA = a.date instanceof Object && a.date.seconds ? new Date(a.date.seconds * 1000) : new Date(a.date || 0);
+                            const dateB = b.date instanceof Object && b.date.seconds ? new Date(b.date.seconds * 1000) : new Date(b.date || 0);
+                            return dateB.getTime() - dateA.getTime();
+                        });
+
+                        const latest = sortedStats[0];
+                        const prevWeightObj = sortedStats.find((s: any) => s.weight && s !== latest);
+                        const prevHeightObj = sortedStats.find((s: any) => s.height && s !== latest);
+
+                        let lastWeightDiff;
+                        if (latest.weight && prevWeightObj?.weight) {
+                            const diff = parseFloat(latest.weight) - parseFloat(prevWeightObj.weight);
+                            lastWeightDiff = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
+                        }
+
+                        let lastHeightDiff;
+                        if (latest.height && prevHeightObj?.height) {
+                            const diff = parseFloat(latest.height) - parseFloat(prevHeightObj.height);
+                            lastHeightDiff = diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
+                        }
+
+                        const lastDate = latest.date instanceof Object && latest.date.seconds
+                            ? new Date(latest.date.seconds * 1000)
+                            : new Date(latest.date);
+
+                        setGrowthStats({
+                            currentWeight: latest.weight,
+                            currentHeight: latest.height,
+                            lastWeightDiff,
+                            lastHeightDiff,
+                            lastMeasuredDate: lastDate,
+                        });
+                    } else {
+                        setGrowthStats({});
+                    }
+                }
+
                 if (__DEV__) console.log('✅ useHomeData: Data fetched for childId =', childId, 'stats =', stats);
 
             } catch (e) {
@@ -189,6 +302,7 @@ export const useHomeData = (
         aiTip,
         loadingAI,
         dailyStats,
+        growthStats,
         isLoading,
         toggleBabyStatus,
         generateInsight,

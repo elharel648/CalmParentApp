@@ -180,7 +180,8 @@ export const getLastEvent = async (childId: string, eventType: 'food' | 'sleep' 
 
 // 💡 Query ONLY by childId - shows TODAY's events only for daily timeline
 // ⚡ OPTIMIZED: Server-side ordering and date filter
-export const getRecentHistory = async (childId: string, _creatorId?: string) => {
+// 🎯 Guest Support: If historyAccessDays is provided, filter to last N days (e.g., 1 = 24 hours)
+export const getRecentHistory = async (childId: string, _creatorId?: string, historyAccessDays?: number) => {
   if (!childId) {
     return [];
   }
@@ -188,16 +189,26 @@ export const getRecentHistory = async (childId: string, _creatorId?: string) => 
   try {
     const eventsRef = collection(db, EVENTS_COLLECTION);
 
-    // Get start of today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const startOfToday = Timestamp.fromDate(today);
+    // Calculate start time based on access level
+    let startTime: Date;
+    if (historyAccessDays && historyAccessDays > 0) {
+      // Guest: Only last 24 hours (1 day)
+      const now = new Date();
+      startTime = new Date(now.getTime() - historyAccessDays * 24 * 60 * 60 * 1000);
+    } else {
+      // Family/Member: Start of today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      startTime = today;
+    }
 
-    // Query only today's events
+    const startTimestamp = Timestamp.fromDate(startTime);
+
+    // Query events from start time
     const q = query(
       eventsRef,
       where('childId', '==', childId),
-      where('timestamp', '>=', startOfToday),
+      where('timestamp', '>=', startTimestamp),
       orderBy('timestamp', 'desc'),
       limit(50) // Allow more events for a single day
     );

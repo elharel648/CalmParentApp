@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
     },
     optionsContainer: {
         flexDirection: 'row',
+        flexWrap: 'wrap', // Allow wrapping
         gap: 10,
         justifyContent: 'flex-end',
     },

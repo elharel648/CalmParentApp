@@ -31,10 +31,13 @@ export function initSentry() {
         dsn: SENTRY_DSN,
         // Enable performance monitoring
         tracesSampleRate: 0.2,
-        // Enable native crash handling
-        enableNativeNagger: true,
-        // Attach screenshots on crash
-        attachScreenshot: true,
+        // Disable native crash handling that causes EXC_BAD_ACCESS
+        enableNativeNagger: false,
+        // DISABLED: Causes crash on iOS - SentrySessionReplay.takeScreenshot
+        attachScreenshot: false,
+        // Disable Session Replay to prevent crashes
+        replaysSessionSampleRate: 0,
+        replaysOnErrorSampleRate: 0,
         // Debug mode for development
         debug: false,
         // Environment tag

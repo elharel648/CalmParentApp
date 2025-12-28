@@ -32,7 +32,7 @@ interface DailyStats {
     sleepCount: number;
     diapers: number;
     supplements: number;
-    feedingTypes: { bottle: number; breast: number; solids: number };
+    feedingTypes: { bottle: number; breast: number; pumping: number; solids: number };
 }
 
 interface TimeInsights {
@@ -85,6 +85,7 @@ export const PremiumInsightCard: React.FC<PremiumInsightCardProps> = ({
         <Animated.View
             entering={FadeInRight.duration(400).delay(delay)}
             style={styles.premiumCard}
+            collapsable={false}
         >
             <BlurView intensity={60} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
             <View style={styles.premiumCardOverlay} />
@@ -141,6 +142,7 @@ export const AITipCard: React.FC<AITipCardProps> = ({ tip, category, delay = 0 }
         <Animated.View
             entering={FadeInUp.duration(500).delay(delay)}
             style={styles.aiTipCard}
+            collapsable={false}
         >
             <BlurView intensity={80} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
             <View style={styles.aiTipOverlay} />
@@ -189,6 +191,7 @@ export const MilestoneCard: React.FC<MilestoneCardProps> = ({
         <Animated.View
             entering={FadeInUp.duration(400).delay(delay)}
             style={styles.milestoneCard}
+            collapsable={false}
         >
             <BlurView intensity={50} tint="systemUltraThinMaterialLight" style={StyleSheet.absoluteFill} />
             <View style={styles.milestoneOverlay} />
@@ -386,18 +389,21 @@ export function generateAIInsights(data: InsightData): {
     }
 
     // Feeding type preference
-    const { bottle, breast, solids } = dailyStats.feedingTypes;
-    const feedingTotal = bottle + breast + solids;
+    const { bottle, breast, pumping, solids } = dailyStats.feedingTypes;
+    const feedingTotal = bottle + breast + pumping + solids;
     if (feedingTotal > 0) {
         let preferred = 'מעורב';
         let percent = 0;
-        if (bottle > breast && bottle > solids) {
+        if (bottle > breast && bottle > pumping && bottle > solids) {
             preferred = 'בקבוק';
             percent = Math.round((bottle / feedingTotal) * 100);
-        } else if (breast > bottle && breast > solids) {
+        } else if (breast > bottle && breast > pumping && breast > solids) {
             preferred = 'הנקה';
             percent = Math.round((breast / feedingTotal) * 100);
-        } else if (solids > bottle && solids > breast) {
+        } else if (pumping > bottle && pumping > breast && pumping > solids) {
+            preferred = 'שאיבה';
+            percent = Math.round((pumping / feedingTotal) * 100);
+        } else if (solids > bottle && solids > breast && solids > pumping) {
             preferred = 'מוצקים';
             percent = Math.round((solids / feedingTotal) * 100);
         }

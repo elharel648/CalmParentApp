@@ -20,6 +20,7 @@ const ROLE_ICONS: Record<FamilyRole, any> = {
     admin: Crown,
     member: Edit3,
     viewer: Eye,
+    guest: Eye, // Guest uses same icon as viewer
 };
 
 /**

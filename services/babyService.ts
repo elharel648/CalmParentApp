@@ -26,6 +26,7 @@ export type BabyData = {
     weight?: string;
     headCircumference?: string;
   };
+  teeth?: Record<string, any>;
   album?: { [key: number]: string };
   albumNotes?: { [key: number]: string };
   milestones?: { title: string; date: any }[];
@@ -249,12 +250,21 @@ export const removeMilestone = async (babyId: string, milestoneObject: any) => {
   });
 };
 
-export const toggleVaccineStatus = async (babyId: string, currentVaccines: any, vaccineKey: string) => {
+export const toggleVaccineStatus = async (babyId: string, currentVaccines: any, vaccineKey: string, date?: Date) => {
   if (!babyId) return;
   const babyRef = doc(db, 'babies', babyId);
-  const newVal = !currentVaccines?.[vaccineKey];
+
+  const currentStatus = currentVaccines?.[vaccineKey];
+  // Determine if currently done (handles boolean true or object {isDone: true})
+  const isDone = typeof currentStatus === 'object' ? currentStatus.isDone : !!currentStatus;
+
+  const newVal = !isDone;
+
+  // If marking as done, save with date. If unmarking, just save false.
+  const valueToSave = newVal ? { isDone: true, date: Timestamp.fromDate(date || new Date()) } : false;
+
   await updateDoc(babyRef, {
-    [`vaccines.${vaccineKey}`]: newVal
+    [`vaccines.${vaccineKey}`]: valueToSave
   });
 };
 

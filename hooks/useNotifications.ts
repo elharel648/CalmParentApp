@@ -10,6 +10,7 @@ interface UseNotificationsReturn {
     scheduleFeedingReminder: (lastFeedingTime: Date) => Promise<void>;
     scheduleSupplementReminder: () => Promise<void>;
     scheduleVaccineReminder: (date: Date, name: string) => Promise<void>;
+    scheduleSmartReminders: (childId: string) => Promise<void>;
     sendTestNotification: () => Promise<void>;
 }
 
@@ -32,7 +33,6 @@ export const useNotifications = (): UseNotificationsReturn => {
             // Schedule recurring notifications
             if (success) {
                 await notificationService.scheduleSupplementReminder();
-                await notificationService.scheduleDiaperReminder();
                 await notificationService.scheduleSleepReminder();
                 await notificationService.scheduleDailySummary();
             }
@@ -73,14 +73,6 @@ export const useNotifications = (): UseNotificationsReturn => {
                 await notificationService.cancelNotification('feeding_reminder');
             }
             // Feeding reminder is scheduled per-event, not here
-        }
-
-        if (newSettings.diaperReminder !== undefined || newSettings.diaperIntervalHours !== undefined) {
-            if (newSettings.diaperReminder === false) {
-                await notificationService.cancelNotification('diaper_reminder');
-            } else {
-                await notificationService.scheduleDiaperReminder();
-            }
         }
 
         if (newSettings.sleepReminder !== undefined || newSettings.sleepTime !== undefined) {
@@ -128,6 +120,11 @@ export const useNotifications = (): UseNotificationsReturn => {
         await notificationService.scheduleVaccineReminder(date, name);
     }, []);
 
+    // Schedule smart pattern-based reminders
+    const scheduleSmartReminders = useCallback(async (childId: string) => {
+        await notificationService.scheduleSmartReminders(childId);
+    }, []);
+
     // Send test notification
     const sendTestNotification = useCallback(async () => {
         await notificationService.sendImmediate('feeding_reminder', 'זו התראת בדיקה! 🎉');
@@ -141,6 +138,7 @@ export const useNotifications = (): UseNotificationsReturn => {
         scheduleFeedingReminder,
         scheduleSupplementReminder,
         scheduleVaccineReminder,
+        scheduleSmartReminders,
         sendTestNotification,
     };
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Linking, Platform, Alert, Animated } from 'react-native';
-import { X, Phone, ListChecks, Siren, Stethoscope, Activity, CheckCircle } from 'lucide-react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Linking, Platform, Alert, Animated, Dimensions } from 'react-native';
+import { X, Phone, Siren, Shield, Skull } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 interface CalmModeModalProps {
@@ -9,28 +9,32 @@ interface CalmModeModalProps {
 }
 
 export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) {
-  const [activeTab, setActiveTab] = useState<'emergency' | 'checklist'>('emergency');
-  const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
-
-  // Fade animation
+  // Animations
+  const slideAnim = useRef(new Animated.Value(400)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
-      // Reset state
-      setCheckedItems(new Set());
-
-      // Fade in
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          useNativeDriver: true,
+          damping: 22,
+          stiffness: 200,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      slideAnim.setValue(400);
+      fadeAnim.setValue(0);
     }
-  }, [visible, fadeAnim]);
+  }, [visible]);
 
   const makeCall = async (phoneNumber: string, name: string) => {
-    // Haptic feedback
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
@@ -49,191 +53,89 @@ export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) 
     }
   };
 
-  const toggleCheckItem = (index: number) => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
-    setCheckedItems(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(index)) {
-        newSet.delete(index);
-      } else {
-        newSet.add(index);
-      }
-      return newSet;
-    });
-  };
-
   const emergencyContacts = [
-    {
-      name: 'מד"א',
-      subtitle: 'חירום רפואי',
-      number: '101',
-      bgColor: '#FEE2E2',
-      iconColor: '#EF4444',
-      icon: <Siren size={24} color="#EF4444" />,
-    },
-    {
-      name: 'משטרה',
-      subtitle: 'סכנה מיידית',
-      number: '100',
-      bgColor: '#DBEAFE',
-      iconColor: '#3B82F6',
-      icon: <Activity size={24} color="#3B82F6" />,
-    },
-    {
-      name: 'מוקד הרעלות',
-      subtitle: 'בליעת חומר',
-      number: '048541900',
-      bgColor: '#EDE9FE',
-      iconColor: '#8B5CF6',
-      icon: <Text style={{ fontSize: 24 }}>☠️</Text>,
-    },
+    { name: 'מד"א', subtitle: 'חירום רפואי', number: '101', Icon: Siren },
+    { name: 'משטרה', subtitle: 'סכנה מיידית', number: '100', Icon: Shield },
+    { name: 'הרעלות', subtitle: 'בליעת חומר', number: '048541900', Icon: Skull },
   ];
 
   const hmoContacts = [
-    { name: 'כללית', subtitle: 'מוקד אחיות 24/7', number: '*2700', color: '#E0F2FE' },
-    { name: 'מכבי', subtitle: 'מוקד אחיות', number: '*3555', color: '#FEF3C7' },
-    { name: 'מאוחדת', subtitle: 'היריון ולידה', number: '*3833', color: '#FCE7F3' },
-    { name: 'לאומית', subtitle: 'מוקד רפואי', number: '*507', color: '#DCFCE7' },
-  ];
-
-  const checklistItems = [
-    { text: "האם החיתול נקי?", emoji: "🧷" },
-    { text: "האם עברו פחות מ-3 שעות מהאוכל?", emoji: "🍼" },
-    { text: "האם חם/קר לו מדי? (בדיקה בעורף)", emoji: "🌡️" },
-    { text: "האם יש שערה כרוכה באצבעות?", emoji: "👆" },
-    { text: "האם הוא פשוט עייף מדי (Over-tired)?", emoji: "😴" },
-    { text: "האם כואב לו משהו? (אוזניים/שיניים)", emoji: "🦷" },
+    { name: 'כללית', subtitle: 'מוקד אחיות 24/7', number: '*2700' },
+    { name: 'מכבי', subtitle: 'מוקד אחיות', number: '*3555' },
+    { name: 'מאוחדת', subtitle: 'היריון ולידה', number: '*3833' },
+    { name: 'לאומית', subtitle: 'מוקד רפואי', number: '*507' },
   ];
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={onClose}
-            style={styles.closeButton}
-            accessibilityLabel="סגור"
-          >
-            <X size={22} color="#374151" />
-          </TouchableOpacity>
-          <View style={styles.titleContainer}>
-            <Text style={styles.mainTitle}>מצב חירום</Text>
-            <Text style={styles.subtitle}>אנחנו כאן לעזור 💪</Text>
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <Animated.View
+          style={[
+            styles.container,
+            { transform: [{ translateY: slideAnim }], opacity: fadeAnim }
+          ]}
+        >
+          {/* Header - Ultra Minimalist */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <X size={20} color="#6B7280" strokeWidth={2} />
+            </TouchableOpacity>
+
+            <View style={styles.titleContainer}>
+              <Text style={styles.mainTitle}>מצב חירום</Text>
+            </View>
+
+            <View style={{ width: 36 }} />
           </View>
-          <View style={{ width: 40 }} />
-        </View>
 
-        {/* Tabs */}
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'emergency' && styles.activeTab]}
-            onPress={() => setActiveTab('emergency')}
+          {/* Content */}
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
           >
-            <Phone size={18} color={activeTab === 'emergency' ? '#fff' : '#6B7280'} />
-            <Text style={[styles.tabText, activeTab === 'emergency' && styles.activeTabText]}>
-              טלפונים
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'checklist' && styles.activeTab]}
-            onPress={() => setActiveTab('checklist')}
-          >
-            <ListChecks size={18} color={activeTab === 'checklist' ? '#fff' : '#6B7280'} />
-            <Text style={[styles.tabText, activeTab === 'checklist' && styles.activeTabText]}>
-              צ'קליסט בכי
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Content */}
-        <Animated.View style={[styles.contentArea, { opacity: fadeAnim }]}>
-          {activeTab === 'emergency' ? (
-            <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-              {/* Emergency contacts - Minimalist Cards */}
-              <Text style={styles.sectionHeader}>🚨 חירום מיידי</Text>
-              <View style={styles.emergencyGrid}>
-                {emergencyContacts.map((contact, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[styles.emergencyCard, { backgroundColor: contact.bgColor }]}
-                    onPress={() => makeCall(contact.number, contact.name)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.emergencyIconContainer}>
-                      {contact.icon}
-                    </View>
-                    <Text style={styles.emergencyName}>{contact.name}</Text>
-                    <Text style={styles.emergencySubtitle}>{contact.subtitle}</Text>
-                    <Text style={styles.emergencyNumber}>{contact.number}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* HMO contacts */}
-              <Text style={styles.sectionHeader}>🏥 מוקד קופת חולים</Text>
-              <View style={styles.hmoList}>
-                {hmoContacts.map((hmo, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.hmoRow}
-                    onPress={() => makeCall(hmo.number, hmo.name)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.hmoIcon, { backgroundColor: hmo.color }]}>
-                      <Stethoscope size={18} color="#374151" />
-                    </View>
-                    <View style={styles.hmoInfo}>
-                      <Text style={styles.hmoName}>{hmo.name}</Text>
-                      <Text style={styles.hmoSubtitle}>{hmo.subtitle}</Text>
-                    </View>
-                    <View style={styles.callBtn}>
-                      <Phone size={14} color="#fff" />
-                      <Text style={styles.callBtnText}>{hmo.number}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-          ) : (
-            <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-              <Text style={styles.sectionHeader}>📋 בדיקה לפני פאניקה</Text>
-              <Text style={styles.checklistHint}>סמן כל דבר שבדקת ✓</Text>
-
-              {checklistItems.map((item, index) => {
-                const isChecked = checkedItems.has(index);
+            {/* Emergency - Minimalist Row */}
+            <Text style={styles.sectionTitle}>חירום מיידי</Text>
+            <View style={styles.emergencyRow}>
+              {emergencyContacts.map((contact, index) => {
+                const { Icon } = contact;
                 return (
                   <TouchableOpacity
                     key={index}
-                    style={[styles.checkRow, isChecked && styles.checkRowChecked]}
-                    onPress={() => toggleCheckItem(index)}
+                    style={styles.emergencyCard}
+                    onPress={() => makeCall(contact.number, contact.name)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                      {isChecked && <CheckCircle size={20} color="#fff" />}
+                    <View style={styles.emergencyIcon}>
+                      <Icon size={24} color="#1F2937" strokeWidth={1.5} />
                     </View>
-                    <Text style={styles.checkEmoji}>{item.emoji}</Text>
-                    <Text style={[styles.checkText, isChecked && styles.checkTextChecked]}>
-                      {item.text}
-                    </Text>
+                    <Text style={styles.emergencyName}>{contact.name}</Text>
+                    <Text style={styles.emergencyNumber}>{contact.number}</Text>
                   </TouchableOpacity>
                 );
               })}
+            </View>
 
-              {checkedItems.size === checklistItems.length && (
-                <View style={styles.allCheckedContainer}>
-                  <Text style={styles.allCheckedText}>
-                    בדקת הכל ועדיין בוכה? 🤗{'\n'}
-                    לפעמים תינוקות פשוט צריכים לבכות קצת.{'\n'}
-                    נשום עמוק, אתה הורה מדהים!
-                  </Text>
+            {/* HMO - Clean List */}
+            <Text style={styles.sectionTitle}>קופות חולים</Text>
+            {hmoContacts.map((hmo, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.hmoRow}
+                onPress={() => makeCall(hmo.number, hmo.name)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.hmoInfo}>
+                  <Text style={styles.hmoName}>{hmo.name}</Text>
+                  <Text style={styles.hmoSubtitle}>{hmo.subtitle}</Text>
                 </View>
-              )}
-            </ScrollView>
-          )}
+                <View style={styles.hmoCall}>
+                  <Phone size={14} color="#6B7280" strokeWidth={2} />
+                  <Text style={styles.hmoNumber}>{hmo.number}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </Animated.View>
       </View>
     </Modal>
@@ -241,240 +143,133 @@ export default function CalmModeModal({ visible, onClose }: CalmModeModalProps) 
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: 16,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
   },
+  container: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    minHeight: '60%',
+  },
+
+  // Header - Minimal
   header: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   closeButton: {
-    padding: 8,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleContainer: {
     alignItems: 'center',
   },
   mainTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#EF4444',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 2,
-  },
-
-  // Tabs - Minimalist Pills
-  tabsContainer: {
-    flexDirection: 'row-reverse',
-    paddingHorizontal: 20,
-    marginBottom: 16,
-    gap: 8,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#F9FAFB',
-    gap: 6,
-  },
-  activeTab: {
-    backgroundColor: '#6366F1',
-  },
-  tabText: {
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#6B7280',
-  },
-  activeTabText: {
-    color: '#fff',
+    color: '#1F2937',
+    letterSpacing: -0.3,
   },
 
   // Content
-  contentArea: {
+  content: {
     flex: 1,
-    paddingHorizontal: 20,
   },
-  scrollContainer: {
-    paddingBottom: 40,
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 50,
   },
-  sectionHeader: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 16,
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginBottom: 12,
     textAlign: 'right',
-    width: '100%',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 
-  // Emergency cards - Minimalist
-  emergencyGrid: {
+  // Emergency Row - Minimalist
+  emergencyRow: {
     flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 30,
+    marginBottom: 28,
   },
   emergencyCard: {
-    width: 105,
-    height: 130,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  emergencyIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  emergencyName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1F2937',
-    textAlign: 'center',
-  },
-  emergencySubtitle: {
-    fontSize: 10,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  emergencyNumber: {
-    fontSize: 13,
-    color: '#374151',
-    fontWeight: '600',
-    marginTop: 4,
-  },
-
-  // HMO list - Minimalist
-  hmoList: {
-    gap: 10,
-  },
-  hmoRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  hmoIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hmoInfo: {
     flex: 1,
-    marginRight: 12,
-  },
-  hmoName: {
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'right',
-    color: '#1F2937',
-  },
-  hmoSubtitle: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'right',
-    marginTop: 2,
-  },
-  callBtn: {
-    flexDirection: 'row-reverse',
-    backgroundColor: '#10B981',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    alignItems: 'center',
-    gap: 4,
-  },
-  callBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-
-  // Checklist - Minimalist
-  checklistHint: {
-    color: '#6B7280',
-    fontSize: 13,
-    textAlign: 'right',
-    marginBottom: 16,
-  },
-  checkRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
     backgroundColor: '#F9FAFB',
-    padding: 16,
     borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+  },
+  emergencyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  checkRowChecked: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#10B981',
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
-  },
-  checkEmoji: {
-    fontSize: 20,
-    marginRight: 12,
-    marginLeft: 8,
-  },
-  checkText: {
-    fontSize: 15,
-    color: '#374151',
-    textAlign: 'right',
-    flex: 1,
-    fontWeight: '500',
-  },
-  checkTextChecked: {
-    textDecorationLine: 'line-through',
-    color: '#9CA3AF',
-  },
-  allCheckedContainer: {
-    backgroundColor: '#FEF3C7',
-    padding: 20,
-    borderRadius: 16,
-    marginTop: 10,
-  },
-  allCheckedText: {
+  emergencyName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
     textAlign: 'center',
-    color: '#92400E',
+  },
+  emergencyNumber: {
     fontSize: 14,
-    lineHeight: 22,
-    fontWeight: '500',
+    fontWeight: '700',
+    color: '#374151',
+    marginTop: 4,
+  },
+
+  // HMO List - Clean
+  hmoRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  hmoInfo: {
+    alignItems: 'flex-end',
+  },
+  hmoName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  hmoSubtitle: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  hmoCall: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  hmoNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
   },
 });

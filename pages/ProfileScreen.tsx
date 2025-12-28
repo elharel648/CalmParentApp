@@ -26,6 +26,7 @@ import GuestInviteModal from '../components/Family/GuestInviteModal';
 import { FamilyMembersCard } from '../components/Family/FamilyMembersCard';
 import { InviteFamilyModal } from '../components/Family/InviteFamilyModal';
 import { JoinFamilyModal } from '../components/Family/JoinFamilyModal';
+import GradientBackground from '../components/GradientBackground';
 
 // Types
 import { EditMetricState, Milestone } from '../types/profile';
@@ -115,132 +116,132 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar style={isDarkMode ? 'light' : 'light'} />
+    <GradientBackground>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+        <StatusBar style={isDarkMode ? 'light' : 'light'} />
 
-      {/* Header */}
-      <LinearGradient
-        colors={['#A78BFA', '#C4B5FD']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.header}
-      >
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ChevronRight size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>פרופיל</Text>
-        <View style={{ width: 38 }} />
-      </LinearGradient>
+        {/* Header */}
+        <LinearGradient
+          colors={['#A78BFA', '#C4B5FD']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.header}
+        >
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <ChevronRight size={22} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>פרופיל</Text>
+          <View style={{ width: 38 }} />
+        </LinearGradient>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-        {/* Profile Card */}
-        <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
-          <TouchableOpacity onPress={handleEditPhoto} style={styles.avatarContainer}>
-            {baby?.photoUrl ? (
-              <Image source={{ uri: baby.photoUrl }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                {getGenderIcon()}
+          {/* Profile Card */}
+          <View style={[styles.profileCard, { backgroundColor: theme.card }]}>
+            <TouchableOpacity onPress={handleEditPhoto} style={styles.avatarContainer}>
+              {baby?.photoUrl ? (
+                <Image source={{ uri: baby.photoUrl }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  {getGenderIcon()}
+                </View>
+              )}
+              <View style={styles.cameraBadge}>
+                <Camera size={12} color="#fff" />
               </View>
-            )}
-            <View style={styles.cameraBadge}>
-              <Camera size={12} color="#fff" />
+            </TouchableOpacity>
+
+            <View style={styles.profileInfo}>
+              <Text style={[styles.profileName, { color: theme.textPrimary }]}>{baby?.name || 'הילד שלי'}</Text>
+              <Text style={[styles.profileAge, { color: theme.primary }]}>{getAgeDisplay()}</Text>
+              <Text style={[styles.profileDate, { color: theme.textSecondary }]}>{birthDateObj.toLocaleDateString('he-IL')}</Text>
             </View>
-          </TouchableOpacity>
 
-          <View style={styles.profileInfo}>
-            <Text style={[styles.profileName, { color: theme.textPrimary }]}>{baby?.name || 'הילד שלי'}</Text>
-            <Text style={[styles.profileAge, { color: theme.primary }]}>{getAgeDisplay()}</Text>
-            <Text style={[styles.profileDate, { color: theme.textSecondary }]}>{birthDateObj.toLocaleDateString('he-IL')}</Text>
+            <TouchableOpacity
+              style={styles.editProfileBtn}
+              onPress={() => {
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                setIsEditBasicInfoOpen(true);
+              }}
+            >
+              <Edit2 size={14} color="#6366F1" />
+            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.editProfileBtn}
-            onPress={() => {
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }
-              setIsEditBasicInfoOpen(true);
-            }}
-          >
-            <Edit2 size={14} color="#6366F1" />
-          </TouchableOpacity>
-        </View>
 
 
 
 
 
-
-        {/* Magical Moments Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Sparkles size={18} color="#8B5CF6" />
-            <Text style={styles.sectionTitle}>רגעים קסומים</Text>
+          {/* Magical Moments Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Sparkles size={18} color="#8B5CF6" />
+              <Text style={styles.sectionTitle}>רגעים קסומים</Text>
+            </View>
+            <AlbumCarousel
+              album={baby?.album}
+              onMonthPress={(month) => updatePhoto('album', month)}
+            />
           </View>
-          <AlbumCarousel
-            album={baby?.album}
-            onMonthPress={(month) => updatePhoto('album', month)}
+
+        </ScrollView>
+
+        {/* Modals */}
+        <EditBasicInfoModal
+          visible={isEditBasicInfoOpen}
+          initialData={{
+            name: baby?.name || '',
+            gender: baby?.gender || 'boy',
+            birthDate: birthDateObj,
+          }}
+          onSave={handleSaveBasicInfo}
+          onClose={() => setIsEditBasicInfoOpen(false)}
+        />
+
+        <EditMetricModal
+          visible={!!editMetric}
+          title={editMetric?.title || ''}
+          unit={editMetric?.unit || ''}
+          initialValue={editMetric?.value || ''}
+          onSave={handleSaveMetric}
+          onClose={() => setEditMetric(null)}
+        />
+
+        <MilestoneModal
+          visible={isMilestoneOpen}
+          onAdd={handleAddMilestone}
+          onClose={() => setIsMilestoneOpen(false)}
+        />
+
+        {/* Guest Invite Modal */}
+        {family && (
+          <GuestInviteModal
+            visible={isGuestInviteOpen}
+            onClose={() => setIsGuestInviteOpen(false)}
+            familyId={family.id}
           />
-        </View>
+        )}
 
-      </ScrollView>
+        {/* Family Invite Modal */}
+        {baby?.id && family && (
+          <InviteFamilyModal
+            visible={inviteModalVisible}
+            onClose={() => setInviteModalVisible(false)}
+            babyId={baby.id}
+            babyName={baby.name || 'הילד'}
+          />
+        )}
 
-      {/* Modals */}
-      <EditBasicInfoModal
-        visible={isEditBasicInfoOpen}
-        initialData={{
-          name: baby?.name || '',
-          gender: baby?.gender || 'boy',
-          birthDate: birthDateObj,
-        }}
-        onSave={handleSaveBasicInfo}
-        onClose={() => setIsEditBasicInfoOpen(false)}
-      />
-
-      <EditMetricModal
-        visible={!!editMetric}
-        title={editMetric?.title || ''}
-        unit={editMetric?.unit || ''}
-        initialValue={editMetric?.value || ''}
-        onSave={handleSaveMetric}
-        onClose={() => setEditMetric(null)}
-      />
-
-      <MilestoneModal
-        visible={isMilestoneOpen}
-        onAdd={handleAddMilestone}
-        onClose={() => setIsMilestoneOpen(false)}
-      />
-
-      {/* Guest Invite Modal */}
-      {baby?.id && family && (
-        <GuestInviteModal
-          visible={isGuestInviteOpen}
-          onClose={() => setIsGuestInviteOpen(false)}
-          childId={baby.id}
-          childName={baby.name || 'הילד'}
-          familyId={family.id}
+        {/* Join Family Modal */}
+        <JoinFamilyModal
+          visible={joinModalVisible}
+          onClose={() => setJoinModalVisible(false)}
         />
-      )}
-
-      {/* Family Invite Modal */}
-      {baby?.id && family && (
-        <InviteFamilyModal
-          visible={inviteModalVisible}
-          onClose={() => setInviteModalVisible(false)}
-          babyId={baby.id}
-          babyName={baby.name || 'הילד'}
-        />
-      )}
-
-      {/* Join Family Modal */}
-      <JoinFamilyModal
-        visible={joinModalVisible}
-        onClose={() => setJoinModalVisible(false)}
-      />
-    </View>
+      </View>
+    </GradientBackground>
   );
 }
 

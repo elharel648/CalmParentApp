@@ -64,7 +64,7 @@ export interface BabyProfileData {
     photoGallery?: PhotoEntry[]; // New
     milestones?: Milestone[];
     categorizedMilestones?: CategorizedMilestone[]; // New
-    vaccines?: { [key: string]: boolean };
+    vaccines?: { [key: string]: boolean | { isDone: boolean; date: any } };
     customVaccines?: CustomVaccine[];
 }
 

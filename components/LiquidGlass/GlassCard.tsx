@@ -134,6 +134,7 @@ const GlassCard: React.FC<GlassCardProps> = ({
 
 const styles = StyleSheet.create({
     touchable: {
+        backgroundColor: 'rgba(255, 255, 255, 0.01)', // Required for efficient shadow calculation
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.08,

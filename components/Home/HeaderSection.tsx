@@ -1,6 +1,6 @@
 import React, { memo, useState, useMemo, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, ScrollView, Modal, Pressable, Animated, Dimensions } from 'react-native';
-import { Camera, Cloud, Plus, X, Link2, UserPlus, Moon, Utensils, Baby as BabyIcon, Pill, Bell, Award, Heart } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert, ScrollView, Modal, Pressable, Animated } from 'react-native';
+import { Camera, Cloud, Plus, X, Link2, UserPlus, Moon, Utensils, Baby as BabyIcon, Pill, Bell, Award, Heart, TrendingUp } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { auth, db } from '../../services/firebaseConfig';
@@ -8,6 +8,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { ChildProfile, MedicationsState } from '../../types/home';
 import { useWeather } from '../../hooks/useWeather';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useActiveChild, ActiveChild } from '../../context/ActiveChildContext';
 
 interface DailyStats {
@@ -16,12 +17,21 @@ interface DailyStats {
     diaperCount: number;
 }
 
+interface GrowthStats {
+    currentWeight?: string;
+    lastWeightDiff?: string;
+    currentHeight?: string;
+    lastHeightDiff?: string;
+    lastMeasuredDate?: Date;
+}
+
 interface HeaderSectionProps {
     greeting: string;
     profile: ChildProfile;
     onProfileUpdate?: () => void;
     dynamicStyles: { text: string; textSub: string };
     dailyStats?: DailyStats;
+    growthStats?: GrowthStats;
     lastFeedTime?: string;
     lastSleepTime?: string;
     meds?: MedicationsState;
@@ -30,6 +40,9 @@ interface HeaderSectionProps {
     onJoinWithCode?: () => void;
     onEditChild?: (child: ActiveChild) => void;
 }
+
+// Module-level flag to prevent double animation on tab switch
+let hasInitialAnimationRun = false;
 
 /**
  * Premium Minimalist Header - With child avatars row
@@ -40,6 +53,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
     onProfileUpdate,
     dynamicStyles,
     dailyStats,
+    growthStats,
     lastFeedTime,
     lastSleepTime,
     meds,
@@ -48,13 +62,14 @@ const HeaderSection = memo<HeaderSectionProps>(({
     onJoinWithCode,
     onEditChild,
 }) => {
+    const { t } = useLanguage();
     const { theme } = useTheme();
     const { allChildren, activeChild, setActiveChild } = useActiveChild();
     const [uploading, setUploading] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const { weather } = useWeather();
 
-    // Calculate age
+    // Calculate age - Better format
     const ageText = useMemo(() => {
         if (!profile.birthDate) return '';
         let birth: Date;
@@ -68,10 +83,16 @@ const HeaderSection = memo<HeaderSectionProps>(({
         const now = new Date();
         const diffMs = now.getTime() - birth.getTime();
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        if (diffDays < 7) return `${diffDays} ימים`;
-        if (diffDays < 30) return `${Math.floor(diffDays / 7)} שבועות`;
-        if (diffDays < 365) return `${Math.floor(diffDays / 30)} חודשים`;
-        return 'שנה+';
+        if (diffDays < 30) {
+            return `${diffDays} ימים`;
+        }
+        const months = Math.floor(diffDays / 30);
+        if (months < 12) {
+            return `${months} חודשים`;
+        }
+        const years = Math.floor(months / 12);
+        const remainingMonths = months % 12;
+        return remainingMonths > 0 ? `${years} שנה ו-${remainingMonths} חודשים` : `${years} שנה`;
     }, [profile.birthDate]);
 
     // Photo upload handler
@@ -82,7 +103,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
         try {
             const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!permission.granted) {
-                Alert.alert('שגיאה', 'נדרשת הרשאה לגלריה');
+                Alert.alert(t('common.error'), t('header.galleryPermission'));
                 return;
             }
             const result = await ImagePicker.launchImageLibraryAsync({
@@ -148,7 +169,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
         ? `${Math.floor(dailyStats.sleepMinutes / 60)}:${String(dailyStats.sleepMinutes % 60).padStart(2, '0')}`
         : '0:00';
 
-    // Smart Reminders & Achievements Cards
+    // Smart Reminders & Achievements Cards - Only show 1-2 most relevant
     const smartCards = useMemo(() => {
         const cards: Array<{
             type: string;
@@ -158,6 +179,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
             title: string;
             subtitle: string;
             isUrgent?: boolean;
+            priority: number; // Lower = higher priority
         }> = [];
 
         // Calculate time since last feed
@@ -174,163 +196,126 @@ const HeaderSection = memo<HeaderSectionProps>(({
             return { hours: diffHours, mins: diffMins };
         };
 
-        // 1. Next Feed Reminder
-        const feedTime = getTimeSinceLastFeed();
-        if (feedTime) {
-            const isOverdue = feedTime.hours >= 3;
-            cards.push({
-                type: 'feed_reminder',
-                icon: Utensils,
-                color: isOverdue ? '#EF4444' : '#F59E0B',
-                bgColor: isOverdue ? '#FEE2E2' : '#FEF3C7',
-                title: isOverdue ? 'הגיע הזמן להאכיל!' : 'האכלה אחרונה',
-                subtitle: `לפני ${feedTime.hours > 0 ? `${feedTime.hours} שעות ` : ''}${feedTime.mins} דקות`,
-                isUrgent: isOverdue,
-            });
-        } else {
-            cards.push({
-                type: 'feed_reminder',
-                icon: Utensils,
-                color: '#F59E0B',
-                bgColor: '#FEF3C7',
-                title: 'האכלה ראשונה',
-                subtitle: 'עדיין לא תועד היום',
-            });
-        }
-
-        // 2. Vitamin D Reminder
+        // Priority: Show supplements first if missing, then feed reminders
+        
+        // 1. Vitamin D Reminder (Priority 1 - Always show if missing)
         if (!meds?.vitaminD) {
             cards.push({
                 type: 'vitamin_reminder',
                 icon: Pill,
                 color: '#8B5CF6',
                 bgColor: '#F3E8FF',
-                title: 'ויטמין D',
-                subtitle: 'לא ניתן עדיין היום',
+                title: t('notifications.vitaminD'),
+                subtitle: t('notifications.notYetToday'),
                 isUrgent: true,
-            });
-        } else {
-            cards.push({
-                type: 'vitamin_done',
-                icon: Pill,
-                color: '#10B981',
-                bgColor: '#D1FAE5',
-                title: 'ויטמין D ✓',
-                subtitle: 'ניתן היום!',
+                priority: 1,
             });
         }
 
-        // 3. Achievement / Sleep Streak
-        const sleepMins = dailyStats?.sleepMinutes || 0;
-        if (sleepMins >= 420) { // 7+ hours
+        // 2. Iron Reminder (Priority 2 - Show if missing)
+        if (!meds?.iron) {
             cards.push({
-                type: 'achievement',
-                icon: Award,
-                color: '#F59E0B',
-                bgColor: '#FEF3C7',
-                title: 'מלך/ת השינה!',
-                subtitle: `${sleepHours} שעות שינה`,
+                type: 'iron_reminder',
+                icon: Pill,
+                color: '#EF4444',
+                bgColor: '#FEE2E2',
+                title: t('notifications.iron'),
+                subtitle: t('notifications.notYetToday'),
+                isUrgent: true,
+                priority: 2,
             });
-        } else if ((dailyStats?.feedCount || 0) >= 5) {
-            cards.push({
-                type: 'achievement',
-                icon: Award,
-                color: '#10B981',
-                bgColor: '#D1FAE5',
-                title: 'יום מזין!',
-                subtitle: `${dailyStats?.feedCount} האכלות`,
-            });
-        } else {
-            // Default: Iron reminder or encouraging message
-            if (!meds?.iron) {
+        }
+
+        // 3. Next Feed Reminder (Priority 3 - Only if no supplements missing)
+        if (cards.length === 0) {
+            const feedTime = getTimeSinceLastFeed();
+            if (feedTime) {
+                const isOverdue = feedTime.hours >= 3;
                 cards.push({
-                    type: 'iron_reminder',
-                    icon: Pill,
-                    color: '#EF4444',
-                    bgColor: '#FEE2E2',
-                    title: 'ברזל',
-                    subtitle: 'לא ניתן עדיין היום',
+                    type: 'feed_reminder',
+                    icon: Utensils,
+                    color: isOverdue ? '#EF4444' : '#F59E0B',
+                    bgColor: isOverdue ? '#FEE2E2' : '#FEF3C7',
+                    title: isOverdue ? t('notifications.feedReminder') : t('notifications.lastFeed'),
+                    subtitle: feedTime.hours > 0 
+                        ? t('time.hoursAgo', { count: feedTime.hours }) + ' ' + t('time.minutesAgo', { count: feedTime.mins })
+                        : t('time.minutesAgo', { count: feedTime.mins }),
+                    isUrgent: isOverdue,
+                    priority: 3,
                 });
             } else {
                 cards.push({
-                    type: 'encouragement',
-                    icon: Heart,
-                    color: '#EC4899',
-                    bgColor: '#FCE7F3',
-                    title: 'יום נהדר!',
-                    subtitle: 'המשיכו ככה',
+                    type: 'feed_reminder',
+                    icon: Utensils,
+                    color: '#F59E0B',
+                    bgColor: '#FEF3C7',
+                    title: t('notifications.firstFeed'),
+                    subtitle: t('notifications.notYetToday'),
+                    priority: 3,
                 });
             }
         }
 
-        return cards;
-    }, [lastFeedTime, meds, dailyStats, sleepHours]);
+        // Return top priority card (supplements first, then feed)
+        const sortedCards = cards.sort((a, b) => {
+            // Urgent cards first
+            if (a.isUrgent && !b.isUrgent) return -1;
+            if (!a.isUrgent && b.isUrgent) return 1;
+            // Then by priority
+            return a.priority - b.priority;
+        });
+        return sortedCards.slice(0, 1);
+    }, [lastFeedTime, meds, dailyStats]);
 
-    // Single toast notification - rotating index
-    const [toastIndex, setToastIndex] = useState(0);
+    // Toast notification - show if there are any cards
+    const hasNotifications = smartCards.length > 0;
+    const currentNotification = smartCards[0]; // Show top priority card
 
     // Animations for toast slide-up effect
-    const toastTranslateY = useRef(new Animated.Value(30)).current;
-    const toastOpacity = useRef(new Animated.Value(0)).current;
+    const toastTranslateY = useRef(new Animated.Value(hasInitialAnimationRun ? 0 : 30)).current;
+    const toastOpacity = useRef(new Animated.Value(hasInitialAnimationRun ? 1 : 0)).current;
 
     // Smooth slide-up animation for toast notifications
     useEffect(() => {
-        // Initial entry animation
-        Animated.parallel([
-            Animated.timing(toastTranslateY, {
-                toValue: 0,
-                duration: 350,
-                useNativeDriver: true,
-            }),
-            Animated.timing(toastOpacity, {
-                toValue: 1,
-                duration: 300,
-                useNativeDriver: true,
-            }),
-        ]).start();
+        if (!hasNotifications) {
+            // Hide if no notifications
+            toastOpacity.setValue(0);
+            return;
+        }
 
-        // Rotate notifications every 4 seconds
-        const rotationInterval = setInterval(() => {
-            // Slide out + fade
+        // Only run initial entry animation once (not on every tab switch)
+        if (!hasInitialAnimationRun) {
+            hasInitialAnimationRun = true;
             Animated.parallel([
                 Animated.timing(toastTranslateY, {
-                    toValue: -15,
-                    duration: 200,
+                    toValue: 0,
+                    duration: 350,
                     useNativeDriver: true,
                 }),
                 Animated.timing(toastOpacity, {
-                    toValue: 0,
-                    duration: 200,
+                    toValue: 1,
+                    duration: 300,
                     useNativeDriver: true,
                 }),
-            ]).start(() => {
-                // Change content
-                setToastIndex((prev) => (prev + 1) % smartCards.length);
-                // Reset position for entry
-                toastTranslateY.setValue(30);
-                // Slide in from bottom
-                Animated.parallel([
-                    Animated.timing(toastTranslateY, {
-                        toValue: 0,
-                        duration: 350,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(toastOpacity, {
-                        toValue: 1,
-                        duration: 300,
-                        useNativeDriver: true,
-                    }),
-                ]).start();
-            });
-        }, 4000);
+            ]).start();
+        } else if (hasNotifications) {
+            // Show if notification appears
+            Animated.parallel([
+                Animated.timing(toastTranslateY, {
+                    toValue: 0,
+                    duration: 350,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(toastOpacity, {
+                    toValue: 1,
+                    duration: 300,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        }
+    }, [hasNotifications, toastTranslateY, toastOpacity]);
 
-        return () => clearInterval(rotationInterval);
-    }, [smartCards.length, toastTranslateY, toastOpacity]);
-
-    // Get current notification
-    const currentNotification = smartCards[toastIndex];
-    const NotificationIcon = currentNotification.icon;
-
+    const NotificationIcon = currentNotification?.icon;
 
     return (
         <View style={styles.container}>
@@ -338,7 +323,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
             <View style={styles.topRow}>
                 <View style={styles.greetingSection}>
                     <Text style={[styles.greetingLarge, { color: '#1C1C1E' }]}>
-                        {greeting}, {profile.name}
+                        {greeting}, {profile.name} <Text style={styles.greetingSubtitle}>({ageText})</Text>
                     </Text>
                 </View>
 
@@ -358,97 +343,114 @@ const HeaderSection = memo<HeaderSectionProps>(({
                     {weather && (
                         <View style={styles.weatherBadge}>
                             <Cloud size={14} color="#6B7280" />
-                            <Text style={styles.weatherText}>{weather.temp}°</Text>
+                            <Text style={styles.weatherText}>{weather.city} {weather.temp}°</Text>
                         </View>
                     )}
                 </View>
             </View>
 
-            {/* Children Avatars Row - RTL aligned to right */}
-            <View style={styles.childrenRow}>
-                {/* Avatars container in horizontal ScrollView for many children */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.avatarsScrollContent}
-                    style={styles.avatarsScrollView}
-                >
-                    {allChildren.map((child) => {
-                        const isActive = activeChild?.childId === child.childId;
-                        return (
-                            <TouchableOpacity
-                                key={child.childId}
-                                style={[
-                                    styles.childAvatar,
-                                    isActive && styles.childAvatarActive
-                                ]}
-                                onPress={() => handleSelectChild(child)}
-                                onLongPress={() => handleEditChild(child)}
-                                delayLongPress={300}
-                                activeOpacity={0.7}
-                            >
-                                {child.photoUrl ? (
-                                    <Image source={{ uri: child.photoUrl }} style={styles.childAvatarImage} />
-                                ) : (
-                                    <View style={[
-                                        styles.childAvatarPlaceholder,
-                                        { backgroundColor: isActive ? '#374151' : '#E5E7EB' }
-                                    ]}>
-                                        <Text style={[
-                                            styles.childInitial,
-                                            { color: isActive ? '#fff' : '#6B7280' }
-                                        ]}>
-                                            {getInitials(child.childName)}
-                                        </Text>
-                                    </View>
-                                )}
-                                {isActive && (
-                                    <View style={styles.activeIndicator} />
-                                )}
-                            </TouchableOpacity>
-                        );
-                    })}
-                </ScrollView>
+            {/* Children Avatars Row - Only show if 2+ children */}
+            {allChildren.length > 1 && (
+                <View style={styles.childrenRow}>
+                    {/* Avatars container - Scrollable for multiple children */}
+                    <View style={styles.avatarsScrollView}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.avatarsScrollContent}
+                        >
+                            {allChildren.map((child) => {
+                                const isActive = activeChild?.childId === child.childId;
+                                return (
+                                    <TouchableOpacity
+                                        key={child.childId}
+                                        style={[
+                                            styles.childAvatar,
+                                            isActive && styles.childAvatarActive
+                                        ]}
+                                        onPress={() => handleSelectChild(child)}
+                                        onLongPress={() => handleEditChild(child)}
+                                        delayLongPress={300}
+                                        activeOpacity={0.7}
+                                    >
+                                        {child.photoUrl ? (
+                                            <Image source={{ uri: child.photoUrl }} style={styles.childAvatarImage} />
+                                        ) : (
+                                            <View style={[
+                                                styles.childAvatarPlaceholder,
+                                                { backgroundColor: isActive ? '#374151' : '#E5E7EB' }
+                                            ]}>
+                                                <Text style={[
+                                                    styles.childInitial,
+                                                    { color: isActive ? '#fff' : '#6B7280' }
+                                                ]}>
+                                                    {getInitials(child.childName)}
+                                                </Text>
+                                            </View>
+                                        )}
+                                        {isActive && (
+                                            <View style={styles.activeIndicator} />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
 
-                {/* Plus Button second in row-reverse = appears on left */}
+                    {/* Plus Button */}
+                    <TouchableOpacity
+                        style={styles.addChildBtn}
+                        onPress={handlePlusPress}
+                        activeOpacity={0.7}
+                    >
+                        <Plus size={18} color="#9CA3AF" />
+                    </TouchableOpacity>
+                </View>
+            )}
+            
+            {/* Single child - show add button inline */}
+            {allChildren.length === 1 && (
                 <TouchableOpacity
-                    style={styles.addChildBtn}
+                    style={styles.singleChildAddBtn}
                     onPress={handlePlusPress}
                     activeOpacity={0.7}
                 >
-                    <Plus size={18} color="#9CA3AF" />
+                    <Plus size={16} color="#9CA3AF" />
+                    <Text style={styles.singleChildAddText}>{t('header.addChild')}</Text>
                 </TouchableOpacity>
-            </View>
+            )}
 
-            {/* Toast-Style Notification - Single Pill */}
-            <Animated.View
-                style={[
-                    styles.toastNotification,
-                    {
-                        opacity: toastOpacity,
-                        transform: [{ translateY: toastTranslateY }],
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
-                    }
-                ]}
-            >
-                {/* Icon */}
-                <View style={[styles.toastIcon, { backgroundColor: currentNotification.bgColor }]}>
-                    <NotificationIcon size={16} color={currentNotification.color} strokeWidth={2} />
-                </View>
+            {/* Toast-Style Notification - Show top priority card */}
+            {hasNotifications && currentNotification && (
+                <Animated.View
+                    style={[
+                        styles.toastNotification,
+                        {
+                            opacity: toastOpacity,
+                            transform: [{ translateY: toastTranslateY }],
+                            backgroundColor: theme.card,
+                            borderColor: theme.border,
+                        }
+                    ]}
+                >
+                    {/* Icon */}
+                    <View style={[styles.toastIcon, { backgroundColor: currentNotification.bgColor }]}>
+                        <NotificationIcon size={16} color={currentNotification.color} strokeWidth={2} />
+                    </View>
 
-                {/* Content */}
-                <View style={styles.toastContent}>
-                    <Text style={[styles.toastTitle, { color: theme.textPrimary }]} numberOfLines={1}>
-                        {currentNotification.title}
+                    {/* Content */}
+                    <View style={styles.toastContent}>
+                        <Text style={[styles.toastTitle, { color: theme.textPrimary }]} numberOfLines={1}>
+                            {currentNotification.title}
+                        </Text>
+                    </View>
+
+                    {/* Time Badge */}
+                    <Text style={[styles.toastTime, { color: theme.textSecondary }]} numberOfLines={1}>
+                        {currentNotification.subtitle}
                     </Text>
-                </View>
-
-                {/* Time Badge */}
-                <Text style={[styles.toastTime, { color: theme.textSecondary }]} numberOfLines={1}>
-                    {currentNotification.subtitle}
-                </Text>
-            </Animated.View>
+                </Animated.View>
+            )}
 
 
             {/* Add Child Modal */}
@@ -462,7 +464,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
                             <X size={20} color="#6B7280" />
                         </TouchableOpacity>
 
-                        <Text style={styles.modalTitle}>הוספת ילד</Text>
+                        <Text style={styles.modalTitle}>{t('header.addChildTitle')}</Text>
 
                         {/* Option 1: New Child */}
                         <TouchableOpacity
@@ -473,8 +475,8 @@ const HeaderSection = memo<HeaderSectionProps>(({
                                 <UserPlus size={24} color="#6366F1" />
                             </View>
                             <View style={styles.modalOptionText}>
-                                <Text style={styles.modalOptionTitle}>רישום ילד חדש</Text>
-                                <Text style={styles.modalOptionSubtitle}>צור פרופיל חדש לילד</Text>
+                                <Text style={styles.modalOptionTitle}>{t('header.registerNewChild')}</Text>
+                                <Text style={styles.modalOptionSubtitle}>{t('header.registerNewChildSubtitle')}</Text>
                             </View>
                         </TouchableOpacity>
 
@@ -487,8 +489,8 @@ const HeaderSection = memo<HeaderSectionProps>(({
                                 <Link2 size={24} color="#10B981" />
                             </View>
                             <View style={styles.modalOptionText}>
-                                <Text style={styles.modalOptionTitle}>הצטרפות עם קוד</Text>
-                                <Text style={styles.modalOptionSubtitle}>קיבלת קוד מהשותף?</Text>
+                                <Text style={styles.modalOptionTitle}>{t('header.joinWithCode')}</Text>
+                                <Text style={styles.modalOptionSubtitle}>{t('header.joinWithCodeSubtitle')}</Text>
                             </View>
                         </TouchableOpacity>
                     </View>
@@ -502,22 +504,22 @@ HeaderSection.displayName = 'HeaderSection';
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 28,
+        marginBottom: 24,
     },
 
     // Top Row
     topRow: {
         flexDirection: 'row-reverse',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 12,
+        alignItems: 'center',
+        marginBottom: 10,
     },
     greetingSection: {
         alignItems: 'flex-end',
         flex: 1,
     },
     greetingLarge: {
-        fontSize: 20,
+        fontSize: 17,
         fontWeight: '600',
         letterSpacing: -0.3,
         marginBottom: 0,
@@ -550,7 +552,23 @@ const styles = StyleSheet.create({
     childrenRow: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 12,
+    },
+    singleChildAddBtn: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+        backgroundColor: 'rgba(0,0,0,0.02)',
+        alignSelf: 'flex-start',
+        marginBottom: 12,
+    },
+    singleChildAddText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#9CA3AF',
     },
     avatarsContainer: {
         flexDirection: 'row-reverse',
@@ -558,7 +576,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     avatarsScrollView: {
-        flex: 1,
+        flexShrink: 0,
     },
     avatarsScrollContent: {
         flexDirection: 'row-reverse',

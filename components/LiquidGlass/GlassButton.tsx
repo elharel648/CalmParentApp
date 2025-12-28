@@ -156,6 +156,7 @@ import { View } from 'react-native';
 
 const styles = StyleSheet.create({
     button: {
+        backgroundColor: 'rgba(255, 255, 255, 0.65)', // Required for efficient shadow calculation
         borderRadius: 16,
         overflow: 'hidden',
         shadowColor: '#000',

@@ -2,13 +2,15 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Define all available quick action keys
+// Define all available quick action keys
 export type QuickActionKey =
     | 'food' | 'sleep' | 'diaper' | 'supplements' | 'whiteNoise'
-    | 'sos' | 'health' | 'growth' | 'milestones' | 'magicMoments' | 'custom';
+    | 'sos' | 'health' | 'growth' | 'milestones' | 'magicMoments' | 'tools' | 'custom'
+    | 'teeth' | 'nightLight';
 
 // Default order of actions (right to left in RTL)
 const DEFAULT_ORDER: QuickActionKey[] = [
-    'custom', 'health', 'growth', 'magicMoments', 'milestones',
+    'custom', 'tools', 'health', 'growth', 'teeth', 'nightLight', 'magicMoments', 'milestones',
     'sos', 'whiteNoise', 'supplements', 'diaper', 'sleep', 'food'
 ];
 

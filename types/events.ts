@@ -152,6 +152,7 @@ export interface DailyStats {
     feedingTypes: {
         bottle: number;
         breast: number;
+        pumping: number;
         solids: number;
     };
 }

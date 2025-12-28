@@ -9,6 +9,9 @@ import { formatPrice, formatDistance, formatRating } from '../../utils/babySitte
  * ממו-איזד לביצועים משופרים
  */
 const SitterCard = memo(({ sitter, onPress, onPlayVideo }) => {
+    const mutualFriends = sitter.mutualFriends || [];
+    const hasMutualFriends = mutualFriends.length > 0;
+
     return (
         <TouchableOpacity
             activeOpacity={0.9}
@@ -63,6 +66,28 @@ const SitterCard = memo(({ sitter, onPress, onPlayVideo }) => {
                     <Text style={styles.bioText} numberOfLines={1}>
                         {sitter.bio}
                     </Text>
+
+                    {/* 🔥 חברים משותפים - אם יש */}
+                    {hasMutualFriends && (
+                        <View style={styles.mutualFriendsRow}>
+                            <View style={styles.mutualAvatars}>
+                                {mutualFriends.slice(0, 3).map((friend, index) => (
+                                    <Image
+                                        key={friend.id}
+                                        source={{ uri: friend.picture?.data?.url || 'https://i.pravatar.cc/50' }}
+                                        style={[
+                                            styles.mutualAvatar,
+                                            { marginRight: index > 0 ? -8 : 0 }
+                                        ]}
+                                    />
+                                ))}
+                            </View>
+                            <Text style={styles.mutualText}>
+                                {mutualFriends.length} חברים משותפים
+                            </Text>
+                            <Ionicons name="logo-facebook" size={12} color="#1877F2" />
+                        </View>
+                    )}
 
                     <View style={styles.cardBottom}>
                         <Text style={styles.priceText}>
@@ -210,6 +235,30 @@ const styles = StyleSheet.create({
     distanceText: {
         fontSize: 12,
         color: '#64748b',
+    },
+    // Mutual friends styles
+    mutualFriendsRow: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 2,
+        marginBottom: 2,
+    },
+    mutualAvatars: {
+        flexDirection: 'row-reverse',
+    },
+    mutualAvatar: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        borderColor: '#fff',
+        backgroundColor: '#E5E7EB',
+    },
+    mutualText: {
+        fontSize: 11,
+        color: '#1877F2',
+        fontWeight: '600',
     },
 });
 

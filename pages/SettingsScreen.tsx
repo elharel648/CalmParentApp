@@ -12,6 +12,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 
 // Hooks
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 import { useFamily } from '../hooks/useFamily';
 import { useActiveChild } from '../context/ActiveChildContext';
 import { useBabyProfile } from '../hooks/useBabyProfile';
@@ -26,6 +27,7 @@ import { EditBasicInfoModal } from '../components/Profile';
 
 export default function SettingsScreen() {
   const { theme, isDarkMode } = useTheme();
+  const { t } = useLanguage();
   const navigation = useNavigation<any>();
   const { activeChild, refreshChildren } = useActiveChild();
   const { baby, updateBasicInfo, updatePhoto, refresh } = useBabyProfile(activeChild?.childId);
@@ -55,12 +57,12 @@ export default function SettingsScreen() {
   const getAgeDisplay = () => {
     if (babyAgeMonths < 1) {
       const days = Math.floor((new Date().getTime() - birthDateObj.getTime()) / (1000 * 60 * 60 * 24));
-      return `${days} ימים`;
+      return t('age.days', { count: days });
     }
-    if (babyAgeMonths < 12) return `${babyAgeMonths} חודשים`;
+    if (babyAgeMonths < 12) return t('age.months', { count: babyAgeMonths });
     const years = Math.floor(babyAgeMonths / 12);
     const months = babyAgeMonths % 12;
-    return months > 0 ? `${years} שנה ו-${months} חודשים` : `${years} שנה`;
+    return months > 0 ? t('age.yearsMonths', { count: years, months }) : t('age.years', { count: years });
   };
 
   const handleEditPhoto = useCallback(async () => {
@@ -80,12 +82,12 @@ export default function SettingsScreen() {
   const handleEditFamilyName = useCallback(() => {
     if (Platform.OS === 'ios') {
       Alert.prompt(
-        'ערוך שם משפחה',
-        'הזן שם חדש למשפחה',
+        t('account.editFamilyName'),
+        t('account.enterNewFamilyName'),
         [
-          { text: 'ביטול', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'שמור',
+            text: t('common.save'),
             onPress: async (newName) => {
               if (newName && newName.trim()) {
                 const success = await renameFamily(newName.trim());
@@ -100,7 +102,7 @@ export default function SettingsScreen() {
         family?.babyName || ''
       );
     } else {
-      Alert.alert('ערוך שם משפחה', 'הפונקציה זמינה רק ב-iOS');
+      Alert.alert(t('account.editFamilyName'), t('account.editFamilyNameIOS'));
     }
   }, [family?.babyName, renameFamily]);
 
@@ -146,7 +148,7 @@ export default function SettingsScreen() {
         setUserPhotoURL(newImageUri);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (error) {
-        Alert.alert('שגיאה', 'לא הצלחנו לשמור את התמונה');
+        Alert.alert(t('account.error'), t('account.couldNotSavePhoto'));
       }
     }
   }, [user, openSettings]);
@@ -194,7 +196,7 @@ export default function SettingsScreen() {
       {/* Minimal Header - Apple Style */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>חשבון</Text>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>{t('account.title')}</Text>
           <TouchableOpacity
             onPress={handleSettingsPress}
             style={styles.settingsButton}
@@ -221,8 +223,8 @@ export default function SettingsScreen() {
             {userPhotoURL ? (
               <Image source={{ uri: userPhotoURL }} style={styles.avatar} />
             ) : (
-              <View style={[styles.avatarPlaceholder, { backgroundColor: theme.divider }]}>
-                <User size={48} color={theme.textTertiary} strokeWidth={1.5} />
+              <View style={[styles.avatarPlaceholder, { backgroundColor: '#EEF2FF' }]}>
+                <User size={48} color="#6366F1" strokeWidth={1.5} />
               </View>
             )}
             <View style={[styles.cameraBadge, { backgroundColor: theme.primary }]}>
@@ -236,7 +238,7 @@ export default function SettingsScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.userName, { color: theme.textPrimary }]}>
-              {userName || 'המשתמש שלי'}
+              {userName || t('account.myUser')}
             </Text>
             <Pencil size={13} color={theme.textTertiary} strokeWidth={2} />
           </TouchableOpacity>
@@ -246,49 +248,56 @@ export default function SettingsScreen() {
           )}
         </View>
         {/* Premium Card - Apple Style with Subtle Gradient */}
-        <TouchableOpacity
-          style={styles.premiumCard}
-          onPress={() => {
-            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setIsPremiumModalOpen(true);
-          }}
-          activeOpacity={0.92}
-        >
-          <LinearGradient
-            colors={['#FF6B35', '#F7931E']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.premiumGradient}
-          >
-            <View style={styles.premiumContent}>
-              <View style={styles.premiumIconContainer}>
-                <Crown size={22} color="#fff" strokeWidth={2} />
-              </View>
-              <View style={styles.premiumTextContainer}>
-                <Text style={styles.premiumTitle}>שדרג ל-Premium</Text>
-                <Text style={styles.premiumSubtitle}>גישה לכל התכונות ודוחות</Text>
-              </View>
-            </View>
-            <Sparkles size={18} color="rgba(255,255,255,0.5)" />
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Family Sharing Section - Clean, Minimal */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>שיתוף משפחתי</Text>
+          <TouchableOpacity
+            style={styles.premiumCard}
+            onPress={() => {
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setIsPremiumModalOpen(true);
+            }}
+            activeOpacity={0.92}
+          >
+            <LinearGradient
+              colors={['#FF6B35', '#F7931E']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.premiumGradient}
+            >
+              <View style={styles.premiumContent}>
+                <View style={styles.premiumIconContainer}>
+                  <Crown size={22} color="#fff" strokeWidth={2} />
+                </View>
+                <View style={styles.premiumTextContainer}>
+                  <Text style={styles.premiumTitle}>{t('account.upgradePremium')}</Text>
+                  <Text style={styles.premiumSubtitle}>{t('account.premiumSubtitle')}</Text>
+                </View>
+              </View>
+              <Sparkles size={18} color="rgba(255,255,255,0.5)" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
 
-          {/* Family Card - No Borders, Just Shadow */}
+        {/* Family Section - Unified, Clean Design */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>{t('account.family')}</Text>
+
+          {/* Family Info Card - Only if in a family */}
           {family && (
-            <View style={[styles.familyCard, { backgroundColor: theme.card }]}>
-              <View style={styles.familyCardHeader}>
-                <View style={styles.familyCardHeaderLeft}>
-                  <Text style={[styles.familyName, { color: theme.textPrimary }]}>
-                    משפחת {family.babyName}
-                  </Text>
-                  <Text style={[styles.familyMembersCount, { color: theme.textSecondary }]}>
-                    {members.length || 1} חברים
-                  </Text>
-          </View>
+            <View style={[styles.familyInfoCard, { backgroundColor: theme.card }]}>
+              <View style={styles.familyInfoHeader}>
+                <View style={styles.familyInfoLeft}>
+                  <View style={[styles.familyInfoAvatar, { backgroundColor: '#6366F1' }]}>
+                    <Users size={18} color="#fff" strokeWidth={2} />
+                  </View>
+                  <View style={styles.familyInfoText}>
+                    <Text style={[styles.familyInfoName, { color: theme.textPrimary }]}>
+                      {t('premium.familyOf')} {family.babyName}
+                    </Text>
+                    <Text style={[styles.familyInfoCount, { color: theme.textSecondary }]}>
+                      {members.length || 1} {t('premium.members')}
+                    </Text>
+                  </View>
+                </View>
                 {isAdmin && (
                   <TouchableOpacity
                     onPress={handleEditFamilyName}
@@ -296,72 +305,65 @@ export default function SettingsScreen() {
                     activeOpacity={0.6}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Pencil size={13} color={theme.textTertiary} strokeWidth={2} />
+                    <Pencil size={14} color={theme.textTertiary} strokeWidth={2} />
                   </TouchableOpacity>
                 )}
-              </View>
-
-              {/* Current User Status - Minimal */}
-              <View style={[styles.userStatusRow, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' }]}>
-                <View style={styles.userStatusLeft}>
-                  <View style={[styles.userStatusBadge, { backgroundColor: '#FF6B35' }]}>
-                    <Text style={styles.userStatusBadgeText}>
-                      {(userName || 'מ').charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.userStatusInfo}>
-                    <Text style={[styles.userStatusName, { color: theme.textPrimary }]}>
-                      {userName || 'אני'} (Admin)
-                    </Text>
-                    <Text style={[styles.userStatusRole, { color: '#FF6B35' }]}>מנהל</Text>
-                  </View>
-                </View>
               </View>
             </View>
           )}
 
-          {/* Family Actions - Pure iOS List Style, RTL */}
+          {/* Family Actions - Premium Minimalist Design */}
           <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
             {isAdmin && (
-              <TouchableOpacity
-                style={[styles.listItem, styles.listItemFirst]}
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setInviteModalVisible(true);
-                }}
-                activeOpacity={0.6}
-              >
-                <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
-                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>הזמנה למשפחה</Text>
-                <View style={[styles.listItemIcon, { backgroundColor: '#EEF2FF' }]}>
-                  <UserPlus size={16} color="#6366F1" strokeWidth={2} />
-                </View>
-              </TouchableOpacity>
-            )}
+              <>
+                <TouchableOpacity
+                  style={[styles.listItem, styles.listItemFirst]}
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setInviteModalVisible(true);
+                  }}
+                  activeOpacity={0.6}
+                >
+                  <View style={styles.listItemContent}>
+                    <View style={[styles.listItemIcon, { backgroundColor: '#EEF2FF' }]}>
+                      <UserPlus size={18} color="#6366F1" strokeWidth={2.5} />
+                    </View>
+                    <View style={styles.listItemTextContainer}>
+                      <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('account.inviteFamily')}</Text>
+                      <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
+                        {t('account.inviteFamily.subtitle')}
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
+                </TouchableOpacity>
 
-            {isAdmin && (
-              <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
-            )}
+                <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
 
-            {isAdmin && (
-              <TouchableOpacity
-                style={styles.listItem}
-                onPress={() => {
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setIsGuestInviteOpen(true);
-                }}
-                activeOpacity={0.6}
-              >
-                <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
-                <Text style={[styles.listItemText, { color: theme.textPrimary }]}>הזמן אורח</Text>
-                <View style={[styles.listItemIcon, { backgroundColor: '#ECFDF5' }]}>
-                  <Users size={16} color="#10B981" strokeWidth={2} />
-        </View>
-              </TouchableOpacity>
-            )}
+                <TouchableOpacity
+                  style={styles.listItem}
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setIsGuestInviteOpen(true);
+                  }}
+                  activeOpacity={0.6}
+                >
+                  <View style={styles.listItemContent}>
+                    <View style={[styles.listItemIcon, { backgroundColor: '#ECFDF5' }]}>
+                      <Users size={18} color="#10B981" strokeWidth={2.5} />
+                    </View>
+                    <View style={styles.listItemTextContainer}>
+                      <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('account.inviteGuest')}</Text>
+                      <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
+                        {t('account.inviteGuest.subtitle')}
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
+                </TouchableOpacity>
 
-            {isAdmin && (
-              <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+                <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+              </>
             )}
 
             <TouchableOpacity
@@ -372,11 +374,18 @@ export default function SettingsScreen() {
               }}
               activeOpacity={0.6}
             >
-              <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
-              <Text style={[styles.listItemText, { color: theme.textPrimary }]}>הצטרף עם קוד</Text>
-              <View style={[styles.listItemIcon, { backgroundColor: '#FFF7ED' }]}>
-                <LinkIcon size={16} color="#F59E0B" strokeWidth={2} />
+              <View style={styles.listItemContent}>
+                <View style={[styles.listItemIcon, { backgroundColor: '#FFF7ED' }]}>
+                  <LinkIcon size={18} color="#F59E0B" strokeWidth={2.5} />
+                </View>
+                <View style={styles.listItemTextContainer}>
+                  <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('account.joinWithCode')}</Text>
+                  <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
+                    {t('account.joinWithCode.subtitle')}
+                  </Text>
+                </View>
               </View>
+              <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
             </TouchableOpacity>
           </View>
         </View>
@@ -400,7 +409,7 @@ export default function SettingsScreen() {
           visible={inviteModalVisible}
           onClose={() => setInviteModalVisible(false)}
           babyId={baby.id}
-          babyName={baby.name || 'הילד'}
+          babyName={baby.name || t('account.theChild')}
         />
       )}
 
@@ -463,9 +472,9 @@ export default function SettingsScreen() {
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.planDuration, { color: theme.textPrimary }]}>חודשי</Text>
+                <Text style={[styles.planDuration, { color: theme.textPrimary }]}>{t('account.monthly')}</Text>
                 <Text style={[styles.planPrice, { color: theme.textPrimary }]}>₪19.90</Text>
-                <Text style={[styles.planPer, { color: theme.textSecondary }]}>לחודש</Text>
+                <Text style={[styles.planPer, { color: theme.textSecondary }]}>{t('account.perMonth')}</Text>
               </TouchableOpacity>
 
               {/* Yearly */}
@@ -484,11 +493,11 @@ export default function SettingsScreen() {
                 activeOpacity={0.7}
               >
                 <View style={styles.planBadge}>
-                  <Text style={styles.planBadgeText}>חסכון 40%</Text>
+                  <Text style={styles.planBadgeText}>{t('account.save40')}</Text>
                 </View>
-                <Text style={[styles.planDuration, { color: theme.textPrimary }]}>שנתי</Text>
+                <Text style={[styles.planDuration, { color: theme.textPrimary }]}>{t('account.yearly')}</Text>
                 <Text style={[styles.planPrice, { color: theme.textPrimary }]}>₪139</Text>
-                <Text style={[styles.planPer, { color: theme.textSecondary }]}>לשנה (₪11.60/חודש)</Text>
+                <Text style={[styles.planPer, { color: theme.textSecondary }]}>{t('account.perYear')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -497,31 +506,31 @@ export default function SettingsScreen() {
               <View style={styles.featureRow}>
                 <Check size={18} color="#10B981" strokeWidth={2.5} />
                 <Text style={[styles.featureText, { color: theme.textPrimary }]}>
-                  דוחות מפורטים ותובנות חכמות
+                  {t('premium.detailedReports')}
                 </Text>
               </View>
               <View style={styles.featureRow}>
                 <Check size={18} color="#10B981" strokeWidth={2.5} />
                 <Text style={[styles.featureText, { color: theme.textPrimary }]}>
-                  ייצוא נתונים ל-PDF ואקסל
+                  {t('premium.exportData')}
                 </Text>
               </View>
               <View style={styles.featureRow}>
                 <Check size={18} color="#10B981" strokeWidth={2.5} />
                 <Text style={[styles.featureText, { color: theme.textPrimary }]}>
-                  שיתוף ללא הגבלה למשפחה ובייביסיטר
+                  {t('premium.unlimitedSharing')}
                 </Text>
               </View>
               <View style={styles.featureRow}>
                 <Check size={18} color="#10B981" strokeWidth={2.5} />
                 <Text style={[styles.featureText, { color: theme.textPrimary }]}>
-                  גיבוי אוטומטי ותמיכה VIP
+                  {t('premium.autoBackup')}
                 </Text>
               </View>
               <View style={styles.featureRow}>
                 <Star size={18} color="#FF6B35" strokeWidth={2.5} />
                 <Text style={[styles.featureText, { color: theme.textPrimary }]}>
-                  ללא פרסומות לעולם
+                  {t('premium.noAds')}
                 </Text>
               </View>
             </View>
@@ -531,7 +540,7 @@ export default function SettingsScreen() {
               style={styles.subscribeButton}
               onPress={() => {
                 if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert('בקרוב!', 'רכישת Premium תתאפשר בקרוב 🎉');
+                Alert.alert(t('premium.comingSoon'), t('premium.comingSoonMessage'));
                 setIsPremiumModalOpen(false);
               }}
               activeOpacity={0.9}
@@ -543,7 +552,7 @@ export default function SettingsScreen() {
                 style={styles.subscribeButtonGradient}
               >
                 <Text style={styles.subscribeButtonText}>
-                  {selectedPlan === 'yearly' ? 'הירשם ל-Premium שנתי' : 'הירשם ל-Premium חודשי'}
+                  {selectedPlan === 'yearly' ? t('premium.subscribeYearly') : t('premium.subscribeMonthly')}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -554,7 +563,7 @@ export default function SettingsScreen() {
               onPress={() => setIsPremiumModalOpen(false)}
               activeOpacity={0.6}
             >
-              <Text style={[styles.closeButtonText, { color: theme.textSecondary }]}>אולי אחר כך</Text>
+              <Text style={[styles.closeButtonText, { color: theme.textSecondary }]}>{t('account.maybeLater')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -684,6 +693,10 @@ const styles = StyleSheet.create({
     marginBottom: 3,
     letterSpacing: 0.38,
   },
+  policySubtitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
   premiumSubtitle: {
     fontSize: 14,
     fontWeight: '500',
@@ -691,19 +704,22 @@ const styles = StyleSheet.create({
     letterSpacing: -0.15,
   },
   section: {
-    marginBottom: 40,
+    marginBottom: 32,
+    paddingHorizontal: 20,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    letterSpacing: -0.08,
-    marginBottom: 12,
+    letterSpacing: 0.5,
+    marginBottom: 16,
     textAlign: 'right',
     textTransform: 'uppercase',
+    opacity: 0.6,
   },
-  familyCard: {
+  // Family Info Card - Clean, Minimal
+  familyInfoCard: {
     borderRadius: 20,
-    padding: 20,
+    padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -711,68 +727,43 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 1,
   },
-  familyCardHeader: {
+  familyInfoHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
   },
-  familyCardHeaderLeft: {
-    alignItems: 'flex-end',
-    flex: 1,
-  },
-  familyName: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 3,
-    letterSpacing: -0.41,
-  },
-  familyMembersCount: {
-    fontSize: 13,
-    fontWeight: '400',
-    letterSpacing: -0.08,
-  },
-  editFamilyButton: {
-    padding: 6,
-  },
-  userStatusRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 16,
-  },
-  userStatusLeft: {
+  familyInfoLeft: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 12,
     flex: 1,
   },
-  userStatusBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  familyInfoAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  userStatusBadgeText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  userStatusInfo: {
-    flex: 1,
+  familyInfoText: {
     alignItems: 'flex-end',
+    flex: 1,
   },
-  userStatusName: {
-    fontSize: 15,
+  familyInfoName: {
+    fontSize: 17,
     fontWeight: '600',
     marginBottom: 2,
-    letterSpacing: -0.24,
+    letterSpacing: -0.3,
   },
-  userStatusRole: {
+  familyInfoCount: {
     fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: -0.08,
+    fontWeight: '400',
+    letterSpacing: -0.2,
+    opacity: 0.7,
+  },
+  editFamilyButton: {
+    padding: 8,
+    borderRadius: 8,
   },
   listContainer: {
     borderRadius: 20,
@@ -788,7 +779,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 20,
-    minHeight: 56,
+    minHeight: 64,
   },
   listItemFirst: {
     paddingTop: 18,
@@ -801,20 +792,36 @@ const styles = StyleSheet.create({
     marginLeft: 20,
     marginRight: 20,
   },
+  listItemContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    flex: 1,
+  },
   listItemIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
   },
-  listItemText: {
+  listItemTextContainer: {
     flex: 1,
-    fontSize: 17,
-    fontWeight: '400',
-    letterSpacing: -0.41,
+    alignItems: 'flex-end',
+  },
+  listItemText: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.3,
     textAlign: 'right',
+    marginBottom: 2,
+  },
+  listItemSubtext: {
+    fontSize: 13,
+    fontWeight: '400',
+    letterSpacing: -0.2,
+    textAlign: 'right',
+    opacity: 0.7,
   },
   modalOverlay: {
     flex: 1,

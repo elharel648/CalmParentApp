@@ -21,7 +21,8 @@ export const useVaccines = (): UseVaccinesReturn => {
     const toggleVaccine = useCallback(async (
         babyId: string,
         currentVaccines: any,
-        key: string
+        key: string,
+        date?: Date
     ): Promise<boolean> => {
         if (!babyId) return false;
 
@@ -29,9 +30,9 @@ export const useVaccines = (): UseVaccinesReturn => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
 
-        await toggleVaccineStatus(babyId, currentVaccines, key);
-        const newVal = !currentVaccines?.[key];
-        return newVal;
+        await toggleVaccineStatus(babyId, currentVaccines, key, date);
+        // Optimistic update return value (not used much but good to have)
+        return true;
     }, []);
 
     const addCustom = useCallback(async (babyId: string, name: string) => {

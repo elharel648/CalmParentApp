@@ -7,8 +7,10 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import Slider from '@react-native-community/slider';
 import { auth, db } from '../../services/firebaseConfig';
-import { doc, getDoc, updateDoc, arrayUnion, collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { saveEventToFirebase } from '../../services/firebaseService';
+import { doc, getDoc, updateDoc, arrayUnion, collection, query, where, limit, getDocs, Timestamp } from 'firebase/firestore';
 import { VACCINE_SCHEDULE, CustomVaccine } from '../../types/profile';
+import { useActiveChild } from '../../context/ActiveChildContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -99,19 +101,21 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
         }
     }, [isModalOpen, currentScreen]);
 
+    const { activeChild } = useActiveChild();
+    // Sync babyId with activeChild
+    useEffect(() => {
+        if (activeChild?.childId) {
+            setBabyId(activeChild.childId);
+        }
+    }, [activeChild]);
+
     const loadVaccines = async () => {
-        const user = auth.currentUser;
-        if (!user) return;
+        if (!activeChild?.childId) return;
 
         try {
-            // Query for baby by parentId (not direct doc ID)
-            const q = query(collection(db, 'babies'), where('parentId', '==', user.uid), limit(1));
-            const querySnapshot = await getDocs(q);
-
-            if (!querySnapshot.empty) {
-                const babyDoc = querySnapshot.docs[0];
+            const babyDoc = await getDoc(doc(db, 'babies', activeChild.childId));
+            if (babyDoc.exists()) {
                 const data = babyDoc.data();
-                setBabyId(babyDoc.id); // Use actual baby doc ID
                 setVaccines(data.vaccines || {});
                 setCustomVaccines(data.customVaccines || []);
             }
@@ -122,18 +126,14 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
 
     const loadHealthLog = async () => {
         setLoadingHistory(true);
-        const user = auth.currentUser;
-        if (!user) {
+        if (!activeChild?.childId) {
             setLoadingHistory(false);
             return;
         }
 
         try {
-            const q = query(collection(db, 'babies'), where('parentId', '==', user.uid), limit(1));
-            const querySnapshot = await getDocs(q);
-
-            if (!querySnapshot.empty) {
-                const babyDoc = querySnapshot.docs[0];
+            const babyDoc = await getDoc(doc(db, 'babies', activeChild.childId));
+            if (babyDoc.exists()) {
                 const data = babyDoc.data();
                 const log = data.healthLog || [];
                 // Sort by timestamp descending
@@ -146,19 +146,53 @@ const HealthCard = memo(({ dynamicStyles, visible, onClose }: HealthCardProps) =
         setLoadingHistory(false);
     };
 
-    const toggleVaccine = async (key: string) => {
+    const toggleVaccine = async (key: string, date?: Date) => {
         if (!babyId) return;
+        const user = auth.currentUser;
+        if (!user) return;
 
         if (Platform.OS !== 'web') {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
 
-        const newVal = !vaccines[key];
-        const updated = { ...vaccines, [key]: newVal };
+        const currentStatus = vaccines[key];
+        const isDone = currentStatus && typeof currentStatus === 'object' ? (currentStatus as any).isDone : !!currentStatus;
+        const newVal = !isDone;
+
+        // Prepare value to save
+        const timestamp = date ? Timestamp.fromDate(date) : Timestamp.now();
+        const valueToSave = newVal ? { isDone: true, date: timestamp } : false;
+
+        const updated = { ...vaccines, [key]: valueToSave };
+        // @ts-ignore
         setVaccines(updated);
 
+        // Optimistically update UI
         try {
-            await updateDoc(doc(db, 'babies', babyId), { vaccines: updated });
+            await updateDoc(doc(db, 'babies', babyId), { [`vaccines.${key}`]: valueToSave });
+
+            // If marked as done, add to History and Timeline
+            if (newVal) {
+                // 1. Add to Health History (healthLog)
+                const vaccineName = VACCINE_SCHEDULE.flatMap(g => g.vaccines).find(v => v.key === key)?.name || key;
+                const historyEntry = {
+                    type: 'vaccine',
+                    name: vaccineName,
+                    note: 'בוצע',
+                    timestamp: timestamp.toDate().toISOString() // Store as ISO string for consistency with other logs
+                };
+                await updateDoc(doc(db, 'babies', babyId), { healthLog: arrayUnion(historyEntry) });
+                // Refresh local history log if visible
+                if (currentScreen === 'history') loadHealthLog();
+
+                // 2. Add to Daily Timeline (events collection)
+                await saveEventToFirebase(user.uid, babyId, {
+                    type: 'custom',
+                    subType: 'vaccine',
+                    note: `חיסון: ${vaccineName}`,
+                    timestamp: date || new Date()
+                });
+            }
         } catch (error) {
             if (__DEV__) console.log('Error updating vaccine:', error);
         }

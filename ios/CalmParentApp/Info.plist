@@ -30,11 +30,6 @@
         <key>CFBundleURLSchemes</key>
         <array>
           <string>fb1567376814402845</string>
-        </array>
-      </dict>
-      <dict>
-        <key>CFBundleURLSchemes</key>
-        <array>
           <string>com.googleusercontent.apps.16421819020-muvdskd7ppjnfcrnal4lsra01pqjr505</string>
         </array>
       </dict>
@@ -47,14 +42,27 @@
     </array>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>FacebookAdvertiserIDCollectionEnabled</key>
+    <false/>
     <key>FacebookAppID</key>
     <string>1567376814402845</string>
+    <key>FacebookAutoInitEnabled</key>
+    <true/>
+    <key>FacebookAutoLogAppEventsEnabled</key>
+    <false/>
     <key>FacebookClientToken</key>
     <string>c2be86c713add9c46c10f5b716deb396</string>
     <key>FacebookDisplayName</key>
     <string>CalmParent</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+      <string>fbapi</string>
+      <string>fb-messenger-api</string>
+      <string>fbauth2</string>
+      <string>fbshareextension</string>
+    </array>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
     <key>LSRequiresIPhoneOS</key>
@@ -84,6 +92,17 @@
     <true/>
     <key>NSSupportsLiveActivitiesFrequentUpdates</key>
     <false/>
+    <key>SKAdNetworkItems</key>
+    <array>
+      <dict>
+        <key>SKAdNetworkIdentifier</key>
+        <string>v9wttpbfk9.skadnetwork</string>
+      </dict>
+      <dict>
+        <key>SKAdNetworkIdentifier</key>
+        <string>n38lu8286q.skadnetwork</string>
+      </dict>
+    </array>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

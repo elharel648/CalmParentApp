@@ -1,6 +1,7 @@
 // pages/BabySitterScreen.tsx - Minimalist Parent Sitter Search
 import React, { useState, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
     View,
     Text,
@@ -27,6 +28,11 @@ const BabySitterScreen = ({ navigation }: any) => {
 
     // Hooks
     const { sitters, isLoading, refetch } = useSitters();
+
+    // 🔧 DEBUG: Log when screen loads
+    useEffect(() => {
+        console.log('🔧 BabySitterScreen: Mounted! isLoading:', isLoading, 'sitters:', sitters.length);
+    }, [sitters, isLoading]);
 
     // State
     const [userMode, setUserMode] = useState<'parent' | 'sitter'>('parent');
@@ -100,54 +106,93 @@ const BabySitterScreen = ({ navigation }: any) => {
     // Handle sitter press
     const handleSitterPress = (sitter: Sitter) => {
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        navigation.navigate('SitterProfile', { sitterData: sitter });
+        // Map Sitter type to SitterData format expected by SitterProfileScreen
+        const sitterData = {
+            id: sitter.id,
+            name: sitter.name,
+            age: sitter.age,
+            image: sitter.photoUrl || 'https://i.pravatar.cc/200',
+            rating: sitter.rating,
+            reviews: sitter.reviewCount,
+            price: sitter.pricePerHour,
+            distance: sitter.distance || 0,
+            phone: '050-1234567', // TODO: Get from Firebase
+            bio: sitter.bio,
+            reviewsList: [], // TODO: Fetch from Firebase
+        };
+        navigation.navigate('SitterProfile', { sitterData });
     };
 
     // ========== COMPONENTS ==========
 
     // Minimalist Sitter Card
-    const SitterCard = ({ sitter }: { sitter: Sitter }) => (
-        <TouchableOpacity
-            style={[styles.sitterCard, { backgroundColor: theme.card }]}
-            onPress={() => handleSitterPress(sitter)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.sitterCardContent}>
-                {sitter.photoUrl ? (
-                    <Image source={{ uri: sitter.photoUrl }} style={styles.sitterPhoto} />
-                ) : (
-                    <View style={[styles.sitterPhotoPlaceholder, { backgroundColor: theme.cardSecondary }]}>
-                        <User size={24} color={theme.textSecondary} />
-                    </View>
-                )}
-                <View style={styles.sitterInfo}>
-                    <View style={styles.sitterHeader}>
-                        <Text style={[styles.sitterName, { color: theme.textPrimary }]}>{sitter.name}</Text>
-                        {sitter.isVerified && (
-                            <Award size={14} color="#10B981" strokeWidth={1.5} />
-                        )}
-                    </View>
-                    <View style={styles.sitterMeta}>
-                        {sitter.rating > 0 && (
-                            <View style={styles.ratingBadge}>
-                                <Star size={12} color="#FBBF24" fill="#FBBF24" />
-                                <Text style={styles.ratingText}>{sitter.rating.toFixed(1)}</Text>
+    const SitterCard = ({ sitter }: { sitter: Sitter }) => {
+        const mutualFriends = sitter.mutualFriends || [];
+        const hasMutualFriends = mutualFriends.length > 0;
+
+        return (
+            <TouchableOpacity
+                style={[styles.sitterCard, { backgroundColor: theme.card }]}
+                onPress={() => handleSitterPress(sitter)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.sitterCardContent}>
+                    {sitter.photoUrl ? (
+                        <Image source={{ uri: sitter.photoUrl }} style={styles.sitterPhoto} />
+                    ) : (
+                        <View style={[styles.sitterPhotoPlaceholder, { backgroundColor: theme.cardSecondary }]}>
+                            <User size={24} color={theme.textSecondary} />
+                        </View>
+                    )}
+                    <View style={styles.sitterInfo}>
+                        <View style={styles.sitterHeader}>
+                            <Text style={[styles.sitterName, { color: theme.textPrimary }]}>{sitter.name}</Text>
+                            {sitter.isVerified && (
+                                <Award size={14} color="#10B981" strokeWidth={1.5} />
+                            )}
+                        </View>
+                        <View style={styles.sitterMeta}>
+                            {sitter.rating > 0 && (
+                                <View style={styles.ratingBadge}>
+                                    <Star size={12} color="#FBBF24" fill="#FBBF24" />
+                                    <Text style={styles.ratingText}>{sitter.rating.toFixed(1)}</Text>
+                                </View>
+                            )}
+                            {sitter.experience && (
+                                <Text style={[styles.experienceText, { color: theme.textSecondary }]}>
+                                    {sitter.experience}
+                                </Text>
+                            )}
+                        </View>
+                        {/* 🔥 חברים משותפים */}
+                        {hasMutualFriends && (
+                            <View style={styles.mutualFriendsRow}>
+                                <View style={styles.mutualAvatars}>
+                                    {mutualFriends.slice(0, 3).map((friend, index) => (
+                                        <Image
+                                            key={friend.id}
+                                            source={{ uri: friend.picture?.data?.url || 'https://i.pravatar.cc/50' }}
+                                            style={[
+                                                styles.mutualAvatar,
+                                                { marginLeft: index > 0 ? -8 : 0, zIndex: 3 - index }
+                                            ]}
+                                        />
+                                    ))}
+                                </View>
+                                <Text style={styles.mutualText}>
+                                    {mutualFriends.length} חברים משותפים
+                                </Text>
                             </View>
                         )}
-                        {sitter.experience && (
-                            <Text style={[styles.experienceText, { color: theme.textSecondary }]}>
-                                {sitter.experience}
-                            </Text>
-                        )}
+                    </View>
+                    <View style={styles.priceSection}>
+                        <Text style={[styles.priceAmount, { color: theme.textPrimary }]}>₪{sitter.pricePerHour}</Text>
+                        <Text style={[styles.priceLabel, { color: theme.textSecondary }]}>לשעה</Text>
                     </View>
                 </View>
-                <View style={styles.priceSection}>
-                    <Text style={[styles.priceAmount, { color: theme.textPrimary }]}>₪{sitter.pricePerHour}</Text>
-                    <Text style={[styles.priceLabel, { color: theme.textSecondary }]}>לשעה</Text>
-                </View>
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     // Sort Pills
     const SortPills = () => (
@@ -219,9 +264,17 @@ const BabySitterScreen = ({ navigation }: any) => {
     );
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.container}>
+            {/* Background Gradient - Apple Style */}
+            <LinearGradient
+                colors={['#FAFAFA', '#F5F5F5', '#FAFAFA']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+            />
+
             {/* Header */}
-            <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+            <View style={[styles.header, { backgroundColor: '#FFFFFF', borderBottomColor: '#E5E5EA' }]}>
                 <View style={styles.headerTop}>
                     <TouchableOpacity onPress={() => navigation.goBack()}>
                         <ChevronRight size={24} color={theme.textSecondary} />
@@ -546,6 +599,30 @@ const styles = StyleSheet.create({
     },
     dashboardBtnText: {
         fontSize: 15,
+        fontWeight: '600',
+    },
+
+    // Mutual Friends Styles
+    mutualFriendsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 6,
+    },
+    mutualAvatars: {
+        flexDirection: 'row',
+    },
+    mutualAvatar: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        borderWidth: 2,
+        borderColor: '#fff',
+        backgroundColor: '#E5E7EB',
+    },
+    mutualText: {
+        fontSize: 11,
+        color: '#1877F2',
         fontWeight: '600',
     },
 });

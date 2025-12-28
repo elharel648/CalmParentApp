@@ -148,21 +148,114 @@ export const getMyFamily = async (): Promise<Family | null> => {
 };
 
 /**
- * Join a family using invite code
+ * Join a family using invite code - Smart detection: automatically detects if code is for family or guest
  * If user is already in a family, they will leave it and join the new one
  */
-export const joinFamily = async (inviteCode: string, role: FamilyRole = 'member'): Promise<{ success: boolean; message: string; family?: Family }> => {
+export const joinFamily = async (inviteCode: string, role: FamilyRole = 'member'): Promise<{ success: boolean; message: string; family?: Family; isGuest?: boolean }> => {
     const userId = getCurrentUserId();
     if (!userId) return { success: false, message: 'יש להתחבר למערכת' };
 
     const user = auth.currentUser;
     if (!user) return { success: false, message: 'יש להתחבר למערכת' };
 
+    const trimmedCode = inviteCode.trim();
+
     try {
-        // Find family by invite code first
+        // FIRST: Check if it's a guest invite code (in 'invites' collection)
+        const inviteDoc = await getDoc(doc(db, 'invites', trimmedCode));
+        
+        if (inviteDoc.exists()) {
+            const inviteData = inviteDoc.data();
+            
+            // Check if invite is expired
+            const expiresAt = inviteData.expiresAt?.toDate ? inviteData.expiresAt.toDate() : new Date(inviteData.expiresAt);
+            if (new Date() > expiresAt) {
+                return { success: false, message: 'קוד ההזמנה פג תוקף' };
+            }
+
+            // Check if invite was already used
+            if (inviteData.used) {
+                return { success: false, message: 'קוד ההזמנה כבר נוצל' };
+            }
+
+            // SECURITY: Prevent self-invite
+            if (inviteData.createdBy === userId) {
+                return { success: false, message: 'לא ניתן להצטרף להזמנה שיצרת בעצמך' };
+            }
+
+            const { familyId, childId } = inviteData;
+
+            // SECURITY: Verify family exists
+            const familyDoc = await getDoc(doc(db, 'families', familyId));
+            if (!familyDoc.exists()) {
+                return { success: false, message: 'המשפחה לא נמצאה' };
+            }
+
+            const familyData = familyDoc.data();
+
+            // SECURITY: Check if already a member
+            if (familyData.members?.[userId]) {
+                return { success: false, message: 'אתה כבר חלק מהמשפחה הזו' };
+            }
+
+            // Check if in a different family - leave it first
+            const existingFamily = await getMyFamily();
+            if (existingFamily && existingFamily.id !== familyId) {
+                await leaveFamily();
+            }
+
+            // Add guest to family with limited access (24 hours)
+            const expiresAt24h = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            
+            await updateDoc(doc(db, 'families', familyId), {
+                [`members.${userId}`]: {
+                    role: 'guest',
+                    name: user.displayName || 'אורח',
+                    email: user.email || '',
+                    joinedAt: serverTimestamp(),
+                    accessLevel: 'actions_only',
+                    historyAccessDays: 1, // Only 24 hours of history
+                    invitedBy: inviteData.createdBy,
+                    expiresAt: expiresAt24h,
+                }
+            });
+
+            // Update user's guestAccess field
+            await setDoc(doc(db, 'users', userId), {
+                guestAccess: {
+                    [familyId]: {
+                        role: 'guest',
+                        childId,
+                        accessLevel: 'actions_only',
+                        joinedAt: serverTimestamp(),
+                        expiresAt: expiresAt24h,
+                    }
+                }
+            }, { merge: true });
+
+            // Mark invite as used
+            await updateDoc(doc(db, 'invites', trimmedCode), {
+                used: true,
+                usedBy: userId,
+                usedAt: serverTimestamp(),
+            });
+
+            // Get child name for success message
+            const childDoc = await getDoc(doc(db, 'babies', childId));
+            const childName = childDoc.exists() ? childDoc.data()?.name || 'התינוק' : 'התינוק';
+
+            return {
+                success: true,
+                message: `הצטרפת כאורח ל${childName}! גישה ל-24 שעות בלבד 🎉`,
+                family: { id: familyId, ...familyData } as Family,
+                isGuest: true,
+            };
+        }
+
+        // SECOND: Check if it's a family invite code (in 'families' collection)
         const q = query(
             collection(db, 'families'),
-            where('inviteCode', '==', inviteCode.trim())
+            where('inviteCode', '==', trimmedCode)
         );
         const snapshot = await getDocs(q);
 
@@ -179,8 +272,6 @@ export const joinFamily = async (inviteCode: string, role: FamilyRole = 'member'
             return { success: false, message: 'אתה כבר חלק מהמשפחה הזו' };
         }
 
-
-
         // Check if in a different family - leave it first
         const existingFamily = await getMyFamily();
         if (existingFamily && existingFamily.id !== familyId) {
@@ -188,14 +279,14 @@ export const joinFamily = async (inviteCode: string, role: FamilyRole = 'member'
             await leaveFamily();
         }
 
-        // Add user to new family
+        // Add user to new family with full access
         await updateDoc(doc(db, 'families', familyId), {
             [`members.${userId}`]: {
                 role,
                 name: user.displayName || 'משתמש חדש',
                 email: user.email || '',
                 joinedAt: serverTimestamp(),
-                accessLevel: role === 'guest' ? 'actions_only' : 'full',
+                accessLevel: 'full', // Full access to all children
             }
         });
 
@@ -206,8 +297,9 @@ export const joinFamily = async (inviteCode: string, role: FamilyRole = 'member'
 
         return {
             success: true,
-            message: `הצטרפת למשפחת ${familyData.babyName}! 🎉`,
-            family: { id: familyId, ...familyData }
+            message: `הצטרפת למשפחת ${familyData.babyName}! גישה מלאה לכל הילדים 🎉`,
+            family: { id: familyId, ...familyData },
+            isGuest: false,
         };
     } catch (error) {
         if (__DEV__) console.log('Error joining family:', error);

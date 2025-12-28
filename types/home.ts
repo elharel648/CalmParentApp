@@ -14,6 +14,7 @@ export interface ChildProfile {
 export interface WeatherData {
     temp: number;
     city: string;
+    icon?: string;
     recommendation: string;
     loading: boolean;
     error?: string;
