@@ -80,8 +80,6 @@
     <string>אפשר כניסה מהירה ומאובטחת באמצעות Face ID</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>האפליקציה צריכה גישה למיקום כדי למצוא בייביסיטרים באזור שלך</string>
-    <key>NSLocationAlwaysUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your location</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>האפליקציה צריכה גישה למיקום כדי למצוא בייביסיטרים באזור שלך</string>
     <key>NSMicrophoneUsageDescription</key>
