@@ -38,7 +38,6 @@
           }
         }
       ],
-      "expo-live-activity",
       [
         "react-native-fbsdk-next",
         {
