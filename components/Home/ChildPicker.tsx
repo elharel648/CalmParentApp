@@ -206,8 +206,18 @@ const ChildPicker: React.FC<ChildPickerProps> = ({ onChildSelect, onAddChild, on
                                     <TouchableOpacity
                                         style={styles.addOptionRow}
                                         onPress={() => {
-                                            setDropdownOpen(false);
-                                            onJoinWithCode?.();
+                                            try {
+                                                console.log('🔗 Join with code button pressed');
+                                                setDropdownOpen(false);
+                                                console.log('🔗 Dropdown closed, waiting before opening JoinModal...');
+                                                // Add delay to prevent modal collision
+                                                setTimeout(() => {
+                                                    console.log('🔗 Now calling onJoinWithCode');
+                                                    onJoinWithCode?.();
+                                                }, 300);
+                                            } catch (error) {
+                                                console.error('🔗 CRASH ERROR:', error);
+                                            }
                                         }}
                                         activeOpacity={0.7}
                                     >

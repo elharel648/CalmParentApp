@@ -87,6 +87,20 @@
                     "order": "DESCENDING"
                 }
             ]
+        },
+        {
+            "collectionGroup": "growthMeasurements",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "babyId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "date",
+                    "order": "DESCENDING"
+                }
+            ]
         }
     ],
     "fieldOverrides": []

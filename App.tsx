@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
-import { NavigationContainer, useNavigationState } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -118,25 +118,28 @@ function MainAppNavigator() {
 
   return (
     <Tab.Navigator
+      id="MainTabs"
       initialRouteName="בית"
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSecondary,
-        tabBarBackground: () => <LiquidGlassTabBar isDarkMode={isDarkMode} activeTabIndex={0} tabCount={4} />,
+        tabBarBackground: () => <LiquidGlassTabBar isDarkMode={isDarkMode} />,
         tabBarStyle: {
           position: 'absolute',
-          bottom: 28,
-          left: 16,
-          right: 16,
-          elevation: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: Platform.OS === 'ios' ? 90 : 72,
           backgroundColor: 'transparent',
-          borderRadius: 32,
-          height: 72,
           borderTopWidth: 0,
-          overflow: 'visible',
-        }
+          elevation: 0,
+          shadowOpacity: 0,
+        },
+        tabBarItemStyle: {
+          backgroundColor: 'transparent',
+        },
       }}
     >
       {/* Account - always visible (renamed from Settings) */}
@@ -173,7 +176,7 @@ function MainAppNavigator() {
 
 function HomeStackScreen() {
   return (
-    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+    <HomeStack.Navigator id="HomeStack" screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="Home" component={HomeScreen} />
       <HomeStack.Screen name="CreateBaby" component={CreateBabyScreen} />
       <HomeStack.Screen name="Notifications" component={NotificationsScreen} />
@@ -184,7 +187,7 @@ function HomeStackScreen() {
 // Account Stack Navigator
 function AccountStackScreen() {
   return (
-    <AccountStack.Navigator screenOptions={{ headerShown: false }}>
+    <AccountStack.Navigator id="AccountStack" screenOptions={{ headerShown: false }}>
       <AccountStack.Screen name="Account" component={SettingsScreen} />
       <AccountStack.Screen name="FullSettings" component={FullSettingsScreen} />
     </AccountStack.Navigator>
@@ -211,7 +214,7 @@ function CreateBabyScreen({ navigation }: any) {
 // ✅ Stack לבייביסיטר - מחבר את הרשימה, הפרופיל והצ'אט
 function BabysitterStackScreen() {
   return (
-    <BabysitterStack.Navigator screenOptions={{ headerShown: false }}>
+    <BabysitterStack.Navigator id="BabysitterStack" screenOptions={{ headerShown: false }}>
       <BabysitterStack.Screen name="SitterList" component={BabySitterScreen} />
       <BabysitterStack.Screen name="SitterProfile" component={SitterProfileScreen} />
       <BabysitterStack.Screen name="SitterRegistration" component={SitterRegistrationScreen} />

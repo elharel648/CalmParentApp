@@ -30,6 +30,7 @@ import { BarChart, LineChart, PieChart } from 'react-native-chart-kit';
 import { useActiveChild } from '../context/ActiveChildContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useBabyProfile } from '../hooks/useBabyProfile';
 import * as Haptics from 'expo-haptics';
 import ChildPicker from '../components/Home/ChildPicker';
 import { LiquidGlassBackground } from '../components/LiquidGlass';
@@ -37,6 +38,9 @@ import { AIInsightHeader, PremiumStatCard, SkiaBezierChart, MilestoneBadge } fro
 import { LiquidGlassLineChart, LiquidGlassBarChart } from '../components/Reports/LiquidGlassCharts';
 import GlassBarChartPerfect from '../components/Reports/GlassBarChart';
 import DetailedStatsScreen from '../components/Reports/DetailedStatsScreen';
+import DetailedGrowthScreen from '../components/Reports/DetailedGrowthScreen';
+import GrowthStatCube from '../components/Reports/GrowthStatCube';
+import GrowthModal from '../components/Home/GrowthModal';
 import {
   PremiumInsightCard,
   AITipCard,
@@ -89,6 +93,19 @@ export default function ReportsScreen() {
   const { theme, isDarkMode } = useTheme();
   const { t } = useLanguage();
   const { activeChild } = useActiveChild();
+  const { baby } = useBabyProfile(activeChild?.childId);
+
+  // Calculate baby age in months
+  const babyAgeMonths = useMemo(() => {
+    if (!baby?.birthDate) return 6; // Default to 6 months if not set
+    // Handle both Firestore Timestamp and Date objects
+    const birthDate = baby.birthDate.seconds
+      ? new Date(baby.birthDate.seconds * 1000)
+      : new Date(baby.birthDate);
+    const now = new Date();
+    const months = Math.floor((now.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+    return isNaN(months) ? 6 : months;
+  }, [baby?.birthDate]);
 
   // State
   const [activeTab, setActiveTab] = useState<TabName>('summary');
@@ -119,6 +136,8 @@ export default function ReportsScreen() {
   // Stats Order
   const [statsOrder, setStatsOrder] = useState<StatKey[]>(DEFAULT_STATS_ORDER);
   const [showStatsEdit, setShowStatsEdit] = useState(false);
+  const [showGrowthModal, setShowGrowthModal] = useState(false);
+  const [showGrowthScreen, setShowGrowthScreen] = useState(false);
 
   // Load stats order
   useEffect(() => {
@@ -568,6 +587,18 @@ export default function ReportsScreen() {
   const [isSingleDayMode, setSingleDayMode] = useState(false);
   const [activePickerField, setActivePickerField] = useState<'start' | 'end' | null>(null);
 
+  // Temporary dates for modal - prevents continuous fetching while scrolling
+  const [tempStartDate, setTempStartDate] = useState(customStartDate);
+  const [tempEndDate, setTempEndDate] = useState(customEndDate);
+
+  // Sync temp dates when modal opens
+  useEffect(() => {
+    if (showRangeModal) {
+      setTempStartDate(customStartDate);
+      setTempEndDate(customEndDate);
+    }
+  }, [showRangeModal]);
+
   // Date Range Modal with inline calendar
   const DateRangeModal = () => (
     <Modal visible={showRangeModal} transparent animationType="fade">
@@ -579,8 +610,13 @@ export default function ReportsScreen() {
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>בחר תאריכים</Text>
             <TouchableOpacity onPress={() => {
+              // Commit temp dates to actual state
               if (isSingleDayMode) {
-                setCustomEndDate(customStartDate);
+                setCustomStartDate(tempStartDate);
+                setCustomEndDate(tempStartDate);
+              } else {
+                setCustomStartDate(tempStartDate);
+                setCustomEndDate(tempEndDate);
               }
               setTimeRange('custom');
               setShowRangeModal(false);
@@ -614,7 +650,7 @@ export default function ReportsScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Date Selection Buttons */}
+          {/* Date Selection Buttons - now showing temp dates */}
           {isSingleDayMode ? (
             <View style={styles.singleDatePicker}>
               <TouchableOpacity
@@ -623,7 +659,7 @@ export default function ReportsScreen() {
               >
                 <Calendar size={18} color="#6366F1" />
                 <Text style={[styles.datePickerValue, { color: theme.textPrimary }]}>
-                  {format(customStartDate, 'd MMMM yyyy', { locale: he })}
+                  {format(tempStartDate, 'd MMMM yyyy', { locale: he })}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -636,7 +672,7 @@ export default function ReportsScreen() {
                   onPress={() => setActivePickerField('start')}
                 >
                   <Text style={[styles.datePickerValue, { color: theme.textPrimary }]}>
-                    {format(customStartDate, 'd/M/yy')}
+                    {format(tempStartDate, 'd/M/yy')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -647,34 +683,34 @@ export default function ReportsScreen() {
                   onPress={() => setActivePickerField('end')}
                 >
                   <Text style={[styles.datePickerValue, { color: theme.textPrimary }]}>
-                    {format(customEndDate, 'd/M/yy')}
+                    {format(tempEndDate, 'd/M/yy')}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
-          {/* Inline Calendar */}
+          {/* Inline Calendar - uses temp dates to avoid continuous fetching */}
           {activePickerField && (
             <View style={styles.inlineCalendarContainer}>
               <DateTimePicker
-                value={activePickerField === 'start' ? customStartDate : customEndDate}
+                value={activePickerField === 'start' ? tempStartDate : tempEndDate}
                 mode="date"
                 display="inline"
                 onChange={(event, date) => {
                   if (date) {
                     if (activePickerField === 'start') {
-                      setCustomStartDate(date);
-                      if (!isSingleDayMode && date > customEndDate) {
-                        setCustomEndDate(date);
+                      setTempStartDate(date);
+                      if (!isSingleDayMode && date > tempEndDate) {
+                        setTempEndDate(date);
                       }
                     } else {
-                      setCustomEndDate(date);
+                      setTempEndDate(date);
                     }
                   }
                 }}
-                maximumDate={activePickerField === 'start' ? (isSingleDayMode ? new Date() : customEndDate) : new Date()}
-                minimumDate={activePickerField === 'end' ? customStartDate : undefined}
+                maximumDate={activePickerField === 'start' ? (isSingleDayMode ? new Date() : tempEndDate) : new Date()}
+                minimumDate={activePickerField === 'end' ? tempStartDate : undefined}
                 locale="he"
                 themeVariant="light"
                 accentColor="#6366F1"
@@ -749,7 +785,7 @@ export default function ReportsScreen() {
       contentContainerStyle={styles.tabContent}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      <Animated.View 
+      <Animated.View
         entering={FadeInUp.duration(500).delay(100).springify().damping(15)}
         style={[styles.statsGrid, { position: 'relative' }]}
       >
@@ -805,6 +841,12 @@ export default function ReportsScreen() {
           return null;
         })}
 
+        {/* Growth Cube with Sparkline */}
+        <GrowthStatCube
+          childId={activeChild?.childId}
+          onPress={() => setShowGrowthScreen(true)}
+        />
+
         <TouchableOpacity
           style={styles.editStatsBtn}
           onPress={() => setShowStatsEdit(true)}
@@ -815,7 +857,7 @@ export default function ReportsScreen() {
       </Animated.View>
 
       {/* Weekly Comparison - Enhanced */}
-      <Animated.View 
+      <Animated.View
         entering={FadeInUp.duration(500).delay(200).springify().damping(15)}
         style={[styles.comparisonSection, { backgroundColor: theme.card }]}
       >
@@ -853,7 +895,7 @@ export default function ReportsScreen() {
       </Animated.View>
 
       {/* Weekly Goals & Streaks - Enhanced */}
-      <Animated.View 
+      <Animated.View
         entering={FadeInUp.duration(500).delay(300).springify().damping(15)}
         style={[styles.goalsSection, { backgroundColor: theme.card }]}
       >
@@ -1107,11 +1149,11 @@ export default function ReportsScreen() {
         locations={[0, 0.3, 0.7, 1]}
         style={StyleSheet.absoluteFill}
       />
-      
+
       {/* Dot Pattern Texture */}
-      <Svg 
-        style={StyleSheet.absoluteFill} 
-        width={SCREEN_WIDTH} 
+      <Svg
+        style={StyleSheet.absoluteFill}
+        width={SCREEN_WIDTH}
         height={SCREEN_HEIGHT}
         preserveAspectRatio="none"
       >
@@ -1132,7 +1174,7 @@ export default function ReportsScreen() {
         </Defs>
         <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#dotPatternReports)" />
       </Svg>
-      
+
       {/* Radial Glow at Top */}
       <LinearGradient
         colors={isDarkMode
@@ -1147,7 +1189,7 @@ export default function ReportsScreen() {
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       {/* Header - Enhanced */}
-      <Animated.View 
+      <Animated.View
         entering={FadeInDown.duration(400).springify().damping(15)}
         style={[styles.header, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.7)', borderBottomColor: theme.border }]}
       >
@@ -1234,6 +1276,12 @@ export default function ReportsScreen() {
         currentOrder={statsOrder}
         onOrderChange={setStatsOrder}
       />
+
+      <GrowthModal
+        visible={showGrowthModal}
+        onClose={() => setShowGrowthModal(false)}
+        childId={activeChild?.childId}
+      />
     </View>
   );
 
@@ -1244,6 +1292,18 @@ export default function ReportsScreen() {
         onClose={() => setSelectedMetric(null)}
         metricType={selectedMetric}
         childId={activeChild?.childId || ''}
+      />
+    );
+  }
+
+  // If growth screen is selected, show the detailed growth screen
+  if (showGrowthScreen) {
+    return (
+      <DetailedGrowthScreen
+        onClose={() => setShowGrowthScreen(false)}
+        childId={activeChild?.childId || ''}
+        ageInMonths={babyAgeMonths}
+        gender={baby?.gender || 'boy'}
       />
     );
   }
@@ -1284,7 +1344,7 @@ const styles = StyleSheet.create({
 
   // Stats Grid - 2x2 Layout
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20, justifyContent: 'space-between' },
-  editStatsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 4 },
+  editStatsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end', marginTop: 4 },
   editStatsText: { fontSize: 13 },
   statCard: { width: (SCREEN_WIDTH - 52) / 2, padding: 16, borderRadius: 20, alignItems: 'flex-end', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
   statIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
@@ -1375,4 +1435,11 @@ const styles = StyleSheet.create({
   comparisonLabel: { fontSize: 12, marginBottom: 4 },
   comparisonValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   comparisonValue: { fontSize: 18, fontWeight: '700' },
+
+  // Growth Section
+  growthSection: { borderRadius: 20, padding: 20, marginTop: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
+  growthGrid: { flexDirection: 'row-reverse', justifyContent: 'space-around', gap: 12 },
+  growthItem: { alignItems: 'center', flex: 1 },
+  growthValue: { fontSize: 22, fontWeight: '700' },
+  growthLabel: { fontSize: 12, marginTop: 4 },
 });

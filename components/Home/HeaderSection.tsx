@@ -83,16 +83,31 @@ const HeaderSection = memo<HeaderSectionProps>(({
         const now = new Date();
         const diffMs = now.getTime() - birth.getTime();
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        if (diffDays < 30) {
+
+        // Special cases
+        if (diffDays === 0) {
+            return ''; // Don't show anything for day 0
+        }
+        if (diffDays === 1) {
+            return 'יום אחד';
+        }
+        if (diffDays < 7) {
             return `${diffDays} ימים`;
+        }
+        if (diffDays < 30) {
+            const weeks = Math.floor(diffDays / 7);
+            return weeks === 1 ? 'שבוע' : `${weeks} שבועות`;
         }
         const months = Math.floor(diffDays / 30);
         if (months < 12) {
-            return `${months} חודשים`;
+            return months === 1 ? 'חודש' : `${months} חודשים`;
         }
         const years = Math.floor(months / 12);
         const remainingMonths = months % 12;
-        return remainingMonths > 0 ? `${years} שנה ו-${remainingMonths} חודשים` : `${years} שנה`;
+        if (remainingMonths > 0) {
+            return `${years} ${years === 1 ? 'שנה' : 'שנים'} ו-${remainingMonths} חודשים`;
+        }
+        return `${years} ${years === 1 ? 'שנה' : 'שנים'}`;
     }, [profile.birthDate]);
 
     // Photo upload handler
@@ -197,7 +212,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
         };
 
         // Priority: Show supplements first if missing, then feed reminders
-        
+
         // 1. Vitamin D Reminder (Priority 1 - Always show if missing)
         if (!meds?.vitaminD) {
             cards.push({
@@ -237,7 +252,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
                     color: isOverdue ? '#EF4444' : '#F59E0B',
                     bgColor: isOverdue ? '#FEE2E2' : '#FEF3C7',
                     title: isOverdue ? t('notifications.feedReminder') : t('notifications.lastFeed'),
-                    subtitle: feedTime.hours > 0 
+                    subtitle: feedTime.hours > 0
                         ? t('time.hoursAgo', { count: feedTime.hours }) + ' ' + t('time.minutesAgo', { count: feedTime.mins })
                         : t('time.minutesAgo', { count: feedTime.mins }),
                     isUrgent: isOverdue,
@@ -323,7 +338,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
             <View style={styles.topRow}>
                 <View style={styles.greetingSection}>
                     <Text style={[styles.greetingLarge, { color: '#1C1C1E' }]}>
-                        {greeting}, {profile.name} <Text style={styles.greetingSubtitle}>({ageText})</Text>
+                        {greeting}, {profile.name}{ageText ? ` · ${ageText}` : ''}
                     </Text>
                 </View>
 
@@ -407,7 +422,7 @@ const HeaderSection = memo<HeaderSectionProps>(({
                     </TouchableOpacity>
                 </View>
             )}
-            
+
             {/* Single child - show add button inline */}
             {allChildren.length === 1 && (
                 <TouchableOpacity

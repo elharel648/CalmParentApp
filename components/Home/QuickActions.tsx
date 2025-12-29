@@ -429,31 +429,31 @@ const QuickActions = memo<QuickActionsProps>(({
                         </View>
                     </Animated.View>
 
-                    {/* Label */}
-                    <Text style={[styles.actionLabel, { color: theme.textPrimary }]} numberOfLines={2}>
+                {/* Label */}
+                <Text style={[styles.actionLabel, { color: theme.textPrimary }]} numberOfLines={2}>
                         {isActive ? getActionLabel(configKey as string, true) : getActionLabel(configKey as string, false)}
-                    </Text>
+                </Text>
 
                     {/* Time, Badge, or Last Time */}
-                    {activeTime && isActive ? (
-                        <View style={[styles.timerBadge, { backgroundColor: config.color }]}>
+                {activeTime && isActive ? (
+                    <View style={[styles.timerBadge, { backgroundColor: config.color }]}>
                             <Timer size={7} color="#fff" strokeWidth={2} />
-                            <Text style={styles.timerText}>{activeTime}</Text>
-                        </View>
-                    ) : lastTime ? (
-                        <Text style={[styles.subText, { color: theme.textSecondary }]}>
-                            {lastTime}
-                        </Text>
-                    ) : badge ? (
+                        <Text style={styles.timerText}>{activeTime}</Text>
+                    </View>
+                ) : lastTime ? (
+                    <Text style={[styles.subText, { color: theme.textSecondary }]}>
+                        {lastTime}
+                    </Text>
+                ) : badge ? (
                         <View style={[styles.badgeContainer, { backgroundColor: config.lightColor }]}>
                             <Text style={[styles.badgeText, { color: config.color }]}>
-                                {badge}
-                            </Text>
+                        {badge}
+                    </Text>
                         </View>
-                    ) : (
-                        <View style={styles.subTextPlaceholder} />
-                    )}
-                </TouchableOpacity>
+                ) : (
+                    <View style={styles.subTextPlaceholder} />
+                )}
+            </TouchableOpacity>
             </Animated.View>
         );
     };
@@ -482,35 +482,35 @@ const QuickActions = memo<QuickActionsProps>(({
 
             {/* Horizontal Slider */}
             <View style={styles.sliderWrapper}>
-                <ScrollView
-                    ref={scrollViewRef}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.sliderContent}
+            <ScrollView
+                ref={scrollViewRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.sliderContent}
                     bounces={true}
                     decelerationRate="fast"
-                >
+            >
                     {visibleActions.map((actionKey, index) => {
-                        const config = actionKey === 'supplements' && allTaken
-                            ? { ...ACTIONS[actionKey], icon: Check }
-                            : ACTIONS[actionKey];
-                        const handler = actionHandlers[actionKey];
+                    const config = actionKey === 'supplements' && allTaken
+                        ? { ...ACTIONS[actionKey], icon: Check }
+                        : ACTIONS[actionKey];
+                    const handler = actionHandlers[actionKey];
 
-                        return (
-                            <ActionButton
-                                key={actionKey}
-                                config={config}
+                    return (
+                        <ActionButton
+                            key={actionKey}
+                            config={config}
                                 configKey={actionKey}
-                                onPress={handler.onPress}
-                                isActive={handler.isActive}
-                                activeTime={handler.activeTime}
-                                lastTime={handler.lastTime}
-                                badge={handler.badge}
+                            onPress={handler.onPress}
+                            isActive={handler.isActive}
+                            activeTime={handler.activeTime}
+                            lastTime={handler.lastTime}
+                            badge={handler.badge}
                                 index={index}
-                            />
-                        );
-                    })}
-                </ScrollView>
+                        />
+                    );
+                })}
+            </ScrollView>
                 {/* Scroll Indicator - Show if more than 4 actions */}
                 {visibleActions.length > 4 && (
                     <View style={styles.scrollIndicator}>

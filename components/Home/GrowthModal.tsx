@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,42 +9,138 @@ import {
     ScrollView,
     Platform,
 } from 'react-native';
-import { X, TrendingUp, FileText, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { X, TrendingUp, FileText, ChevronDown, ChevronUp, Calendar, Trash2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format } from 'date-fns';
+import { he } from 'date-fns/locale';
 import { useTheme } from '../../context/ThemeContext';
 import { useBabyProfile } from '../../hooks/useBabyProfile';
+import { addGrowthMeasurement, updateGrowthMeasurement, deleteGrowthMeasurement, GrowthMeasurement } from '../../services/growthService';
+import { Timestamp } from 'firebase/firestore';
 
 interface GrowthModalProps {
     visible: boolean;
     onClose: () => void;
+    childId?: string;
+    // Edit mode props
+    editMeasurement?: GrowthMeasurement;
 }
 
-export default function GrowthModal({ visible, onClose }: GrowthModalProps) {
+export default function GrowthModal({ visible, onClose, childId, editMeasurement }: GrowthModalProps) {
     const { theme, isDarkMode } = useTheme();
-    const { baby, updateStats } = useBabyProfile();
+    const { baby, updateAllStats } = useBabyProfile(childId);
 
     const [weight, setWeight] = useState('');
     const [height, setHeight] = useState('');
     const [headCircumference, setHeadCircumference] = useState('');
     const [notes, setNotes] = useState('');
     const [showNotes, setShowNotes] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Date picker
+    const [measurementDate, setMeasurementDate] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+
+    const isEditMode = !!editMeasurement;
+
+    // Populate fields in edit mode
+    useEffect(() => {
+        if (editMeasurement) {
+            setWeight(editMeasurement.weight?.toString() || '');
+            setHeight(editMeasurement.height?.toString() || '');
+            setHeadCircumference(editMeasurement.headCircumference?.toString() || '');
+            setNotes(editMeasurement.notes || '');
+            setMeasurementDate(editMeasurement.date.toDate());
+            if (editMeasurement.notes) setShowNotes(true);
+        } else {
+            // Reset for new measurement
+            setMeasurementDate(new Date());
+        }
+    }, [editMeasurement, visible]);
 
     const handleSave = async () => {
+        if (isSaving) return;
+        setIsSaving(true);
+
         if (Platform.OS !== 'web') {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
 
-        // Save each field if it has a value
-        if (weight) await updateStats('weight', weight);
-        if (height) await updateStats('height', height);
-        if (headCircumference) await updateStats('head', headCircumference);
+        const historyData: {
+            weight?: number;
+            height?: number;
+            headCircumference?: number;
+            notes?: string;
+            date?: Timestamp;
+        } = {
+            date: Timestamp.fromDate(measurementDate),
+        };
 
-        // Reset fields
+        if (weight.trim().length > 0) {
+            historyData.weight = parseFloat(weight.trim());
+        }
+        if (height.trim().length > 0) {
+            historyData.height = parseFloat(height.trim());
+        }
+        if (headCircumference.trim().length > 0) {
+            historyData.headCircumference = parseFloat(headCircumference.trim());
+        }
+        if (notes.trim().length > 0) {
+            historyData.notes = notes.trim();
+        }
+
+        try {
+            if (isEditMode && editMeasurement) {
+                // Update existing measurement
+                await updateGrowthMeasurement(editMeasurement.id, historyData);
+            } else if (childId) {
+                // Add new measurement
+                await addGrowthMeasurement(childId, historyData);
+
+                // Also update baby.stats if this is the latest measurement (today)
+                const today = new Date();
+                if (measurementDate.toDateString() === today.toDateString()) {
+                    const statsToSave: { weight?: string; height?: string; headCircumference?: string } = {};
+                    if (weight.trim()) statsToSave.weight = weight.trim();
+                    if (height.trim()) statsToSave.height = height.trim();
+                    if (headCircumference.trim()) statsToSave.headCircumference = headCircumference.trim();
+                    if (Object.keys(statsToSave).length > 0) {
+                        await updateAllStats(statsToSave);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error saving measurement:', error);
+        }
+
+        resetAndClose();
+    };
+
+    const handleDelete = async () => {
+        if (!editMeasurement) return;
+
+        if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+
+        try {
+            await deleteGrowthMeasurement(editMeasurement.id);
+        } catch (error) {
+            console.error('Error deleting measurement:', error);
+        }
+
+        resetAndClose();
+    };
+
+    const resetAndClose = () => {
         setWeight('');
         setHeight('');
         setHeadCircumference('');
         setNotes('');
         setShowNotes(false);
+        setMeasurementDate(new Date());
+        setIsSaving(false);
         onClose();
     };
 
@@ -52,15 +148,18 @@ export default function GrowthModal({ visible, onClose }: GrowthModalProps) {
         if (Platform.OS !== 'web') {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
-        setWeight('');
-        setHeight('');
-        setHeadCircumference('');
-        setNotes('');
-        setShowNotes(false);
-        onClose();
+        resetAndClose();
+    };
+
+    const handleDateChange = (event: any, selectedDate?: Date) => {
+        setShowDatePicker(Platform.OS === 'ios');
+        if (selectedDate) {
+            setMeasurementDate(selectedDate);
+        }
     };
 
     const hasValues = weight || height || headCircumference;
+    const isToday = measurementDate.toDateString() === new Date().toDateString();
 
     return (
         <Modal
@@ -75,7 +174,9 @@ export default function GrowthModal({ visible, onClose }: GrowthModalProps) {
                     <View style={styles.header}>
                         <View style={{ width: 30 }} />
                         <View style={styles.headerContent}>
-                            <Text style={[styles.title, { color: theme.textPrimary }]}>מעקב גדילה</Text>
+                            <Text style={[styles.title, { color: theme.textPrimary }]}>
+                                {isEditMode ? 'עריכת מדידה' : 'מעקב גדילה'}
+                            </Text>
                             <TrendingUp size={18} color="#10B981" strokeWidth={2.5} />
                         </View>
                         <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
@@ -84,6 +185,28 @@ export default function GrowthModal({ visible, onClose }: GrowthModalProps) {
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false}>
+                        {/* Date Picker Row */}
+                        <TouchableOpacity
+                            style={[styles.dateRow, { backgroundColor: isDarkMode ? '#2C2C2E' : '#F5F5F5' }]}
+                            onPress={() => setShowDatePicker(true)}
+                        >
+                            <Calendar size={18} color={theme.textSecondary} />
+                            <Text style={[styles.dateText, { color: theme.textPrimary }]}>
+                                {isToday ? 'היום' : format(measurementDate, 'd בMMMM yyyy', { locale: he })}
+                            </Text>
+                            <ChevronDown size={16} color={theme.textTertiary} />
+                        </TouchableOpacity>
+
+                        {showDatePicker && (
+                            <DateTimePicker
+                                value={measurementDate}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={handleDateChange}
+                                maximumDate={new Date()}
+                            />
+                        )}
+
                         {/* Weight Row */}
                         <View style={styles.row}>
                             <Text style={[styles.label, { color: theme.textPrimary }]}>משקל</Text>
@@ -177,11 +300,25 @@ export default function GrowthModal({ visible, onClose }: GrowthModalProps) {
                         <TouchableOpacity
                             style={[styles.saveBtn, { opacity: !hasValues ? 0.5 : 1 }]}
                             onPress={handleSave}
-                            disabled={!hasValues}
+                            disabled={!hasValues || isSaving}
                             activeOpacity={0.8}
                         >
-                            <Text style={styles.saveBtnText}>שמור מדידה</Text>
+                            <Text style={styles.saveBtnText}>
+                                {isSaving ? 'שומר...' : isEditMode ? 'עדכן מדידה' : 'שמור מדידה'}
+                            </Text>
                         </TouchableOpacity>
+
+                        {/* Delete Button (Edit Mode) */}
+                        {isEditMode && (
+                            <TouchableOpacity
+                                style={styles.deleteBtn}
+                                onPress={handleDelete}
+                                activeOpacity={0.8}
+                            >
+                                <Trash2 size={16} color="#EF4444" />
+                                <Text style={styles.deleteBtnText}>מחק מדידה</Text>
+                            </TouchableOpacity>
+                        )}
                     </ScrollView>
                 </View>
             </View>
@@ -207,7 +344,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row-reverse',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 20,
     },
     headerContent: {
         flexDirection: 'row-reverse',
@@ -219,6 +356,19 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 18,
+        fontWeight: '600',
+    },
+    dateRow: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        padding: 12,
+        borderRadius: 12,
+        marginBottom: 16,
+    },
+    dateText: {
+        fontSize: 15,
         fontWeight: '600',
     },
     row: {
@@ -286,5 +436,18 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '700',
+    },
+    deleteBtn: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        paddingVertical: 14,
+        marginTop: 12,
+    },
+    deleteBtnText: {
+        color: '#EF4444',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });

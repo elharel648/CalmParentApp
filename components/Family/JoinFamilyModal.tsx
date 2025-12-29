@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { X, Users, LogIn } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { useFamily } from '../../hooks/useFamily';
 import { joinFamily } from '../../services/familyService';
 
 interface JoinFamilyModalProps {
@@ -29,6 +28,8 @@ export const JoinFamilyModal: React.FC<JoinFamilyModalProps> = ({
     const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    console.log('🔗 JoinFamilyModal RENDER - visible:', visible);
 
     const handleJoin = async () => {
         if (code.length !== 6) {

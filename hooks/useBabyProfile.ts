@@ -17,6 +17,7 @@ interface UseBabyProfileReturn {
     updatePhoto: (type: 'profile' | 'album', monthIndex?: number) => Promise<void>;
     updateBirthDate: (date: Date) => Promise<void>;
     updateStats: (type: 'weight' | 'height' | 'head', value: string) => Promise<void>;
+    updateAllStats: (stats: { weight?: string; height?: string; headCircumference?: string }) => Promise<void>;
     updateBasicInfo: (data: { name: string; gender: 'boy' | 'girl' | 'other'; birthDate: Date }) => Promise<void>;
     updateAlbumNote: (month: number, note: string) => Promise<void>;
 }
@@ -96,6 +97,31 @@ export const useBabyProfile = (childId?: string): UseBabyProfileReturn => {
 
         await updateBabyData(baby.id, updates);
         setBaby(prev => prev ? { ...prev, stats: updates.stats } : null);
+    }, [baby?.id, baby?.stats]);
+
+    // Update all stats in one call to avoid race condition
+    const updateAllStats = useCallback(async (newStats: { weight?: string; height?: string; headCircumference?: string }) => {
+        if (!baby?.id) {
+            console.log('❌ updateAllStats: No baby.id');
+            return;
+        }
+
+        if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+
+        const currentStats = baby.stats || {};
+        const mergedStats: GrowthStats = {
+            ...currentStats,
+            ...(newStats.weight !== undefined && { weight: newStats.weight }),
+            ...(newStats.height !== undefined && { height: newStats.height }),
+            ...(newStats.headCircumference !== undefined && { headCircumference: newStats.headCircumference }),
+        };
+
+        console.log('📤 updateAllStats saving:', mergedStats);
+        await updateBabyData(baby.id, { stats: mergedStats });
+        console.log('✅ updateAllStats successful');
+        setBaby(prev => prev ? { ...prev, stats: mergedStats } : null);
     }, [baby?.id, baby?.stats]);
 
     const updateBasicInfo = useCallback(async (data: { name: string; gender: 'boy' | 'girl' | 'other'; birthDate: Date }) => {
@@ -281,6 +307,7 @@ export const useBabyProfile = (childId?: string): UseBabyProfileReturn => {
         updatePhoto,
         updateBirthDate,
         updateStats,
+        updateAllStats,
         updateBasicInfo,
         updateAlbumNote,
     };

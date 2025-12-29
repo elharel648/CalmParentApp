@@ -163,10 +163,10 @@ export const joinFamily = async (inviteCode: string, role: FamilyRole = 'member'
     try {
         // FIRST: Check if it's a guest invite code (in 'invites' collection)
         const inviteDoc = await getDoc(doc(db, 'invites', trimmedCode));
-        
+
         if (inviteDoc.exists()) {
             const inviteData = inviteDoc.data();
-            
+
             // Check if invite is expired
             const expiresAt = inviteData.expiresAt?.toDate ? inviteData.expiresAt.toDate() : new Date(inviteData.expiresAt);
             if (new Date() > expiresAt) {
@@ -206,7 +206,7 @@ export const joinFamily = async (inviteCode: string, role: FamilyRole = 'member'
 
             // Add guest to family with limited access (24 hours)
             const expiresAt24h = new Date(Date.now() + 24 * 60 * 60 * 1000);
-            
+
             await updateDoc(doc(db, 'families', familyId), {
                 [`members.${userId}`]: {
                     role: 'guest',
@@ -275,7 +275,6 @@ export const joinFamily = async (inviteCode: string, role: FamilyRole = 'member'
         // Check if in a different family - leave it first
         const existingFamily = await getMyFamily();
         if (existingFamily && existingFamily.id !== familyId) {
-            // Leave current family silently
             await leaveFamily();
         }
 
@@ -301,9 +300,9 @@ export const joinFamily = async (inviteCode: string, role: FamilyRole = 'member'
             family: { id: familyId, ...familyData },
             isGuest: false,
         };
-    } catch (error) {
-        if (__DEV__) console.log('Error joining family:', error);
-        return { success: false, message: 'שגיאה בהצטרפות למשפחה' };
+    } catch (error: any) {
+        if (__DEV__) console.log('Error joining family:', error?.code, error?.message);
+        return { success: false, message: `שגיאה בהצטרפות למשפחה: ${error?.code || error?.message || 'unknown'}` };
     }
 };
 

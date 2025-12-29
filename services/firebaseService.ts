@@ -109,24 +109,47 @@ export const getChildProfile = async (userId: string): Promise<ChildProfile | nu
 export const saveEventToFirebase = async (userId: string, childId: string, data: any) => {
   try {
     const eventsRef = collection(db, EVENTS_COLLECTION);
-    const timestamp = data.timestamp ? (data.timestamp instanceof Date ? Timestamp.fromDate(data.timestamp) : data.timestamp) : new Date();
+
+    // Handle timestamp conversion carefully
+    let timestamp: Timestamp;
+    if (data.timestamp instanceof Timestamp) {
+      timestamp = data.timestamp;
+    } else if (data.timestamp instanceof Date) {
+      timestamp = Timestamp.fromDate(data.timestamp);
+    } else if (data.timestamp) {
+      // Could be a number or string - try to convert
+      timestamp = Timestamp.fromDate(new Date(data.timestamp));
+    } else {
+      timestamp = Timestamp.now();
+    }
 
     // Get current user info for reporter badge
     const currentUser = auth.currentUser;
     const reporterName = currentUser?.displayName || 'אנונימי';
     const reporterPhotoUrl = currentUser?.photoURL || null;
 
-    const docRef = await addDoc(eventsRef, {
+    // Remove undefined values from data to avoid Firestore errors
+    const cleanData = Object.fromEntries(
+      Object.entries(data).filter(([_, v]) => v !== undefined)
+    );
+
+    const eventData = {
       userId,
       childId, // 🔑 קריטי לשיתוף ולריבוי ילדים
       creatorId: userId, // 🔑 נדרש עבור security rules
       reporterName, // 👤 שם המדווח
       reporterPhotoUrl, // 📸 תמונת המדווח
-      ...data,
+      ...cleanData,
       timestamp
-    });
+    };
+
+    await addDoc(eventsRef, eventData);
     return true;
-  } catch (error) {
+  } catch (error: any) {
+    if (__DEV__) {
+      console.log('saveEventToFirebase error:', error?.code);
+      console.log('saveEventToFirebase error message:', error?.message);
+    }
     throw error;
   }
 };
@@ -178,9 +201,10 @@ export const getLastEvent = async (childId: string, eventType: 'food' | 'sleep' 
   }
 };
 
-// 💡 Query ONLY by childId - shows TODAY's events only for daily timeline
+// 💡 Query ONLY by childId - shows events for daily timeline
 // ⚡ OPTIMIZED: Server-side ordering and date filter
 // 🎯 Guest Support: If historyAccessDays is provided, filter to last N days (e.g., 1 = 24 hours)
+// 🏠 Family Members: Show last 7 days by default
 export const getRecentHistory = async (childId: string, _creatorId?: string, historyAccessDays?: number) => {
   if (!childId) {
     return [];
@@ -191,15 +215,14 @@ export const getRecentHistory = async (childId: string, _creatorId?: string, his
 
     // Calculate start time based on access level
     let startTime: Date;
+    const now = new Date();
+
     if (historyAccessDays && historyAccessDays > 0) {
-      // Guest: Only last 24 hours (1 day)
-      const now = new Date();
+      // Guest: Only last N days (e.g., 1 day = 24 hours)
       startTime = new Date(now.getTime() - historyAccessDays * 24 * 60 * 60 * 1000);
     } else {
-      // Family/Member: Start of today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      startTime = today;
+      // Family/Member: Show last 7 days by default
+      startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     }
 
     const startTimestamp = Timestamp.fromDate(startTime);
@@ -210,7 +233,7 @@ export const getRecentHistory = async (childId: string, _creatorId?: string, his
       where('childId', '==', childId),
       where('timestamp', '>=', startTimestamp),
       orderBy('timestamp', 'desc'),
-      limit(50) // Allow more events for a single day
+      limit(100) // Increased limit for more history
     );
 
     const snapshot = await getDocs(q);

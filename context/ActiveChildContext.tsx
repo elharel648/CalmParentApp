@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { auth, db } from '../services/firebaseConfig';
 import { doc, onSnapshot, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { AccessLevel, FamilyRole } from '../services/familyService';
@@ -42,6 +42,15 @@ export const ActiveChildProvider: React.FC<ActiveChildProviderProps> = ({ childr
     const [activeChild, setActiveChildState] = useState<ActiveChild | null>(null);
     const [allChildren, setAllChildren] = useState<ActiveChild[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Ref to track activeChild without causing refreshChildren to recreate
+    // This fixes the infinite loop when joining with code
+    const activeChildRef = useRef<ActiveChild | null>(null);
+
+    // Keep ref in sync with state
+    useEffect(() => {
+        activeChildRef.current = activeChild;
+    }, [activeChild]);
 
     // Computed permissions based on current role AND having a child profile
     // Hide tabs if: (1) user is a guest, OR (2) user has no baby profiles
@@ -162,8 +171,10 @@ export const ActiveChildProvider: React.FC<ActiveChildProviderProps> = ({ childr
             setAllChildren(childrenList);
 
             // Set active child to first one if not already set
-            if (childrenList.length > 0 && !activeChild) {
+            // Using ref to avoid infinite loop (ref doesn't cause callback recreation)
+            if (childrenList.length > 0 && !activeChildRef.current) {
                 setActiveChildState(childrenList[0]);
+                activeChildRef.current = childrenList[0];
             }
 
         } catch (error) {
@@ -171,7 +182,7 @@ export const ActiveChildProvider: React.FC<ActiveChildProviderProps> = ({ childr
         } finally {
             setIsLoading(false);
         }
-    }, [activeChild]);
+    }, []); // Empty deps - uses ref instead of state to avoid infinite loop
 
     // Listen to auth state and refresh
     useEffect(() => {

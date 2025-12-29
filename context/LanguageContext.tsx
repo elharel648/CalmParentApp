@@ -18,7 +18,7 @@ const translations: Record<Language, Record<string, string>> = {
     'common.loading': 'טוען...',
     'common.error': 'שגיאה',
     'common.retry': 'נסה שוב',
-    
+
     // Home Screen
     'home.greeting.morning': 'בוקר טוב',
     'home.greeting.afternoon': 'צהריים טובים',
@@ -27,7 +27,7 @@ const translations: Record<Language, Record<string, string>> = {
     'home.quickActions': 'פעולות מהירות',
     'home.dailyTimeline': 'סדר היום',
     'home.shareSummary': 'שתף סיכום יומי',
-    
+
     // Stats
     'stats.title': 'סטטיסטיקות',
     'stats.feedings': 'האכלות',
@@ -37,13 +37,13 @@ const translations: Record<Language, Record<string, string>> = {
     'stats.editOrder': 'ערוך סדר',
     'stats.comparison': 'השוואה לשבוע שעבר',
     'stats.goals': 'יעדים שבועיים',
-    
+
     // Settings
     'settings.language': 'שפה',
     'settings.selectLanguage': 'בחירת שפה',
     'settings.hebrew': 'עברית',
     'settings.english': 'English',
-    
+
     // Notifications
     'notifications.feedReminder': 'הגיע הזמן להאכיל!',
     'notifications.lastFeed': 'האכלה אחרונה',
@@ -51,18 +51,21 @@ const translations: Record<Language, Record<string, string>> = {
     'notifications.notYetToday': 'עדיין לא תועד היום',
     'notifications.vitaminD': 'ויטמין D',
     'notifications.iron': 'ברזל',
-    
+
     // Timeline
     'timeline.empty': 'אין אירועים להצגה',
     'timeline.loading': 'טוען סדר יום...',
-    
+
     // Time
     'time.now': 'עכשיו',
     'time.minutesAgo': 'לפני {count} דקות',
     'time.hoursAgo': 'לפני {count} שעות',
     'time.daysAgo': 'לפני {count} ימים',
     'time.yesterday': 'אתמול',
-    
+    'time.every': 'כל',
+    'time.hours': 'שעות',
+    'time.at': 'בשעה',
+
     // Quick Actions
     'actions.food': 'אוכל',
     'actions.sleep': 'שינה',
@@ -80,13 +83,13 @@ const translations: Record<Language, Record<string, string>> = {
     'actions.custom': 'הוספה',
     'actions.active.food': 'מאכילה',
     'actions.active.sleep': 'ישנ/ה',
-    
+
     // Age
     'age.days': '{count} ימים',
     'age.months': '{count} חודשים',
     'age.years': '{count} שנה',
     'age.yearsMonths': '{count} שנה ו-{months} חודשים',
-    
+
     // Stats Details
     'stats.comparison.yesterday': 'השוואה לאתמול',
     'stats.comparison.lastWeek': 'השוואה לשבוע שעבר',
@@ -95,50 +98,52 @@ const translations: Record<Language, Record<string, string>> = {
     'stats.goals.weekly': 'יעדים שבועיים',
     'stats.goals.monthly': 'יעדים חודשיים',
     'stats.streak': '{count} ימים רצופים',
-    
+
     // Tools
     'tools.title': 'ארגז כלים',
     'tools.sleepCalculator': 'מחשבון שינה',
     'tools.sleepCalculator.subtitle': 'מתי להשכיב לישון?',
     'tools.checklist': 'צ\'קליסט הרגעה',
     'tools.checklist.subtitle': 'תינוק בוכה? בוא נבדוק',
-    
+
     // Account
     'account.title': 'חשבון',
     'account.family': 'משפחה',
     'account.inviteFamily': 'הזמן למשפחה',
     'account.inviteFamily.subtitle': 'קוד לגישה מלאה לכל הילדים',
+    'account.createFamily': 'צור משפחה',
+    'account.createFamily.subtitle': 'התחל לשתף עם בן/בת הזוג',
     'account.inviteGuest': 'הזמן אורח',
     'account.inviteGuest.subtitle': 'קוד לגישה ל-24 שעות בלבד',
     'account.joinWithCode': 'הצטרף עם קוד',
     'account.joinWithCode.subtitle': 'המערכת מזהה אוטומטית את סוג הקוד',
-    
+
     // Empty States
     'empty.noChild': 'בחר ילד לצפייה בסטטיסטיקות',
     'empty.noEvents': 'אין אירועים להצגה',
-    
+
     // Date/Time
     'date.today': 'היום',
     'date.yesterday': 'אתמול',
     'date.custom': 'מותאם',
     'date.range': '{start} - {end}',
-    
+
     // Feed Types
     'feed.bottle': 'בקבוק',
     'feed.breast': 'הנקה',
     'feed.pumping': 'שאיבה',
     'feed.solids': 'מוצקים',
     'feed.amount': '{amount} מ"ל',
-    
+
     // Sleep
     'sleep.duration': '{hours} שע\' {minutes} דק\'',
     'sleep.minutes': '{minutes} דקות',
-    
+
     // Diaper
     'diaper.wet': 'רטוב',
     'diaper.dirty': 'מלוכלך',
     'diaper.mixed': 'מעורב',
-    
+
     // Tracking Modal
     'tracking.food.title': 'תיעוד אוכל',
     'tracking.sleep.title': 'תיעוד שינה',
@@ -165,7 +170,7 @@ const translations: Record<Language, Record<string, string>> = {
     'tracking.whatHappened': 'מה היה?',
     'tracking.both': 'שניהם',
     'tracking.saveError': 'לא ניתן לשמור את הנתונים. אנא נסה שנית.',
-    
+
     // Account/Settings
     'account.editFamilyName': 'ערוך שם משפחה',
     'account.enterNewFamilyName': 'הזן שם חדש למשפחה',
@@ -184,7 +189,7 @@ const translations: Record<Language, Record<string, string>> = {
     'account.deleteAccount': 'מחיקת חשבון',
     'account.deleteAccountWarning': 'פעולה זו בלתי הפיכה',
     'account.theChild': 'הילד',
-    
+
     // Days of week
     'weekday.sun': 'א',
     'weekday.mon': 'ב',
@@ -193,7 +198,7 @@ const translations: Record<Language, Record<string, string>> = {
     'weekday.thu': 'ה',
     'weekday.fri': 'ו',
     'weekday.sat': 'ש',
-    
+
     // Premium Features
     'premium.detailedReports': 'דוחות מפורטים ותובנות חכמות',
     'premium.exportData': 'ייצוא נתונים ל-PDF ואקסל',
@@ -207,7 +212,7 @@ const translations: Record<Language, Record<string, string>> = {
     'premium.members': 'חברים',
     'premium.familyOf': 'משפחת',
     'account.myUser': 'המשתמש שלי',
-    
+
     // Tracking Modal Additional
     'tracking.notSpecified': 'לא צוין',
     'tracking.ml': 'מ"ל',
@@ -222,7 +227,7 @@ const translations: Record<Language, Record<string, string>> = {
     'tracking.enterAmount': 'הזן כמות',
     'tracking.example': 'לדוגמה',
     'tracking.forExample': 'למשל',
-    
+
     // Settings Screen
     'settings.title': 'הגדרות',
     'settings.notifications': 'התראות ותזכורות',
@@ -246,7 +251,7 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.logout': 'התנתקות',
     'settings.sendMessage': 'שלח הודעה',
     'settings.hours': 'שעות',
-    
+
     // Alerts
     'alerts.notAvailable': 'לא זמין',
     'alerts.biometricNotSupported': 'המכשיר לא תומך ב-Face ID/Touch ID או שלא הוגדר קוד גישה.',
@@ -276,7 +281,7 @@ const translations: Record<Language, Record<string, string>> = {
     'alerts.deleteAccountError': 'אירעה שגיאה במחיקת החשבון. נסה שוב מאוחר יותר.',
     'alerts.confirm': 'אישור',
     'alerts.lastUpdated': 'עדכון אחרון: דצמבר 2024',
-    
+
     // Privacy Policy
     'privacy.intro': '1. מבוא',
     'privacy.collection': '2. איסוף מידע',
@@ -284,7 +289,7 @@ const translations: Record<Language, Record<string, string>> = {
     'privacy.security': '4. אבטחת מידע',
     'privacy.sharing': '5. שיתוף מידע',
     'privacy.contact': '6. יצירת קשר',
-    
+
     // Terms of Service
     'terms.agreement': '1. הסכמה לתנאים',
     'terms.serviceDescription': '2. תיאור השירות',
@@ -294,7 +299,7 @@ const translations: Record<Language, Record<string, string>> = {
     'terms.intellectualProperty': '6. קניין רוחני',
     'terms.changes': '7. שינויים בתנאים',
     'terms.contact': '8. יצירת קשר',
-    
+
     // Timeline
     'timeline.title': 'סדר היום',
     'timeline.noRecordsToday': 'אין תיעודים להיום',
@@ -309,7 +314,7 @@ const translations: Record<Language, Record<string, string>> = {
     'timeline.supplement': 'תוסף',
     'timeline.iron': 'ברזל',
     'timeline.probiotic': 'פרוביוטיקה',
-    
+
     // Header Section
     'header.galleryPermission': 'נדרשת הרשאה לגלריה',
     'header.addChild': 'הוסף ילד',
@@ -318,7 +323,7 @@ const translations: Record<Language, Record<string, string>> = {
     'header.registerNewChildSubtitle': 'צור פרופיל חדש לילד',
     'header.joinWithCode': 'הצטרפות עם קוד',
     'header.joinWithCodeSubtitle': 'קיבלת קוד מהשותף?',
-    
+
     // Share
     'share.message': 'היי! אני משתמש/ת ב-CalmParent וזה ממש עוזר לי לנהל את הטיפול בבייבי. ממליץ/ה בחום! 👶📱',
   },
@@ -332,7 +337,7 @@ const translations: Record<Language, Record<string, string>> = {
     'common.loading': 'Loading...',
     'common.error': 'Error',
     'common.retry': 'Retry',
-    
+
     // Home Screen
     'home.greeting.morning': 'Good Morning',
     'home.greeting.afternoon': 'Good Afternoon',
@@ -341,7 +346,7 @@ const translations: Record<Language, Record<string, string>> = {
     'home.quickActions': 'Quick Actions',
     'home.dailyTimeline': 'Daily Timeline',
     'home.shareSummary': 'Share Daily Summary',
-    
+
     // Stats
     'stats.title': 'Statistics',
     'stats.feedings': 'Feedings',
@@ -351,13 +356,13 @@ const translations: Record<Language, Record<string, string>> = {
     'stats.editOrder': 'Edit Order',
     'stats.comparison': 'Comparison to Last Week',
     'stats.goals': 'Weekly Goals',
-    
+
     // Settings
     'settings.language': 'Language',
     'settings.selectLanguage': 'Select Language',
     'settings.hebrew': 'עברית',
     'settings.english': 'English',
-    
+
     // Notifications
     'notifications.feedReminder': 'Time to Feed!',
     'notifications.lastFeed': 'Last Feeding',
@@ -365,11 +370,11 @@ const translations: Record<Language, Record<string, string>> = {
     'notifications.notYetToday': 'Not recorded today yet',
     'notifications.vitaminD': 'Vitamin D',
     'notifications.iron': 'Iron',
-    
+
     // Timeline
     'timeline.empty': 'No events to display',
     'timeline.loading': 'Loading timeline...',
-    
+
     // Time
     'time.now': 'Now',
     'time.minutesAgo': '{count} minutes ago',
@@ -377,7 +382,7 @@ const translations: Record<Language, Record<string, string>> = {
     'time.daysAgo': '{count} days ago',
     'time.yesterday': 'Yesterday',
     'time.at': 'at',
-    
+
     // Quick Actions
     'actions.food': 'Food',
     'actions.sleep': 'Sleep',
@@ -395,13 +400,13 @@ const translations: Record<Language, Record<string, string>> = {
     'actions.custom': 'Add',
     'actions.active.food': 'Feeding',
     'actions.active.sleep': 'Sleeping',
-    
+
     // Age
     'age.days': '{count} days',
     'age.months': '{count} months',
     'age.years': '{count} year',
     'age.yearsMonths': '{count} year and {months} months',
-    
+
     // Stats Details
     'stats.comparison.yesterday': 'Comparison to Yesterday',
     'stats.comparison.lastWeek': 'Comparison to Last Week',
@@ -410,50 +415,52 @@ const translations: Record<Language, Record<string, string>> = {
     'stats.goals.weekly': 'Weekly Goals',
     'stats.goals.monthly': 'Monthly Goals',
     'stats.streak': '{count} days streak',
-    
+
     // Tools
     'tools.title': 'Toolbox',
     'tools.sleepCalculator': 'Sleep Calculator',
     'tools.sleepCalculator.subtitle': 'When to put to sleep?',
     'tools.checklist': 'Calming Checklist',
     'tools.checklist.subtitle': 'Baby crying? Let\'s check',
-    
+
     // Account
     'account.title': 'Account',
     'account.family': 'Family',
     'account.inviteFamily': 'Invite to Family',
     'account.inviteFamily.subtitle': 'Code for full access to all children',
+    'account.createFamily': 'Create Family',
+    'account.createFamily.subtitle': 'Start sharing with your partner',
     'account.inviteGuest': 'Invite Guest',
     'account.inviteGuest.subtitle': 'Code for 24-hour access only',
     'account.joinWithCode': 'Join with Code',
     'account.joinWithCode.subtitle': 'System automatically detects code type',
-    
+
     // Empty States
     'empty.noChild': 'Select a child to view statistics',
     'empty.noEvents': 'No events to display',
-    
+
     // Date/Time
     'date.today': 'Today',
     'date.yesterday': 'Yesterday',
     'date.custom': 'Custom',
     'date.range': '{start} - {end}',
-    
+
     // Feed Types
     'feed.bottle': 'Bottle',
     'feed.breast': 'Breast',
     'feed.pumping': 'Pumping',
     'feed.solids': 'Solids',
     'feed.amount': '{amount} ml',
-    
+
     // Sleep
     'sleep.duration': '{hours}h {minutes}m',
     'sleep.minutes': '{minutes} minutes',
-    
+
     // Diaper
     'diaper.wet': 'Wet',
     'diaper.dirty': 'Dirty',
     'diaper.mixed': 'Mixed',
-    
+
     // Tracking Modal
     'tracking.food.title': 'Log Food',
     'tracking.sleep.title': 'Log Sleep',
@@ -480,7 +487,7 @@ const translations: Record<Language, Record<string, string>> = {
     'tracking.whatHappened': 'What happened?',
     'tracking.both': 'Both',
     'tracking.saveError': 'Could not save data. Please try again.',
-    
+
     // Account/Settings
     'account.editFamilyName': 'Edit Family Name',
     'account.enterNewFamilyName': 'Enter new family name',
@@ -499,7 +506,7 @@ const translations: Record<Language, Record<string, string>> = {
     'account.deleteAccount': 'Delete Account',
     'account.deleteAccountWarning': 'This action is irreversible',
     'account.theChild': 'The Child',
-    
+
     // Days of week
     'weekday.sun': 'S',
     'weekday.mon': 'M',
@@ -508,7 +515,7 @@ const translations: Record<Language, Record<string, string>> = {
     'weekday.thu': 'T',
     'weekday.fri': 'F',
     'weekday.sat': 'S',
-    
+
     // Premium Features
     'premium.detailedReports': 'Detailed reports and smart insights',
     'premium.exportData': 'Export data to PDF and Excel',
@@ -522,7 +529,7 @@ const translations: Record<Language, Record<string, string>> = {
     'premium.members': 'members',
     'premium.familyOf': 'Family of',
     'account.myUser': 'My User',
-    
+
     // Tracking Modal Additional
     'tracking.notSpecified': 'Not specified',
     'tracking.ml': 'ml',
@@ -537,7 +544,7 @@ const translations: Record<Language, Record<string, string>> = {
     'tracking.enterAmount': 'Enter amount',
     'tracking.example': 'For example',
     'tracking.forExample': 'For example',
-    
+
     // Settings Screen
     'settings.title': 'Settings',
     'settings.notifications': 'Notifications & Reminders',
@@ -561,7 +568,7 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.logout': 'Logout',
     'settings.sendMessage': 'Send Message',
     'settings.hours': 'hours',
-    
+
     // Alerts
     'alerts.notAvailable': 'Not Available',
     'alerts.biometricNotSupported': 'Device does not support Face ID/Touch ID or passcode is not set up.',
@@ -591,7 +598,7 @@ const translations: Record<Language, Record<string, string>> = {
     'alerts.deleteAccountError': 'An error occurred while deleting account. Please try again later.',
     'alerts.confirm': 'OK',
     'alerts.lastUpdated': 'Last Updated: December 2024',
-    
+
     // Privacy Policy
     'privacy.intro': '1. Introduction',
     'privacy.collection': '2. Information Collection',
@@ -599,7 +606,7 @@ const translations: Record<Language, Record<string, string>> = {
     'privacy.security': '4. Information Security',
     'privacy.sharing': '5. Information Sharing',
     'privacy.contact': '6. Contact',
-    
+
     // Terms of Service
     'terms.agreement': '1. Agreement to Terms',
     'terms.serviceDescription': '2. Service Description',
@@ -609,7 +616,7 @@ const translations: Record<Language, Record<string, string>> = {
     'terms.intellectualProperty': '6. Intellectual Property',
     'terms.changes': '7. Changes to Terms',
     'terms.contact': '8. Contact',
-    
+
     // Timeline
     'timeline.title': 'Daily Timeline',
     'timeline.noRecordsToday': 'No records for today',
@@ -624,7 +631,7 @@ const translations: Record<Language, Record<string, string>> = {
     'timeline.supplement': 'Supplement',
     'timeline.iron': 'Iron',
     'timeline.probiotic': 'Probiotic',
-    
+
     // Header Section
     'header.galleryPermission': 'Gallery permission required',
     'header.addChild': 'Add Child',
@@ -633,10 +640,10 @@ const translations: Record<Language, Record<string, string>> = {
     'header.registerNewChildSubtitle': 'Create a new child profile',
     'header.joinWithCode': 'Join with Code',
     'header.joinWithCodeSubtitle': 'Received a code from partner?',
-    
+
     // Share
     'share.message': 'Hey! I\'m using CalmParent and it really helps me manage baby care. Highly recommend! 👶📱',
-    
+
     // Time Labels
     'time.every': 'Every',
     'time.startTime': 'Start Time',
@@ -646,7 +653,7 @@ const translations: Record<Language, Record<string, string>> = {
     'time.hours': 'hours',
     'time.minute': 'minute',
     'time.minutes': 'minutes',
-    
+
     // Delete Account
     'account.deletePermanent': 'Permanent Account Deletion ⚠️',
     'account.deletePermanentWarning': 'This action is irreversible and will permanently delete all your data. Are you sure?',
@@ -656,7 +663,7 @@ const translations: Record<Language, Record<string, string>> = {
     'account.reauthRequired': 'Re-authentication Required',
     'account.reauthRequiredMessage': 'For security reasons, please logout and login again before deleting the account.',
     'account.logoutNow': 'Logout Now',
-    
+
     // Biometric
     'biometric.authenticate': 'Authenticate to enable biometric protection',
     'biometric.usePassword': 'Use Password',
@@ -733,13 +740,13 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
   // Translation function
   const t = useCallback((key: string, params?: Record<string, string | number>): string => {
     const translation = translations[language]?.[key] || key;
-    
+
     if (params) {
       return Object.entries(params).reduce((str, [paramKey, paramValue]) => {
         return str.replace(`{${paramKey}}`, String(paramValue));
       }, translation);
     }
-    
+
     return translation;
   }, [language]);
 

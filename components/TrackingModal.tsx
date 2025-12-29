@@ -25,7 +25,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
   const { theme, isDarkMode } = useTheme();
   const { t } = useLanguage();
   const foodTimerContext = useFoodTimer();
-  
+
   // Get translated TYPE_CONFIG
   const TYPE_CONFIG = {
     food: {
@@ -50,7 +50,8 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
 
   // --- Food States ---
   const [foodType, setFoodType] = useState<'bottle' | 'breast' | 'pumping' | 'solids'>('bottle');
-  const [amount, setAmount] = useState('');
+  const [bottleAmount, setBottleAmount] = useState('');
+  const [pumpingAmount, setPumpingAmount] = useState('');
   const [solidsFoodName, setSolidsFoodName] = useState('');
   const [foodNote, setFoodNote] = useState('');
 
@@ -87,7 +88,8 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
     if (visible) {
       // Reset local state only (not breastfeeding timer which should persist)
       setSubType(null);
-      setAmount('');
+      setBottleAmount('');
+      setPumpingAmount('');
       setSolidsFoodName('');
       setFoodNote('');
       // Note: breastfeeding and pumping timers use global context and should NOT be reset here
@@ -159,13 +161,13 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
 
     if (type === 'food') {
       if (foodType === 'bottle') {
-        data.amount = amount ? `${amount} ${t('tracking.ml')}` : t('tracking.notSpecified');
+        data.amount = bottleAmount ? `${bottleAmount} ${t('tracking.ml')}` : t('tracking.notSpecified');
         data.subType = 'bottle';
       } else if (foodType === 'breast') {
         data.note = `${t('tracking.leftColon')}: ${formatTime(leftTimer)} | ${t('tracking.rightColon')}: ${formatTime(rightTimer)}`;
         data.subType = 'breast';
       } else if (foodType === 'pumping') {
-        data.amount = amount ? `${amount} ${t('tracking.ml')}` : t('tracking.notSpecified');
+        data.amount = pumpingAmount ? `${pumpingAmount} ${t('tracking.ml')}` : t('tracking.notSpecified');
         data.note = pumpingTimer > 0 ? `${t('tracking.pumpingTime')}: ${formatTime(pumpingTimer)}` : undefined;
         data.subType = 'pumping';
       } else if (foodType === 'solids') {
@@ -287,7 +289,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
             ) : (leftTimer > 0 || rightTimer > 0) ? (
               <Text style={{ color: '#6366F1', fontSize: 12, fontWeight: '600' }}>{formatTime(leftTimer + rightTimer)}</Text>
             ) : (
-              <Baby size={22} color={foodType === 'breast' ? '#6366F1' : '#9CA3AF'} strokeWidth={1.5} />
+              <Baby size={22} color={foodType === 'breast' ? '#fff' : '#9CA3AF'} strokeWidth={1.5} />
             )}
           </View>
           <Text style={[styles.foodTabText, foodType === 'breast' && styles.activeFoodTabText]}>{t('tracking.breast')}</Text>
@@ -297,7 +299,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           onPress={() => { setFoodType('bottle'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <View style={styles.foodTabIconContainer}>
-            <Milk size={22} color={foodType === 'bottle' ? '#6366F1' : '#9CA3AF'} strokeWidth={1.5} />
+            <Milk size={22} color={foodType === 'bottle' ? '#fff' : '#9CA3AF'} strokeWidth={1.5} />
           </View>
           <Text style={[styles.foodTabText, foodType === 'bottle' && styles.activeFoodTabText]}>{t('tracking.bottle')}</Text>
         </TouchableOpacity>
@@ -306,7 +308,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
           onPress={() => { setFoodType('solids'); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <View style={styles.foodTabIconContainer}>
-            <Apple size={22} color={foodType === 'solids' ? '#6366F1' : '#9CA3AF'} strokeWidth={1.5} />
+            <Apple size={22} color={foodType === 'solids' ? '#fff' : '#9CA3AF'} strokeWidth={1.5} />
           </View>
           <Text style={[styles.foodTabText, foodType === 'solids' && styles.activeFoodTabText]}>{t('tracking.solids')}</Text>
         </TouchableOpacity>
@@ -320,7 +322,7 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
             ) : pumpingTimer > 0 ? (
               <Text style={{ color: '#6366F1', fontSize: 12, fontWeight: '600' }}>{formatTime(pumpingTimer)}</Text>
             ) : (
-              <Droplets size={22} color={foodType === 'pumping' ? '#6366F1' : '#9CA3AF'} strokeWidth={1.5} />
+              <Droplets size={22} color={foodType === 'pumping' ? '#fff' : '#9CA3AF'} strokeWidth={1.5} />
             )}
           </View>
           <Text style={[styles.foodTabText, foodType === 'pumping' && styles.activeFoodTabText]}>{t('tracking.pumping')}</Text>
@@ -433,8 +435,8 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
             <TouchableOpacity
               style={styles.amountBtn}
               onPress={() => {
-                const current = parseInt(amount) || 0;
-                if (current >= 5) setAmount((current - 5).toString());
+                const current = parseInt(bottleAmount) || 0;
+                if (current >= 5) setBottleAmount((current - 5).toString());
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
             >
@@ -454,26 +456,26 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
                       {
                         text: t('tracking.done'), onPress: (value: string) => {
                           const num = parseInt(value);
-                          if (!isNaN(num) && num >= 0) setAmount(num.toString());
+                          if (!isNaN(num) && num >= 0) setBottleAmount(num.toString());
                         }
                       },
                     ],
                     'plain-text',
-                    amount || '0',
+                    bottleAmount || '0',
                     'number-pad'
                   );
                 }
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.amountValue}>{amount || '0'}</Text>
+              <Text style={styles.amountValue}>{bottleAmount || '0'}</Text>
               <Text style={styles.amountUnit}>{t('tracking.ml')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.amountBtn}
               onPress={() => {
-                const current = parseInt(amount) || 0;
-                setAmount((current + 5).toString());
+                const current = parseInt(bottleAmount) || 0;
+                setBottleAmount((current + 5).toString());
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
             >
@@ -546,8 +548,8 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
               <TouchableOpacity
                 style={styles.pumpingAmountBtnLarge}
                 onPress={() => {
-                  const current = parseInt(amount) || 0;
-                  if (current >= 5) setAmount((current - 5).toString());
+                  const current = parseInt(pumpingAmount) || 0;
+                  if (current >= 5) setPumpingAmount((current - 5).toString());
                   if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
               >
@@ -567,26 +569,26 @@ export default function TrackingModal({ visible, type, onClose, onSave }: Tracki
                         {
                           text: t('tracking.done'), onPress: (value: string) => {
                             const num = parseInt(value);
-                            if (!isNaN(num) && num >= 0) setAmount(num.toString());
+                            if (!isNaN(num) && num >= 0) setPumpingAmount(num.toString());
                           }
                         },
                       ],
                       'plain-text',
-                      amount || '0',
+                      pumpingAmount || '0',
                       'number-pad'
                     );
                   }
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.pumpingAmountValueLarge}>{amount || '0'}</Text>
+                <Text style={styles.pumpingAmountValueLarge}>{pumpingAmount || '0'}</Text>
                 <Text style={styles.pumpingAmountUnitLarge}>{t('tracking.ml')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.pumpingAmountBtnLarge}
                 onPress={() => {
-                  const current = parseInt(amount) || 0;
-                  setAmount((current + 5).toString());
+                  const current = parseInt(pumpingAmount) || 0;
+                  setPumpingAmount((current + 5).toString());
                   if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
               >
@@ -1179,25 +1181,25 @@ const styles = StyleSheet.create({
   calendarDayDisabled: { opacity: 0.3 },
 
   // Food Tabs
-  foodTabs: { 
-    flexDirection: 'row-reverse', 
-    justifyContent: 'space-between', 
-    marginBottom: 28, 
+  foodTabs: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    marginBottom: 28,
     paddingHorizontal: 4,
     gap: 8,
   },
-  foodTab: { 
-    flex: 1, 
-    alignItems: 'center', 
-    paddingVertical: 14, 
-    borderRadius: 18, 
+  foodTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 18,
     backgroundColor: 'rgba(0,0,0,0.02)',
-    borderWidth: 1, 
+    borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)',
   },
-  activeFoodTab: { 
-    backgroundColor: '#6366F1', 
-    borderColor: '#6366F1', 
+  activeFoodTab: {
+    backgroundColor: '#6366F1',
+    borderColor: '#6366F1',
     borderWidth: 1.5,
   },
   foodTabIconContainer: {
@@ -1206,37 +1208,37 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 24,
   },
-  foodTabText: { 
-    fontSize: 11, 
-    color: '#9CA3AF', 
-    textAlign: 'center', 
+  foodTabText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'center',
     fontWeight: '600',
     letterSpacing: -0.2,
   },
-  activeFoodTabText: { 
+  activeFoodTabText: {
     color: '#fff',
     fontWeight: '700',
   },
   // Premium Food Tabs (kept for backward compatibility)
-  premiumFoodTabs: { 
-    flexDirection: 'row-reverse', 
-    justifyContent: 'space-between', 
-    marginBottom: 28, 
+  premiumFoodTabs: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    marginBottom: 28,
     paddingHorizontal: 4,
   },
-  premiumFoodTab: { 
-    flex: 1, 
-    alignItems: 'center', 
-    paddingVertical: 14, 
-    borderRadius: 18, 
+  premiumFoodTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 18,
     backgroundColor: 'rgba(0,0,0,0.02)',
-    borderWidth: 1, 
+    borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)',
     marginHorizontal: 5,
   },
-  premiumFoodTabActive: { 
-    backgroundColor: '#6366F1', 
-    borderColor: '#6366F1', 
+  premiumFoodTabActive: {
+    backgroundColor: '#6366F1',
+    borderColor: '#6366F1',
     borderWidth: 1.5,
   },
   premiumFoodTabIconContainer: {
@@ -1245,14 +1247,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 24,
   },
-  premiumFoodTabText: { 
-    fontSize: 11, 
-    color: '#9CA3AF', 
-    textAlign: 'center', 
+  premiumFoodTabText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'center',
     fontWeight: '600',
     letterSpacing: -0.2,
   },
-  premiumFoodTabTextActive: { 
+  premiumFoodTabTextActive: {
     color: '#fff',
     fontWeight: '700',
   },
@@ -1264,7 +1266,7 @@ const styles = StyleSheet.create({
   premiumFoodTabTimerActive: {
     color: '#fff',
   },
-  
+
   // Premium Date Picker
   premiumDatePickerBtn: {
     flexDirection: 'row',
@@ -1395,22 +1397,22 @@ const styles = StyleSheet.create({
   appleTimeArrow: { fontSize: 16, color: '#C7C7CC' },
 
   // Premium Time Picker - Glass Cards
-  premiumTimeRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    gap: 16, 
-    marginBottom: 24, 
+  premiumTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 24,
     paddingHorizontal: 4,
   },
-  premiumTimeCard: { 
-    flex: 1, 
-    alignItems: 'center', 
+  premiumTimeCard: {
+    flex: 1,
+    alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.02)',
-    borderRadius: 20, 
-    paddingVertical: 16, 
-    paddingHorizontal: 12, 
-    borderWidth: 1, 
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)',
     // Premium shadow
     shadowColor: '#000',
@@ -1419,30 +1421,30 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  premiumTimeLabel: { 
-    fontSize: 11, 
-    marginBottom: 8, 
-    fontWeight: '600', 
+  premiumTimeLabel: {
+    fontSize: 11,
+    marginBottom: 8,
+    fontWeight: '600',
     letterSpacing: 0.3,
     opacity: 0.7,
   },
-  premiumTimeDisplay: { 
-    flexDirection: 'row', 
-    alignItems: 'center' 
+  premiumTimeDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center'
   },
-  premiumTimeDigit: { 
-    fontSize: 28, 
-    fontWeight: '300', 
+  premiumTimeDigit: {
+    fontSize: 28,
+    fontWeight: '300',
     letterSpacing: -1,
   },
-  premiumTimeArrowContainer: { 
-    paddingHorizontal: 8 
+  premiumTimeArrowContainer: {
+    paddingHorizontal: 8
   },
-  premiumTimeArrow: { 
-    fontSize: 16, 
-    fontWeight: '300' 
+  premiumTimeArrow: {
+    fontSize: 16,
+    fontWeight: '300'
   },
-  
+
   // Premium Bottle
   premiumBottleContainer: {
     width: '100%',
@@ -1489,7 +1491,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     opacity: 0.7,
   },
-  
+
   // Premium Breast
   premiumBreastContainer: {
     alignItems: 'center',
@@ -1549,7 +1551,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     opacity: 0.7,
   },
-  
+
   // Premium Pumping
   premiumPumpingRowContainer: {
     flexDirection: 'row',
@@ -1638,7 +1640,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     opacity: 0.7,
   },
-  
+
   // Premium Solids
   premiumSolidsContainer: {
     width: '100%',
@@ -1661,7 +1663,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     minHeight: 24,
   },
-  
+
   // Premium Notes
   premiumNoteContainer: {
     width: '100%',

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Image, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Users, Settings, Camera, User, Pencil, Crown, Sparkles, Check, Star, ChevronLeft, UserPlus, Link as LinkIcon } from 'lucide-react-native';
+import { Users, Settings, Camera, User, Pencil, Crown, Sparkles, Check, Star, ChevronLeft, UserPlus, Link as LinkIcon, Trash2, LogOut } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
@@ -31,7 +31,7 @@ export default function SettingsScreen() {
   const navigation = useNavigation<any>();
   const { activeChild, refreshChildren } = useActiveChild();
   const { baby, updateBasicInfo, updatePhoto, refresh } = useBabyProfile(activeChild?.childId);
-  const { family, members, rename: renameFamily, isAdmin } = useFamily();
+  const { family, members, rename: renameFamily, isAdmin, remove: removeMember, leave: leaveFamily } = useFamily();
   const user = auth.currentUser;
 
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
@@ -113,6 +113,51 @@ export default function SettingsScreen() {
       Linking.openSettings();
     }
   }, []);
+
+  const handleRemoveMember = useCallback((memberId: string, memberName: string) => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      'הסרת חבר',
+      `להסיר את ${memberName} מהמשפחה?`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'הסר',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await removeMember(memberId);
+            if (success && Platform.OS !== 'web') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+          },
+        },
+      ]
+    );
+  }, [removeMember]);
+
+  const handleLeaveFamily = useCallback(() => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      'עזיבת משפחה',
+      'האם אתה בטוח שברצונך לעזוב את המשפחה? תאבד גישה לכל הנתונים המשותפים.',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'עזוב',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await leaveFamily();
+            if (success) {
+              if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+              refreshChildren();
+            }
+          },
+        },
+      ]
+    );
+  }, [leaveFamily, refreshChildren]);
 
   const handleEditUserPhoto = useCallback(async () => {
     if (Platform.OS !== 'web') {
@@ -309,12 +354,57 @@ export default function SettingsScreen() {
                   </TouchableOpacity>
                 )}
               </View>
+
+              {/* Members List */}
+              <View style={styles.membersList}>
+                {members.map((member, index) => {
+                  const isMe = member.id === auth.currentUser?.uid;
+                  const roleConfig = {
+                    admin: { label: 'מנהל', color: '#F59E0B' },
+                    member: { label: 'חבר', color: '#6366F1' },
+                    viewer: { label: 'צופה', color: '#10B981' },
+                    guest: { label: 'אורח', color: '#F59E0B' },
+                  }[member.role] || { label: 'חבר', color: '#6366F1' };
+
+                  return (
+                    <View key={member.id || index} style={[styles.memberRow, { borderTopColor: theme.divider }]}>
+                      {/* Remove button - only for admin, not for self */}
+                      {isAdmin && !isMe && member.id && (
+                        <TouchableOpacity
+                          onPress={() => handleRemoveMember(member.id!, member.name || 'חבר')}
+                          style={styles.removeButton}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Trash2 size={16} color="#EF4444" strokeWidth={2} />
+                        </TouchableOpacity>
+                      )}
+                      <View style={[styles.memberBadge, { backgroundColor: roleConfig.color + '20' }]}>
+                        <Text style={[styles.memberBadgeText, { color: roleConfig.color }]}>{roleConfig.label}</Text>
+                      </View>
+                      <View style={styles.memberInfo}>
+                        <Text style={[styles.memberName, { color: theme.textPrimary }]}>
+                          {member.name || 'משתמש'}{isMe ? ' (אני)' : ''}
+                        </Text>
+                        {member.email && (
+                          <Text style={[styles.memberEmail, { color: theme.textSecondary }]}>{member.email}</Text>
+                        )}
+                      </View>
+                      <View style={[styles.memberAvatar, { backgroundColor: roleConfig.color + '20' }]}>
+                        <Text style={[styles.memberInitial, { color: roleConfig.color }]}>
+                          {(member.name || 'מ').charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           )}
 
           {/* Family Actions - Premium Minimalist Design */}
           <View style={[styles.listContainer, { backgroundColor: theme.card }]}>
-            {isAdmin && (
+            {/* Show Create/Invite Family when: user is admin OR user has no family */}
+            {(isAdmin || !family) && (
               <>
                 <TouchableOpacity
                   style={[styles.listItem, styles.listItemFirst]}
@@ -329,9 +419,11 @@ export default function SettingsScreen() {
                       <UserPlus size={18} color="#6366F1" strokeWidth={2.5} />
                     </View>
                     <View style={styles.listItemTextContainer}>
-                      <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('account.inviteFamily')}</Text>
+                      <Text style={[styles.listItemText, { color: theme.textPrimary }]}>
+                        {family ? t('account.inviteFamily') : t('account.createFamily')}
+                      </Text>
                       <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
-                        {t('account.inviteFamily.subtitle')}
+                        {family ? t('account.inviteFamily.subtitle') : t('account.createFamily.subtitle')}
                       </Text>
                     </View>
                   </View>
@@ -339,7 +431,12 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
 
                 <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
+              </>
+            )}
 
+            {/* Guest invite - any family member can invite (24h access is low risk) */}
+            {family && (
+              <>
                 <TouchableOpacity
                   style={styles.listItem}
                   onPress={() => {
@@ -361,7 +458,6 @@ export default function SettingsScreen() {
                   </View>
                   <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
                 </TouchableOpacity>
-
                 <View style={[styles.listDivider, { backgroundColor: theme.divider }]} />
               </>
             )}
@@ -388,6 +484,30 @@ export default function SettingsScreen() {
               <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
             </TouchableOpacity>
           </View>
+
+          {/* Leave Family - for non-admin members only */}
+          {family && !isAdmin && (
+            <View style={[styles.listContainer, { backgroundColor: theme.card, marginTop: 16 }]}>
+              <TouchableOpacity
+                style={[styles.listItem, styles.listItemFirst, styles.listItemLast]}
+                onPress={handleLeaveFamily}
+                activeOpacity={0.6}
+              >
+                <View style={styles.listItemContent}>
+                  <View style={[styles.listItemIcon, { backgroundColor: '#FEE2E2' }]}>
+                    <LogOut size={18} color="#EF4444" strokeWidth={2.5} />
+                  </View>
+                  <View style={styles.listItemTextContainer}>
+                    <Text style={[styles.listItemText, { color: '#EF4444' }]}>עזוב משפחה</Text>
+                    <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
+                      יניתק אותך מהמשפחה המשותפת
+                    </Text>
+                  </View>
+                </View>
+                <ChevronLeft size={18} color={theme.textTertiary} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Bottom Spacing */}
@@ -764,6 +884,55 @@ const styles = StyleSheet.create({
   editFamilyButton: {
     padding: 8,
     borderRadius: 8,
+  },
+  membersList: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 12,
+  },
+  memberRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 12,
+  },
+  memberAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberInitial: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  removeButton: {
+    padding: 6,
+    marginLeft: 4,
+  },
+  memberInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  memberName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  memberEmail: {
+    fontSize: 11,
+    marginTop: 2,
+    opacity: 0.7,
+  },
+  memberBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  memberBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   listContainer: {
     borderRadius: 20,

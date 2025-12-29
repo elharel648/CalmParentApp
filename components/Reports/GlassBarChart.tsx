@@ -182,16 +182,21 @@ const GlassBarChartPerfect: React.FC<GlassBarChartProps> = ({
             runOnJS(handleTouchEnd)();
         });
 
+    // Deferred touch end for tap gesture
+    const delayedTouchEnd = useCallback(() => {
+        setTimeout(() => {
+            handleTouchEnd();
+        }, 1500);
+    }, [handleTouchEnd]);
+
     const tapGesture = Gesture.Tap()
         .onStart((e) => {
             touchActive.value = withTiming(1, { duration: 100 });
             runOnJS(handleTouch)(e.x);
         })
         .onEnd(() => {
-            // Keep selected for a moment
-            setTimeout(() => {
-                runOnJS(handleTouchEnd)();
-            }, 1500);
+            // Keep selected for a moment - use runOnJS for setTimeout
+            runOnJS(delayedTouchEnd)();
         });
 
     const composedGesture = Gesture.Race(gesture, tapGesture);

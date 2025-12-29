@@ -1,7 +1,8 @@
 import React, { memo, useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Platform } from 'react-native';
-import { X, Sparkles, Baby, Bath, Stethoscope, Pill, Thermometer, Camera, Book, Music, Star } from 'lucide-react-native';
+import { X, Sparkles, Baby, Bath, Stethoscope, Pill, Thermometer, Camera, Book, Music, Star, Clock, Calendar, FileText } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
 
 interface AddCustomActionModalProps {
@@ -16,6 +17,9 @@ export interface CustomAction {
     icon: string;
     color: string;
     createdAt: string;
+    date?: string;
+    time?: string;
+    notes?: string;
 }
 
 const PRESET_ICONS = [
@@ -35,6 +39,18 @@ const AddCustomActionModal = memo<AddCustomActionModalProps>(({ visible, onClose
     const { theme } = useTheme();
     const [name, setName] = useState('');
     const [selectedIcon, setSelectedIcon] = useState<string | null>(null);
+    const [notes, setNotes] = useState('');
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false);
+
+    const formatDate = (date: Date) => {
+        return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
+    };
+
+    const formatTime = (date: Date) => {
+        return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    };
 
     const handleAdd = () => {
         if (!name.trim() || !selectedIcon) return;
@@ -47,6 +63,9 @@ const AddCustomActionModal = memo<AddCustomActionModalProps>(({ visible, onClose
             icon: selectedIcon,
             color: iconConfig?.color || '#6B7280',
             createdAt: new Date().toISOString(),
+            date: selectedDate.toISOString().split('T')[0],
+            time: formatTime(selectedDate),
+            notes: notes.trim() || undefined,
         };
 
         if (Platform.OS !== 'web') {
@@ -54,14 +73,19 @@ const AddCustomActionModal = memo<AddCustomActionModalProps>(({ visible, onClose
         }
 
         onAdd(newAction);
-        setName('');
-        setSelectedIcon(null);
+        resetForm();
         onClose();
     };
 
-    const handleClose = () => {
+    const resetForm = () => {
         setName('');
         setSelectedIcon(null);
+        setNotes('');
+        setSelectedDate(new Date());
+    };
+
+    const handleClose = () => {
+        resetForm();
         onClose();
     };
 
@@ -78,45 +102,90 @@ const AddCustomActionModal = memo<AddCustomActionModalProps>(({ visible, onClose
                         <View style={{ width: 32 }} />
                     </View>
 
-                    {/* Name Input */}
-                    <View style={styles.inputSection}>
-                        <Text style={[styles.label, { color: theme.textSecondary }]}>שם הפעולה</Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: theme.background, color: theme.textPrimary }]}
-                            value={name}
-                            onChangeText={setName}
-                            placeholder="למשל: אמבטיה, משחק..."
-                            placeholderTextColor={theme.textSecondary}
-                            textAlign="right"
-                        />
-                    </View>
+                    <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
+                        {/* Name Input */}
+                        <View style={styles.inputSection}>
+                            <Text style={[styles.label, { color: theme.textSecondary }]}>שם הפעולה</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: theme.background, color: theme.textPrimary }]}
+                                value={name}
+                                onChangeText={setName}
+                                placeholder="למשל: אמבטיה, משחק..."
+                                placeholderTextColor={theme.textSecondary}
+                                textAlign="right"
+                            />
+                        </View>
 
-                    {/* Icon Selection */}
-                    <View style={styles.inputSection}>
-                        <Text style={[styles.label, { color: theme.textSecondary }]}>בחר אייקון</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            <View style={styles.iconsRow}>
-                                {PRESET_ICONS.map(({ key, icon: Icon, color }) => (
-                                    <TouchableOpacity
-                                        key={key}
-                                        style={[
-                                            styles.iconOption,
-                                            { backgroundColor: color + '20' },
-                                            selectedIcon === key && { borderColor: color, borderWidth: 2 }
-                                        ]}
-                                        onPress={() => {
-                                            setSelectedIcon(key);
-                                            if (Platform.OS !== 'web') {
-                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                            }
-                                        }}
-                                    >
-                                        <Icon size={20} color={color} />
-                                    </TouchableOpacity>
-                                ))}
+                        {/* Icon Selection */}
+                        <View style={styles.inputSection}>
+                            <Text style={[styles.label, { color: theme.textSecondary }]}>בחר אייקון</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                <View style={styles.iconsRow}>
+                                    {PRESET_ICONS.map(({ key, icon: Icon, color }) => (
+                                        <TouchableOpacity
+                                            key={key}
+                                            style={[
+                                                styles.iconOption,
+                                                { backgroundColor: color + '20' },
+                                                selectedIcon === key && { borderColor: color, borderWidth: 2 }
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedIcon(key);
+                                                if (Platform.OS !== 'web') {
+                                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                }
+                                            }}
+                                        >
+                                            <Icon size={20} color={color} />
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </ScrollView>
+                        </View>
+
+                        {/* Date & Time Row */}
+                        <View style={styles.inputSection}>
+                            <Text style={[styles.label, { color: theme.textSecondary }]}>תאריך ושעה</Text>
+                            <View style={styles.dateTimeRow}>
+                                <TouchableOpacity
+                                    style={[styles.dateTimeBtn, { backgroundColor: theme.background }]}
+                                    onPress={() => setShowTimePicker(true)}
+                                >
+                                    <Clock size={16} color={theme.textSecondary} />
+                                    <Text style={[styles.dateTimeText, { color: theme.textPrimary }]}>
+                                        {formatTime(selectedDate)}
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.dateTimeBtn, { backgroundColor: theme.background }]}
+                                    onPress={() => setShowDatePicker(true)}
+                                >
+                                    <Calendar size={16} color={theme.textSecondary} />
+                                    <Text style={[styles.dateTimeText, { color: theme.textPrimary }]}>
+                                        {formatDate(selectedDate)}
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
-                        </ScrollView>
-                    </View>
+                        </View>
+
+                        {/* Notes Input */}
+                        <View style={styles.inputSection}>
+                            <View style={styles.labelRow}>
+                                <FileText size={14} color={theme.textSecondary} />
+                                <Text style={[styles.label, { color: theme.textSecondary }]}>הערות (אופציונלי)</Text>
+                            </View>
+                            <TextInput
+                                style={[styles.notesInput, { backgroundColor: theme.background, color: theme.textPrimary }]}
+                                value={notes}
+                                onChangeText={setNotes}
+                                placeholder="הוסף פרטים נוספים..."
+                                placeholderTextColor={theme.textSecondary}
+                                textAlign="right"
+                                multiline
+                                numberOfLines={3}
+                            />
+                        </View>
+                    </ScrollView>
 
                     {/* Add Button */}
                     <TouchableOpacity
@@ -129,6 +198,32 @@ const AddCustomActionModal = memo<AddCustomActionModalProps>(({ visible, onClose
                     >
                         <Text style={styles.addButtonText}>הוסף פעולה</Text>
                     </TouchableOpacity>
+
+                    {/* Date Picker Modal */}
+                    {showDatePicker && (
+                        <DateTimePicker
+                            value={selectedDate}
+                            mode="date"
+                            display="spinner"
+                            onChange={(event, date) => {
+                                setShowDatePicker(false);
+                                if (date) setSelectedDate(date);
+                            }}
+                        />
+                    )}
+
+                    {/* Time Picker Modal */}
+                    {showTimePicker && (
+                        <DateTimePicker
+                            value={selectedDate}
+                            mode="time"
+                            display="spinner"
+                            onChange={(event, date) => {
+                                setShowTimePicker(false);
+                                if (date) setSelectedDate(date);
+                            }}
+                        />
+                    )}
                 </View>
             </View>
         </Modal>
@@ -140,28 +235,30 @@ AddCustomActionModal.displayName = 'AddCustomActionModal';
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: 24,
     },
     container: {
         width: '100%',
-        maxWidth: 320,
-        borderRadius: 20,
-        paddingVertical: 24,
+        maxWidth: 360,
+        maxHeight: '80%',
+        borderRadius: 24,
+        paddingTop: 20,
         paddingHorizontal: 20,
+        paddingBottom: 20,
         shadowColor: '#1F2937',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.08,
-        shadowRadius: 24,
-        elevation: 8,
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.15,
+        shadowRadius: 30,
+        elevation: 12,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 16,
     },
     closeBtn: {
         padding: 6,
@@ -170,8 +267,17 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
     },
+    scrollContent: {
+        maxHeight: 320,
+    },
     inputSection: {
-        marginBottom: 20,
+        marginBottom: 18,
+    },
+    labelRow: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 8,
     },
     label: {
         fontSize: 13,
@@ -180,35 +286,60 @@ const styles = StyleSheet.create({
         textAlign: 'right',
     },
     input: {
-        borderRadius: 12,
+        borderRadius: 14,
         padding: 14,
         fontSize: 15,
     },
+    notesInput: {
+        borderRadius: 14,
+        padding: 14,
+        fontSize: 15,
+        minHeight: 80,
+        textAlignVertical: 'top',
+    },
     iconsRow: {
         flexDirection: 'row',
-        gap: 12,
+        gap: 10,
     },
     iconOption: {
         width: 44,
         height: 44,
-        borderRadius: 22,
+        borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
     },
+    dateTimeRow: {
+        flexDirection: 'row-reverse',
+        gap: 12,
+    },
+    dateTimeBtn: {
+        flex: 1,
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 8,
+        padding: 14,
+        borderRadius: 14,
+    },
+    dateTimeText: {
+        fontSize: 15,
+        fontWeight: '500',
+    },
     addButton: {
         backgroundColor: '#10B981',
-        borderRadius: 12,
-        padding: 14,
+        borderRadius: 14,
+        padding: 16,
         alignItems: 'center',
+        marginTop: 8,
     },
     addButtonDisabled: {
         backgroundColor: '#D1D5DB',
     },
     addButtonText: {
         color: '#fff',
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: '700',
     },
 });
 
 export default AddCustomActionModal;
+

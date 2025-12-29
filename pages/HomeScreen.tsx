@@ -2,11 +2,11 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { View, StyleSheet, ScrollView, Share, Alert, ActivityIndicator, StatusBar, RefreshControl, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import Animated, { 
-    FadeInDown, 
-    useSharedValue, 
-    useAnimatedStyle, 
-    withSpring, 
+import Animated, {
+    FadeInDown,
+    useSharedValue,
+    useAnimatedStyle,
+    withSpring,
     withTiming,
     withRepeat,
     interpolate,
@@ -222,7 +222,7 @@ export default function HomeScreen({ navigation }: any) {
     // --- Animations (MUST be before any early returns) ---
     const scrollY = useSharedValue(0);
     const floatingOffset = useSharedValue(0);
-    
+
     // Floating animation for background elements
     useEffect(() => {
         floatingOffset.value = withRepeat(
@@ -302,12 +302,12 @@ export default function HomeScreen({ navigation }: any) {
                     style={StyleSheet.absoluteFill}
                 />
             </Animated.View>
-            
+
             {/* Dot Pattern Texture - Parallax */}
             <Animated.View style={[StyleSheet.absoluteFill, parallaxBackgroundStyle]}>
-                <Svg 
-                    style={StyleSheet.absoluteFill} 
-                    width={SCREEN_WIDTH} 
+                <Svg
+                    style={StyleSheet.absoluteFill}
+                    width={SCREEN_WIDTH}
                     height={SCREEN_HEIGHT}
                     preserveAspectRatio="none"
                 >
@@ -329,7 +329,7 @@ export default function HomeScreen({ navigation }: any) {
                     <Rect width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="url(#dotPattern)" />
                 </Svg>
             </Animated.View>
-            
+
             {/* Radial Glow at Top - Floating */}
             <Animated.View style={[StyleSheet.absoluteFill, floatingGlowStyle]}>
                 <LinearGradient
@@ -367,8 +367,8 @@ export default function HomeScreen({ navigation }: any) {
                     {profile.id && (
                         <>
                             {/* Staggered Entry Header - Enhanced */}
-                            <Animated.View 
-                                entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(0).springify().damping(15) : undefined} 
+                            <Animated.View
+                                entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(0).springify().damping(15) : undefined}
                                 collapsable={false}
                             >
                                 <HeaderSection
@@ -383,7 +383,7 @@ export default function HomeScreen({ navigation }: any) {
                                     meds={meds}
                                     navigation={navigation}
                                     onAddChild={() => navigation.navigate('CreateBaby')}
-                                    onJoinWithCode={() => setIsJoinModalOpen(true)}
+                                    onJoinWithCode={() => { console.log('🔗 HomeScreen: Opening JoinModal'); setIsJoinModalOpen(true); }}
                                     onEditChild={(child) => {
                                         setEditingChild(child);
                                         setIsEditChildModalOpen(true);
@@ -392,8 +392,8 @@ export default function HomeScreen({ navigation }: any) {
                             </Animated.View>
 
                             {/* Staggered Entry Quick Actions - Enhanced */}
-                            <Animated.View 
-                                entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(100).springify().damping(15) : undefined} 
+                            <Animated.View
+                                entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(100).springify().damping(15) : undefined}
                                 collapsable={false}
                             >
                                 <QuickActions
@@ -452,15 +452,15 @@ export default function HomeScreen({ navigation }: any) {
                             <HealthCard dynamicStyles={dynamicStyles} visible={isHealthOpen} onClose={() => setIsHealthOpen(false)} />
 
                             {/* Staggered Entry Timeline - Enhanced */}
-                            <Animated.View 
-                                entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(200).springify().damping(15) : undefined} 
+                            <Animated.View
+                                entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(200).springify().damping(15) : undefined}
                                 collapsable={false}
                             >
                                 <DailyTimeline refreshTrigger={timelineRefresh} childId={profile.id} />
                             </Animated.View>
 
                             {/* Share Button - Enhanced Animation */}
-                            <Animated.View 
+                            <Animated.View
                                 entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(300).springify().damping(15) : undefined}
                             >
                                 <ShareStatusButton onShare={shareStatus} message={shareMessage} />
@@ -495,6 +495,7 @@ export default function HomeScreen({ navigation }: any) {
                 <GrowthModal
                     visible={isGrowthOpen}
                     onClose={() => setIsGrowthOpen(false)}
+                    childId={activeChild?.childId}
                 />
                 <MilestonesModal
                     visible={isMilestonesOpen}

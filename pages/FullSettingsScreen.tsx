@@ -493,7 +493,7 @@ export default function SettingsScreen() {
                 <View style={styles.listItemTextContainer}>
                   <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.supplementsReminder')}</Text>
                   <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
-                    {t('time.every')} {t('date.today')} {t('time.at')} {notifSettings.supplementTime}
+                    כל יום בשעה {notifSettings.supplementTime}
                   </Text>
                 </View>
               </View>
@@ -530,7 +530,7 @@ export default function SettingsScreen() {
                 <View style={styles.listItemTextContainer}>
                   <Text style={[styles.listItemText, { color: theme.textPrimary }]}>{t('settings.dailySummary')}</Text>
                   <Text style={[styles.listItemSubtext, { color: theme.textSecondary }]}>
-                    {t('time.every')} {t('date.today')} {t('time.at')} {notifSettings.dailySummaryTime}
+                    כל יום בשעה {notifSettings.dailySummaryTime}
                   </Text>
                 </View>
               </View>

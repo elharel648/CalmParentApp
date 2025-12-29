@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useState } from 'react';
 import { TouchableOpacity, Text, StyleSheet, Platform, Linking, View } from 'react-native';
-import { Send, Check } from 'lucide-react-native';
+import { Share2, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -48,7 +48,7 @@ const ShareStatusButton = memo<ShareStatusButtonProps>(({ onShare, message }) =>
             onPress={handlePress}
             activeOpacity={0.6}
         >
-            <Send size={16} color="#9CA3AF" strokeWidth={2} />
+            <Share2 size={16} color="#9CA3AF" strokeWidth={2} />
             <Text style={[styles.text, { color: theme.textSecondary }]}>
                 {showSuccess ? 'נשלח!' : 'שתף סיכום יומי'}
             </Text>
