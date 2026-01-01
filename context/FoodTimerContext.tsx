@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import * as LiveActivity from 'expo-live-activity';
+import { liveActivityService } from '../services/liveActivityService';
 
 interface FoodTimerContextType {
     // Pumping Timer
@@ -46,11 +46,20 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
     const pumpingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pumpingActivityIdRef = useRef<string | undefined>(undefined);
 
-    // Pumping timer effect
+    // Pumping timer effect with Live Activity updates
     useEffect(() => {
         if (pumpingIsRunning) {
             pumpingTimerRef.current = setInterval(() => {
-                setPumpingElapsedSeconds(prev => prev + 1);
+                setPumpingElapsedSeconds(prev => {
+                    const newSeconds = prev + 1;
+                    // Update Live Activity every second
+                    if (Platform.OS === 'ios' && pumpingActivityIdRef.current) {
+                        liveActivityService.updatePumpingTimer(newSeconds).catch(() => {
+                            // Silently fail if update doesn't work
+                        });
+                    }
+                    return newSeconds;
+                });
             }, 1000);
         } else {
             if (pumpingTimerRef.current) {
@@ -63,52 +72,37 @@ export const FoodTimerProvider = ({ children }: FoodTimerProviderProps) => {
         };
     }, [pumpingIsRunning]);
 
-    const startPumping = useCallback(() => {
+    const startPumping = useCallback(async () => {
         if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setPumpingIsRunning(true);
         setPumpingElapsedSeconds(0);
 
-        // Start iOS Live Activity
+        // Start iOS Live Activity (ActivityKit)
         if (Platform.OS === 'ios') {
             try {
-                const activityId = LiveActivity.startActivity(
-                    {
-                        title: '🍼 שאיבה',
-                        subtitle: '',
-                        progressBar: { date: Date.now() }, // Start time for count-up
-                    },
-                    {
-                        backgroundColor: '#F59E0B',
-                        titleColor: '#FFFFFF',
-                        subtitleColor: '#FEF3C7',
-                        progressViewTint: '#FCD34D',
-                        progressViewLabelColor: '#FFFFFF',
-                        deepLinkUrl: '/home',
-                        timerType: 'digital',
-                    }
-                );
-                if (activityId) pumpingActivityIdRef.current = activityId;
+                const activityId = await liveActivityService.startPumpingTimer();
+                if (activityId) {
+                    pumpingActivityIdRef.current = activityId;
+                    if (__DEV__) console.log('✅ Live Activity started:', activityId);
+                }
             } catch (error) {
-                if (__DEV__) console.log('Live Activity not supported:', error);
+                if (__DEV__) console.warn('⚠️ Live Activity not supported:', error);
             }
         }
     }, []);
 
-    const stopPumping = useCallback(() => {
+    const stopPumping = useCallback(async () => {
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setPumpingIsRunning(false);
-
-        // Stop iOS Live Activity
+        
+        // Stop iOS Live Activity (ActivityKit)
         if (Platform.OS === 'ios' && pumpingActivityIdRef.current) {
             try {
-                LiveActivity.stopActivity(pumpingActivityIdRef.current, {
-                    title: 'שאיבה הסתיימה',
-                    subtitle: '',
-                    imageName: 'feed',
-                });
+                await liveActivityService.stopPumpingTimer();
                 pumpingActivityIdRef.current = undefined;
+                if (__DEV__) console.log('✅ Live Activity stopped');
             } catch (error) {
-                if (__DEV__) console.log('Error stopping Live Activity:', error);
+                if (__DEV__) console.warn('⚠️ Error stopping Live Activity:', error);
             }
         }
     }, []);

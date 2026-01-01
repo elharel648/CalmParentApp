@@ -40,7 +40,8 @@
           "autoLogAppEventsEnabled": false,
           "isAutoInitEnabled": true
         }
-      ]
+      ],
+      "./plugins/withLiveActivity.js"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -59,6 +60,7 @@
         "NSLocationWhenInUseUsageDescription": "האפליקציה צריכה גישה למיקום כדי למצוא בייביסיטרים באזור שלך",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "האפליקציה צריכה גישה למיקום כדי למצוא בייביסיטרים באזור שלך",
         "ITSAppUsesNonExemptEncryption": false,
+        "NSSupportsLiveActivities": true,
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
