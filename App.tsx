@@ -1,7 +1,8 @@
 import 'react-native-gesture-handler';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -39,29 +40,13 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { ActiveChildProvider, useActiveChild } from './context/ActiveChildContext';
 import { QuickActionsProvider } from './context/QuickActionsContext';
 import { LanguageProvider } from './context/LanguageContext';
+import { ScrollTrackingProvider } from './context/ScrollTrackingContext';
+import { ToastProvider } from './context/ToastContext';
+import { DynamicIslandProvider } from './context/DynamicIslandContext';
+import DynamicIsland from './components/DynamicIsland';
 import ErrorBoundary from './components/ErrorBoundary';
-import * as Sentry from '@sentry/react-native';
 
-Sentry.init({
-  dsn: 'https://d6f2c1e24015d5a729ac8fde1891d23d@o4510568313913344.ingest.us.sentry.io/4510568315486208',
 
-  // Adds more context data to events (IP address, cookies, user, etc.)
-  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
-  sendDefaultPii: true,
-
-  // 🔥 PERFORMANCE MONITORING - מעקב אחרי ביצועים
-  tracesSampleRate: 0.2, // 20% מהטרנזקציות יימדדו
-  enableAutoPerformanceTracing: true, // מעקב אוטומטי אחרי navigation ו-API calls
-
-  // 🚫 DISABLED Session Replay - causes EXC_BAD_ACCESS crash on iOS
-  replaysSessionSampleRate: 0,
-  replaysOnErrorSampleRate: 0,
-  // integrations: [Sentry.mobileReplayIntegration()], // DISABLED - crashes on screenshot
-  integrations: [Sentry.feedbackIntegration()],
-
-  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
-  // spotlight: __DEV__,
-});
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
@@ -136,6 +121,7 @@ function MainAppNavigator() {
           borderTopWidth: 0,
           elevation: 0,
           shadowOpacity: 0,
+          overflow: 'hidden', // Critical for liquid glass effect
         },
         tabBarItemStyle: {
           backgroundColor: 'transparent',
@@ -226,7 +212,7 @@ function BabysitterStackScreen() {
 
 // --- האפליקציה הראשית ---
 
-export default Sentry.wrap(function App() {
+export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [hasBabyProfile, setHasBabyProfile] = useState<boolean | null>(null);
   const [isAppLoading, setIsAppLoading] = useState(true);
@@ -316,27 +302,66 @@ export default Sentry.wrap(function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>
-        <SleepTimerProvider>
-          <FoodTimerProvider>
-            <QuickActionsProvider>
-              <LanguageProvider>
-                <ThemeProvider>
-                  <ActiveChildProvider>
-                    <SafeAreaProvider>
-                      <NavigationContainer>
-                        <MainAppNavigator />
-                      </NavigationContainer>
-                    </SafeAreaProvider>
-                  </ActiveChildProvider>
-                </ThemeProvider>
-              </LanguageProvider>
-            </QuickActionsProvider>
-          </FoodTimerProvider>
-        </SleepTimerProvider>
+        <ScrollTrackingProvider>
+          <SleepTimerProvider>
+            <FoodTimerProvider>
+              <QuickActionsProvider>
+                <LanguageProvider>
+                  <ThemeProvider>
+                    <ToastProvider>
+                      <DynamicIslandProvider>
+                        <ActiveChildProvider>
+                          <SafeAreaProvider>
+                            <DynamicIsland />
+                            <NavigationContainer
+                            linking={{
+                              prefixes: ['calmparent://', 'https://calmparent.app'],
+                              config: {
+                                screens: {
+                                  בית: 'home',
+                                  סטטיסטיקות: 'reports',
+                                  חשבון: 'account',
+                                  בייביסיטר: 'babysitter',
+                                  Home: {
+                                    screens: {
+                                      Home: 'home',
+                                      CreateBaby: 'create-baby',
+                                      Notifications: 'notifications',
+                                    },
+                                  },
+                                  Account: {
+                                    screens: {
+                                      Account: 'account',
+                                      FullSettings: 'settings',
+                                    },
+                                  },
+                                  Babysitter: {
+                                    screens: {
+                                      SitterList: 'babysitter',
+                                      SitterProfile: 'babysitter/:sitterId',
+                                      SitterDashboard: 'babysitter/dashboard',
+                                    },
+                                  },
+                                },
+                              },
+                            }}
+                          >
+                            <MainAppNavigator />
+                            </NavigationContainer>
+                          </SafeAreaProvider>
+                        </ActiveChildProvider>
+                      </DynamicIslandProvider>
+                    </ToastProvider>
+                  </ThemeProvider>
+                </LanguageProvider>
+              </QuickActionsProvider>
+            </FoodTimerProvider>
+          </SleepTimerProvider>
+        </ScrollTrackingProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>
   );
-});
+}
 
 const styles = StyleSheet.create({
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' },

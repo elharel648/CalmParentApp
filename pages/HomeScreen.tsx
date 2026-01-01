@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Share, Alert, ActivityIndicator, StatusBar, RefreshControl, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Share, Alert, ActivityIndicator, StatusBar, RefreshControl, Dimensions, TouchableOpacity, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Animated, {
@@ -25,6 +25,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { useActiveChild } from '../context/ActiveChildContext';
+import { useScrollTracking } from '../context/ScrollTrackingContext';
 
 // Components
 import HeaderSection from '../components/Home/HeaderSection';
@@ -55,6 +56,8 @@ import { EditBasicInfoModal } from '../components/Profile';
 import { auth, db } from '../services/firebaseConfig';
 import { doc, updateDoc } from 'firebase/firestore';
 import { saveEventToFirebase, formatTimeFromTimestamp } from '../services/firebaseService';
+import { useToast } from '../context/ToastContext';
+import { undoService } from '../services/undoService';
 
 // Types
 import { TrackingType, DynamicStyles } from '../types/home';
@@ -187,27 +190,53 @@ export default function HomeScreen({ navigation }: any) {
     }, []);
 
     // --- Handlers ---
+    const { showSuccess, showError } = useToast();
     const handleSaveTracking = useCallback(async (data: any) => {
         if (!user) {
-            Alert.alert('שגיאה', 'יש להתחבר למערכת');
+            showError('יש להתחבר למערכת');
             return;
         }
 
         if (!profile.id) {
-            Alert.alert('שגיאה', 'לא נמצא פרופיל ילד. אנא צור פרופיל בהגדרות.');
+            showError('לא נמצא פרופיל ילד. אנא צור פרופיל בהגדרות.');
             return;
         }
 
-        await saveEventToFirebase(user.uid, profile.id, data);
-        // Alert removed - TrackingModal now shows checkmark animation
+        try {
+            const eventId = await saveEventToFirebase(user.uid, profile.id, data);
+            
+            // Store for undo
+            undoService.setLastAction({
+                eventId,
+                type: 'create',
+                data,
+                timestamp: new Date(),
+            });
 
-        // Schedule feeding reminder if this was a food event
-        if (data.type === 'food') {
-            scheduleFeedingReminder(new Date());
+            // Show success toast with undo
+            showSuccess('נשמר בהצלחה!', 5000, {
+                label: 'ביטול',
+                onPress: async () => {
+                    const success = await undoService.undo();
+                    if (success) {
+                        showSuccess('בוטל');
+                        refreshHomeData();
+                    } else {
+                        showError('לא ניתן לבטל');
+                    }
+                },
+            });
+
+            // Schedule feeding reminder if this was a food event
+            if (data.type === 'food') {
+                scheduleFeedingReminder(new Date());
+            }
+        } catch (error) {
+            showError('שגיאה בשמירה. נסה שוב.');
         }
 
-        refreshHomeData();
-        setTimelineRefresh(prev => prev + 1);
+            refreshHomeData();
+            setTimelineRefresh(prev => prev + 1);
     }, [user, profile.id, refreshHomeData, scheduleFeedingReminder]);
 
     const shareMessage = useMemo(() =>
@@ -220,7 +249,9 @@ export default function HomeScreen({ navigation }: any) {
     }, [shareMessage]);
 
     // --- Animations (MUST be before any early returns) ---
-    const scrollY = useSharedValue(0);
+    // Use global scroll tracking for parallax tab bar effect
+    const { scrollY, scrollX } = useScrollTracking();
+    const localScrollY = useSharedValue(0); // Keep local for HomeScreen-specific parallax
     const floatingOffset = useSharedValue(0);
 
     // Floating animation for background elements
@@ -235,17 +266,23 @@ export default function HomeScreen({ navigation }: any) {
         );
     }, [floatingOffset]);
 
-    // Scroll handler for parallax
+    // Scroll handler for parallax - updates both global and local scroll values
     const scrollHandler = useAnimatedScrollHandler({
         onScroll: (event) => {
-            scrollY.value = event.contentOffset.y;
+            const offsetY = event.contentOffset.y;
+            const offsetX = event.contentOffset.x || 0;
+            // Update global scroll tracking for tab bar parallax
+            scrollY.value = offsetY;
+            scrollX.value = offsetX;
+            // Update local scroll for HomeScreen-specific effects
+            localScrollY.value = offsetY;
         },
     });
 
-    // Parallax background style
+    // Parallax background style (uses local scroll for HomeScreen-specific effect)
     const parallaxBackgroundStyle = useAnimatedStyle(() => {
         const translateY = interpolate(
-            scrollY.value,
+            localScrollY.value,
             [0, 500],
             [0, -100],
             Extrapolation.CLAMP
@@ -294,7 +331,7 @@ export default function HomeScreen({ navigation }: any) {
                 <LinearGradient
                     colors={isDarkMode
                         ? ['#0A0A0F', '#0F0F18', '#0C0C12', '#0A0A0F']
-                        : ['#FAFAFA', '#F7F7F7', '#F3F3F3', '#FAFAFA']
+                        : ['#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF']
                     }
                     start={{ x: 0, y: 0 }}
                     end={{ x: 0, y: 1 }}
@@ -344,51 +381,51 @@ export default function HomeScreen({ navigation }: any) {
             </Animated.View>
 
             <SafeAreaView style={styles.safeArea} edges={['top']}>
-                <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+            <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
                 <Animated.ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
                     onScroll={scrollHandler}
                     scrollEventThrottle={16}
-                    refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                    }
-                >
-                    {/* When NO baby profile - show only Add Baby Placeholder */}
-                    {!profile.id && (
-                        <AddBabyPlaceholder
-                            onCreateBaby={() => navigation.navigate('CreateBaby')}
-                            onJoinWithCode={() => setIsJoinModalOpen(true)}
-                        />
-                    )}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+            >
+                {/* When NO baby profile - show only Add Baby Placeholder */}
+                {!profile.id && (
+                    <AddBabyPlaceholder
+                        onCreateBaby={() => navigation.navigate('CreateBaby')}
+                        onJoinWithCode={() => setIsJoinModalOpen(true)}
+                    />
+                )}
 
-                    {/* When HAVE baby profile - show full home screen */}
-                    {profile.id && (
-                        <>
+                {/* When HAVE baby profile - show full home screen */}
+                {profile.id && (
+                    <>
                             {/* Staggered Entry Header - Enhanced */}
                             <Animated.View
                                 entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(0).springify().damping(15) : undefined}
                                 collapsable={false}
                             >
-                                <HeaderSection
-                                    greeting={greeting}
-                                    profile={profile}
-                                    onProfileUpdate={onRefresh}
-                                    dynamicStyles={dynamicStyles}
-                                    dailyStats={dailyStats}
+                        <HeaderSection
+                            greeting={greeting}
+                            profile={profile}
+                            onProfileUpdate={onRefresh}
+                            dynamicStyles={dynamicStyles}
+                            dailyStats={dailyStats}
                                     growthStats={growthStats}
-                                    lastFeedTime={lastFeedTime}
-                                    lastSleepTime={lastSleepTime}
-                                    meds={meds}
-                                    navigation={navigation}
-                                    onAddChild={() => navigation.navigate('CreateBaby')}
+                            lastFeedTime={lastFeedTime}
+                            lastSleepTime={lastSleepTime}
+                            meds={meds}
+                            navigation={navigation}
+                            onAddChild={() => navigation.navigate('CreateBaby')}
                                     onJoinWithCode={() => { console.log('🔗 HomeScreen: Opening JoinModal'); setIsJoinModalOpen(true); }}
                                     onEditChild={(child) => {
                                         setEditingChild(child);
                                         setIsEditChildModalOpen(true);
                                     }}
-                                />
+                        />
                             </Animated.View>
 
                             {/* Staggered Entry Quick Actions - Enhanced */}
@@ -396,81 +433,81 @@ export default function HomeScreen({ navigation }: any) {
                                 entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(100).springify().damping(15) : undefined}
                                 collapsable={false}
                             >
-                                <QuickActions
-                                    lastFeedTime={lastFeedTime}
-                                    lastSleepTime={lastSleepTime}
-                                    onFoodPress={() => setTrackingModalType('food')}
-                                    onSleepPress={() => setTrackingModalType('sleep')}
-                                    onDiaperPress={() => setTrackingModalType('diaper')}
-                                    onWhiteNoisePress={() => setIsWhiteNoiseOpen(true)}
-                                    onSOSPress={() => setIsCalmModeOpen(true)}
-                                    onSupplementsPress={() => setIsSupplementsOpen(true)}
-                                    onHealthPress={() => setIsHealthOpen(true)}
-                                    onGrowthPress={() => setIsGrowthOpen(true)}
-                                    onMilestonesPress={() => setIsMilestonesOpen(true)}
+                        <QuickActions
+                            lastFeedTime={lastFeedTime}
+                            lastSleepTime={lastSleepTime}
+                            onFoodPress={() => setTrackingModalType('food')}
+                            onSleepPress={() => setTrackingModalType('sleep')}
+                            onDiaperPress={() => setTrackingModalType('diaper')}
+                            onWhiteNoisePress={() => setIsWhiteNoiseOpen(true)}
+                            onSOSPress={() => setIsCalmModeOpen(true)}
+                            onSupplementsPress={() => setIsSupplementsOpen(true)}
+                            onHealthPress={() => setIsHealthOpen(true)}
+                            onGrowthPress={() => setIsGrowthOpen(true)}
+                            onMilestonesPress={() => setIsMilestonesOpen(true)}
 
-                                    onMagicMomentsPress={() => setIsMagicMomentsOpen(true)}
+                            onMagicMomentsPress={() => setIsMagicMomentsOpen(true)}
                                     onToolsPress={() => setIsToolsOpen(true)}
                                     // onChecklistPress={() => setIsChecklistOpen(true)} // Moved to Tools
                                     onTeethPress={() => setIsTeethOpen(true)}
                                     onNightLightPress={() => setIsNightLightOpen(true)}
-                                    onCustomPress={() => setIsAddCustomOpen(true)}
-                                    onFoodTimerStop={async (seconds, timerType) => {
-                                        const mins = Math.floor(seconds / 60);
-                                        const secs = seconds % 60;
-                                        const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-                                        const subTypeMap: Record<string, string> = {
-                                            'breast_left': 'breast',
-                                            'breast_right': 'breast',
-                                            'pumping': 'pumping'
-                                        };
-                                        const subType = subTypeMap[timerType] || 'breast';
-                                        const side = timerType === 'breast_left' ? 'שמאל' : timerType === 'breast_right' ? 'ימין' : '';
-                                        await handleSaveTracking({
-                                            type: 'food',
-                                            subType,
-                                            note: side ? `${side}: ${timeStr}` : `זמן: ${timeStr}`,
-                                            timestamp: new Date()
-                                        });
-                                    }}
-                                    onSleepTimerStop={async (seconds) => {
-                                        const mins = Math.floor(seconds / 60);
-                                        const secs = seconds % 60;
-                                        const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-                                        await handleSaveTracking({
-                                            type: 'sleep',
-                                            note: `משך שינה: ${timeStr}`,
-                                            duration: seconds,
-                                            timestamp: new Date()
-                                        });
-                                    }}
-                                    meds={meds}
-                                    dynamicStyles={dynamicStyles}
-                                />
+                            onCustomPress={() => setIsAddCustomOpen(true)}
+                            onFoodTimerStop={async (seconds, timerType) => {
+                                const mins = Math.floor(seconds / 60);
+                                const secs = seconds % 60;
+                                const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                                const subTypeMap: Record<string, string> = {
+                                    'breast_left': 'breast',
+                                    'breast_right': 'breast',
+                                    'pumping': 'pumping'
+                                };
+                                const subType = subTypeMap[timerType] || 'breast';
+                                const side = timerType === 'breast_left' ? 'שמאל' : timerType === 'breast_right' ? 'ימין' : '';
+                                await handleSaveTracking({
+                                    type: 'food',
+                                    subType,
+                                    note: side ? `${side}: ${timeStr}` : `זמן: ${timeStr}`,
+                                    timestamp: new Date()
+                                });
+                            }}
+                            onSleepTimerStop={async (seconds) => {
+                                const mins = Math.floor(seconds / 60);
+                                const secs = seconds % 60;
+                                const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                                await handleSaveTracking({
+                                    type: 'sleep',
+                                    note: `משך שינה: ${timeStr}`,
+                                    duration: seconds,
+                                    timestamp: new Date()
+                                });
+                            }}
+                            meds={meds}
+                            dynamicStyles={dynamicStyles}
+                        />
                             </Animated.View>
 
-                            <HealthCard dynamicStyles={dynamicStyles} visible={isHealthOpen} onClose={() => setIsHealthOpen(false)} />
+                        <HealthCard dynamicStyles={dynamicStyles} visible={isHealthOpen} onClose={() => setIsHealthOpen(false)} />
 
                             {/* Staggered Entry Timeline - Enhanced */}
                             <Animated.View
                                 entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(200).springify().damping(15) : undefined}
                                 collapsable={false}
                             >
-                                <DailyTimeline refreshTrigger={timelineRefresh} childId={profile.id} />
+                        <DailyTimeline refreshTrigger={timelineRefresh} childId={profile.id} />
                             </Animated.View>
 
                             {/* Share Button - Enhanced Animation */}
                             <Animated.View
                                 entering={!hasHomeAnimationsRun ? FadeInDown.duration(500).delay(300).springify().damping(15) : undefined}
                             >
-                                <ShareStatusButton onShare={shareStatus} message={shareMessage} />
+                        <ShareStatusButton onShare={shareStatus} message={shareMessage} />
                             </Animated.View>
-                        </>
-                    )}
+                    </>
+                )}
                 </Animated.ScrollView>
 
-                {/* Modals */}
-                <CalmModeModal visible={isCalmModeOpen} onClose={() => setIsCalmModeOpen(false)} />
+            {/* Modals */}
+            <CalmModeModal visible={isCalmModeOpen} onClose={() => setIsCalmModeOpen(false)} />
                 <ToolsModal
                     visible={isToolsOpen}
                     onClose={() => setIsToolsOpen(false)}
@@ -484,37 +521,37 @@ export default function HomeScreen({ navigation }: any) {
                 <TeethTrackerModal visible={isTeethOpen} onClose={() => setIsTeethOpen(false)} />
                 <SleepCalculatorModal visible={isNextNapOpen} onClose={() => setIsNextNapOpen(false)} />
                 <ChecklistModal visible={isChecklistOpen} onClose={() => setIsChecklistOpen(false)} />
-                <WhiteNoiseModal visible={isWhiteNoiseOpen} onClose={() => setIsWhiteNoiseOpen(false)} />
-                <SupplementsModal
-                    visible={isSupplementsOpen}
-                    onClose={() => setIsSupplementsOpen(false)}
-                    meds={meds}
-                    onToggle={toggleMed}
-                    onRefresh={() => setTimelineRefresh(prev => prev + 1)}
-                />
-                <GrowthModal
-                    visible={isGrowthOpen}
-                    onClose={() => setIsGrowthOpen(false)}
+            <WhiteNoiseModal visible={isWhiteNoiseOpen} onClose={() => setIsWhiteNoiseOpen(false)} />
+            <SupplementsModal
+                visible={isSupplementsOpen}
+                onClose={() => setIsSupplementsOpen(false)}
+                meds={meds}
+                onToggle={toggleMed}
+                onRefresh={() => setTimelineRefresh(prev => prev + 1)}
+            />
+            <GrowthModal
+                visible={isGrowthOpen}
+                onClose={() => setIsGrowthOpen(false)}
                     childId={activeChild?.childId}
-                />
-                <MilestonesModal
-                    visible={isMilestonesOpen}
-                    onClose={() => setIsMilestonesOpen(false)}
-                />
-                <TrackingModal
-                    visible={!!trackingModalType}
-                    type={trackingModalType}
-                    onClose={() => setTrackingModalType(null)}
-                    onSave={handleSaveTracking}
-                />
-                <JoinFamilyModal
-                    visible={isJoinModalOpen}
-                    onClose={() => setIsJoinModalOpen(false)}
-                    onSuccess={() => {
-                        setIsJoinModalOpen(false);
-                        onRefresh();
-                    }}
-                />
+            />
+            <MilestonesModal
+                visible={isMilestonesOpen}
+                onClose={() => setIsMilestonesOpen(false)}
+            />
+            <TrackingModal
+                visible={!!trackingModalType}
+                type={trackingModalType}
+                onClose={() => setTrackingModalType(null)}
+                onSave={handleSaveTracking}
+            />
+            <JoinFamilyModal
+                visible={isJoinModalOpen}
+                onClose={() => setIsJoinModalOpen(false)}
+                onSuccess={() => {
+                    setIsJoinModalOpen(false);
+                    onRefresh();
+                }}
+            />
                 {editingChild && (
                     <EditBasicInfoModal
                         visible={isEditChildModalOpen}
@@ -543,34 +580,34 @@ export default function HomeScreen({ navigation }: any) {
                         }}
                     />
                 )}
-                <MagicMomentsModal
-                    visible={isMagicMomentsOpen}
-                    onClose={() => setIsMagicMomentsOpen(false)}
-                />
-                <AddCustomActionModal
-                    visible={isAddCustomOpen}
-                    onClose={() => setIsAddCustomOpen(false)}
-                    onAdd={async (action) => {
-                        // Save to local state
-                        setCustomActions(prev => [...prev, action]);
+            <MagicMomentsModal
+                visible={isMagicMomentsOpen}
+                onClose={() => setIsMagicMomentsOpen(false)}
+            />
+            <AddCustomActionModal
+                visible={isAddCustomOpen}
+                onClose={() => setIsAddCustomOpen(false)}
+                onAdd={async (action) => {
+                    // Save to local state
+                    setCustomActions(prev => [...prev, action]);
 
-                        // Save to Firebase timeline
-                        if (user && profile.id) {
-                            try {
-                                await saveEventToFirebase(user.uid, profile.id, {
-                                    type: 'custom',
-                                    note: action.name,
-                                    subType: action.icon,
-                                });
-                                setTimelineRefresh(prev => prev + 1);
-                                Alert.alert('נוסף!', `"${action.name}" נשמר בהצלחה`);
-                            } catch {
-                                Alert.alert('שגיאה בשמירה');
-                            }
+                    // Save to Firebase timeline
+                    if (user && profile.id) {
+                        try {
+                            await saveEventToFirebase(user.uid, profile.id, {
+                                type: 'custom',
+                                note: action.name,
+                                subType: action.icon,
+                            });
+                            setTimelineRefresh(prev => prev + 1);
+                            Alert.alert('נוסף!', `"${action.name}" נשמר בהצלחה`);
+                        } catch {
+                            Alert.alert('שגיאה בשמירה');
                         }
-                    }}
-                />
-            </SafeAreaView>
+                    }
+                }}
+            />
+        </SafeAreaView>
         </View>
     );
 }

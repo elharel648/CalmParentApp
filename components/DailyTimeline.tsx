@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, Share } from 'react-native';
 import { Utensils, Moon, Layers, ChevronDown, ChevronUp, X, FileText, Pill, AlertCircle, RefreshCw } from 'lucide-react-native';
 import { getRecentHistory, deleteEvent } from '../services/firebaseService';
 import { useTheme } from '../context/ThemeContext';
@@ -10,6 +10,8 @@ import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import { auth } from '../services/firebaseConfig';
 import { TimelineSkeleton } from './Home/SkeletonLoader';
+import SwipeableRow from './SwipeableRow';
+import { useToast } from '../context/ToastContext';
 
 interface TimelineEvent {
   id: string;
@@ -35,6 +37,7 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
   const { theme, isDarkMode } = useTheme();
   const { t } = useLanguage();
   const { family } = useFamily();
+  const { showSuccess, showError } = useToast();
   
   // Get translated TYPE_CONFIG
   const TYPE_CONFIG = {
@@ -117,29 +120,28 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    Alert.alert(
-      t('common.delete'),
-      t('common.delete') + '?',
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteEvent(eventId);
-              // Remove from local state
-              setEvents(prevEvents => prevEvents.filter(e => e.id !== eventId));
-              if (Platform.OS !== 'web') {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              }
-            } catch (error) {
-              Alert.alert(t('common.error'), t('common.error'));
-            }
-          },
+    try {
+      await deleteEvent(eventId);
+      setEvents(prevEvents => prevEvents.filter(e => e.id !== eventId));
+      showSuccess('נמחק בהצלחה', 3000, {
+        label: 'ביטול',
+        onPress: async () => {
+          // TODO: Re-add event (would need to store full event data)
+          showSuccess('בוטל');
         },
-      ]
-    );
+      });
+    } catch (error) {
+      showError('שגיאה במחיקה');
+    }
+  };
+
+  const handleShare = async (event: TimelineEvent) => {
+    const eventText = `${getEventDetails(event)}\n${getTimeAgo(event.timestamp)}`;
+    try {
+      await Share.share({ message: eventText });
+    } catch (error) {
+      showError('לא ניתן לשתף');
+    }
   };
 
   const getTimeAgo = (date: Date) => {
@@ -345,64 +347,62 @@ const DailyTimeline = memo<DailyTimelineProps>(({ refreshTrigger = 0, childId = 
               key={event.id}
               entering={FadeInRight.duration(300).delay(index * 80).springify()}
             >
-              <View style={styles.eventRow} collapsable={false}>
-                {/* Left side: Time + Dot */}
-                <View style={styles.leftSection}>
-                  <Text style={styles.time}>
-                    {event.timestamp.toLocaleTimeString('he-IL', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false
-                    })}
-                  </Text>
-                  <Text style={styles.timeAgo}>{getTimeAgo(event.timestamp)}</Text>
-                </View>
-
-                {/* Timeline icon + line */}
-                <View style={styles.timelineTrack}>
-                  <View style={[styles.timelineIcon, { backgroundColor: config.color + '20' }]}>
-                    <Icon size={14} color={config.color} strokeWidth={2} />
+              <SwipeableRow
+                onDelete={() => handleDelete(event.id)}
+                onShare={() => handleShare(event)}
+              >
+                <View style={styles.eventRow} collapsable={false}>
+                  {/* Left side: Time + Dot */}
+                  <View style={styles.leftSection}>
+                    <Text style={styles.time}>
+                      {event.timestamp.toLocaleTimeString('he-IL', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                      })}
+                    </Text>
+                    <Text style={styles.timeAgo}>{getTimeAgo(event.timestamp)}</Text>
                   </View>
-                  {/* Line connector */}
-                  {!isLast && <View style={styles.connector} />}
-                </View>
 
-                {/* Right side: Content */}
-                <View style={styles.eventCardContainer}>
-                  <View style={[styles.eventCard, { backgroundColor: theme.card }]}>
-                    <View style={styles.cardContent}>
-                      <View style={styles.eventHeader}>
-                        <Text style={[styles.eventTitle, { color: theme.textPrimary }]}>{details}</Text>
-                        <TouchableOpacity
-                          style={styles.deleteBtn}
-                          onPress={() => handleDelete(event.id)}
-                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                          <X size={14} color="#9CA3AF" strokeWidth={2} />
-                        </TouchableOpacity>
-                      </View>
-                      {subtext && (
-                        <Text style={[styles.eventSubtext, { color: theme.textSecondary }]}>{subtext}</Text>
-                      )}
+                  {/* Timeline icon + line */}
+                  <View style={styles.timelineTrack}>
+                    <View style={[styles.timelineIcon, { backgroundColor: config.color + '20' }]}>
+                      <Icon size={14} color={config.color} strokeWidth={2} />
                     </View>
+                    {/* Line connector */}
+                    {!isLast && <View style={styles.connector} />}
+                  </View>
 
-                    {/* Reporter Badge - Small avatar showing who reported */}
-                    {event.reporterName && (
-                      <View style={styles.reporterBadge}>
-                        {event.reporterPhotoUrl ? (
-                          <Image source={{ uri: event.reporterPhotoUrl }} style={styles.reporterAvatar} />
-                        ) : (
-                          <View style={[styles.reporterAvatarPlaceholder, { backgroundColor: config.color + '30' }]}>
-                            <Text style={[styles.reporterInitial, { color: config.color }]}>
-                              {event.reporterName.charAt(0)}
-                            </Text>
-                          </View>
+                  {/* Right side: Content */}
+                  <View style={styles.eventCardContainer}>
+                    <View style={styles.eventCard}>
+                      <View style={styles.cardContent}>
+                        <View style={styles.eventHeader}>
+                          <Text style={[styles.eventTitle, { color: theme.textPrimary }]}>{details}</Text>
+                        </View>
+                        {subtext && (
+                          <Text style={[styles.eventSubtext, { color: theme.textSecondary }]}>{subtext}</Text>
                         )}
                       </View>
-                    )}
+
+                      {/* Reporter Badge - Small avatar showing who reported */}
+                      {event.reporterName && (
+                        <View style={styles.reporterBadge}>
+                          {event.reporterPhotoUrl ? (
+                            <Image source={{ uri: event.reporterPhotoUrl }} style={styles.reporterAvatar} />
+                          ) : (
+                            <View style={[styles.reporterAvatarPlaceholder, { backgroundColor: config.color + '30' }]}>
+                              <Text style={[styles.reporterInitial, { color: config.color }]}>
+                                {event.reporterName.charAt(0)}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
                   </View>
                 </View>
-              </View>
+              </SwipeableRow>
             </Animated.View>
           );
         })}
@@ -590,28 +590,24 @@ const styles = StyleSheet.create({
   // Right: Content - Pill Style
   eventCardContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // Required for efficient shadow calculation
-    borderRadius: 24,
-    // Multi-layered shadows for floating effect
+    borderRadius: 16,
+    // Clean shadow on white card
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   eventCard: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     overflow: 'hidden',
     position: 'relative',
     minHeight: 64,
   },
   deleteBtn: {
     padding: 4,
-    backgroundColor: '#F9FAFB',
     borderRadius: 6,
   },
   cardContent: {

@@ -18,15 +18,6 @@
       "expo-local-authentication",
       "expo-font",
       "@react-native-community/datetimepicker",
-      "@sentry/react-native",
-      [
-        "@sentry/react-native/expo",
-        {
-          "url": "https://sentry.io/",
-          "project": "react-native",
-          "organization": "harel-ziv"
-        }
-      ],
       "@react-native-firebase/app",
       "@react-native-firebase/perf",
       "@react-native-firebase/crashlytics",

@@ -436,7 +436,7 @@ export default function ReportsScreen() {
     fetchData();
   }, [activeChild?.childId, timeRange, selectedDate, customStartDate, customEndDate]);
 
-  // Export report
+  // Export report with improved formatting and comparisons
   const handleExport = async () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -444,14 +444,24 @@ export default function ReportsScreen() {
       ? (dailyStats.sleep / dailyStats.sleepCount).toFixed(1)
       : '0';
 
+    // Add comparison data if available
+    const comparisonText = comparison ? `
+📈 השוואה לשבוע הקודם:
+   ${comparison.sleepChange !== 0 ? `שינה: ${comparison.sleepChange > 0 ? '+' : ''}${comparison.sleepChange}%` : ''}
+   ${comparison.feedingChange !== 0 ? `האכלות: ${comparison.feedingChange > 0 ? '+' : ''}${comparison.feedingChange}%` : ''}
+   ${comparison.diaperChange !== 0 ? `חיתולים: ${comparison.diaperChange > 0 ? '+' : ''}${comparison.diaperChange}%` : ''}
+` : '';
+
     const report = `
 📊 דוח ${activeChild?.childName || 'התינוק'}
-📅 ${format(new Date(), 'd MMMM yyyy', { locale: he })}
+📅 ${format(selectedDate || new Date(), 'd MMMM yyyy', { locale: he })}
+${timeRange === 'week' ? `📆 תקופה: שבוע` : timeRange === 'month' ? `📆 תקופה: חודש` : `📆 תקופה: יום`}
 
 🍼 האכלות: ${dailyStats.foodCount} (${dailyStats.food} מ"ל)
    בקבוק: ${dailyStats.feedingTypes.bottle}
    הנקה: ${dailyStats.feedingTypes.breast}
    מוצקים: ${dailyStats.feedingTypes.solids}
+   שאיבה: ${dailyStats.feedingTypes.pumping || 0}
 
 😴 שינה: ${dailyStats.sleep.toFixed(1)} שעות (ממוצע: ${avgSleep}ש')
    שינה ארוכה ביותר: ${timeInsights?.longestSleep || 0}ש'
@@ -460,6 +470,7 @@ export default function ReportsScreen() {
 🧷 חיתולים: ${dailyStats.diapers}
 💊 תוספים: ${dailyStats.supplements}
 
+${comparisonText}
 ---
 הורה רגוע 💜
         `.trim();
@@ -467,7 +478,10 @@ export default function ReportsScreen() {
     try {
       await Share.share({ message: report });
     } catch {
-      Alert.alert('שגיאה', 'לא ניתן לשתף');
+      // Use toast instead of Alert
+      if (typeof window !== 'undefined' && (window as any).showToast) {
+        (window as any).showToast({ message: 'לא ניתן לשתף', type: 'error' });
+      }
     }
   };
 

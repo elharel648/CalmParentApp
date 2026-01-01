@@ -177,7 +177,33 @@ class NotificationStorageService {
             if (__DEV__) console.log('Failed to clear all notifications:', error);
         }
     }
+
+    /**
+     * Send notification to a specific user (for guest expiry, etc.)
+     */
+    async sendNotificationToUser(
+        userId: string,
+        type: StoredNotification['type'] | 'guest_access_ended',
+        title: string,
+        message: string
+    ): Promise<string | null> {
+        try {
+            const docRef = await addDoc(collection(db, this.collectionName), {
+                userId,
+                type,
+                title,
+                message,
+                timestamp: Timestamp.fromDate(new Date()),
+                isRead: false,
+            });
+            return docRef.id;
+        } catch (error) {
+            if (__DEV__) console.log('Failed to send notification to user:', error);
+            return null;
+        }
+    }
 }
 
 export const notificationStorageService = new NotificationStorageService();
 export default notificationStorageService;
+

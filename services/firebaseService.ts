@@ -143,8 +143,8 @@ export const saveEventToFirebase = async (userId: string, childId: string, data:
       timestamp
     };
 
-    await addDoc(eventsRef, eventData);
-    return true;
+    const docRef = await addDoc(eventsRef, eventData);
+    return docRef.id; // Return event ID for undo functionality
   } catch (error: any) {
     if (__DEV__) {
       console.log('saveEventToFirebase error:', error?.code);
